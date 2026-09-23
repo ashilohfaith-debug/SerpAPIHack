@@ -19,3 +19,6 @@ relay_data/
 # frontend (P10)
 node_modules/
 frontend/dist/
+# unrelated audit-receipt dirs written into cwd by other tooling (not RELAY)
+receipts/
+review-receipts/
