@@ -1,0 +1,41 @@
+[project]
+name = "relay"
+version = "0.0.1"
+description = "RELAY — Windows-first, offline-first, voice-first accessibility assistant for blind and visually impaired people."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+# Essential core is pure stdlib. Voice (P3) and perception (P4) deps are added
+# behind extras once Windows/3.12 wheel compatibility is verified — the core
+# never forces a heavy install.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+# voice  = [...]   # P3: sounddevice, numpy, webrtcvad/silero, STT, piper, pywin32
+# percept = [...]  # P4: uiautomation, comtypes, pywin32, rapidocr-onnxruntime, pillow
+
+[project.scripts]
+relay = "relay.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["relay*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# pycodestyle errors, pyflakes, import sorting. We deliberately keep broad
+# defensive try/except in isolation boundaries (event bus, emergency flush,
+# worker supervisor) so one bad callback can't break the others — so the
+# opinionated BLE/S "blind except" rules are not part of this baseline.
+select = ["E", "F", "I"]

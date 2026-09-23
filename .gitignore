@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+# never commit models, user data, runtime db, credentials
+models/
+*.onnx
+*.bin
+*.gguf
+*.pt
+relay_data/
+*.db
+*.db-wal
+*.db-shm
+# frontend (P10)
+node_modules/
+frontend/dist/

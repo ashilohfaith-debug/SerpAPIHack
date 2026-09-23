@@ -1,0 +1,23 @@
+RELAY
+Copyright (c) 2026 RELAY contributors
+Licensed under the MIT License (see LICENSE).
+
+This product includes design patterns and small components adapted from the
+following MIT-licensed projects. Their copyright notices are retained here as
+required by the MIT License:
+
+- screen-use (https://github.com/tongriyaotxt/screen-use), MIT License.
+  Adapted: UI Automation element enumeration + ValuePattern read/write ideas,
+  screen-change fingerprinting and stuck-classification, verify-by-observation.
+
+- clacky (https://github.com/Raynan00/clacky), MIT License, which itself vendors
+  the "Bitshank/clicky-windows" companion shell (MIT).
+  Adapted: offline wake-word + energy-VAD ambient-listening approach, and the
+  action risk-classification tiers.
+
+Design patterns studied for independent reimplementation (NO source copied):
+- shorka (https://github.com/lllichtmaher/shorka) — barge-in, spoken confirmation,
+  tool-call repair, focus-centric UIA reading. No license was published; only the
+  observable design was used, reimplemented from scratch.
+- VisionAssistantPro (https://github.com/mahmoodhozhabri/VisionAssistantPro),
+  GPL-2.0 — accessibility/NVDA-coexistence lessons only; NO code reused or linked.
