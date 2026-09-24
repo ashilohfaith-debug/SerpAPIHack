@@ -128,6 +128,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="offline TTS->STT round-trip (no mic) and exit")
     p.add_argument("--observe", action="store_true",
                    help="describe the current foreground window via UI Automation")
+    p.add_argument("--demo-notepad", action="store_true",
+                   help="real perceive->act->verify demo: create + save + verify a file in Notepad")
+    p.add_argument("--demo-fail", action="store_true",
+                   help="prove failures are reported honestly (open a nonexistent app)")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
@@ -135,6 +139,12 @@ def main(argv: list[str] | None = None) -> int:
         return _voice_selftest()
     if args.observe:
         return _observe()
+    if args.demo_notepad:
+        from relay.demo import notepad_demo
+        return notepad_demo()
+    if args.demo_fail:
+        from relay.demo import injected_failure_demo
+        return injected_failure_demo()
     p.print_help()
     return 0
 

@@ -117,6 +117,18 @@ class UIAWorker:
                            observation_version=snap.observation_version)
         return snap
 
+    def run(self, fn: Callable, timeout: float = 2.0):
+        """Run an arbitrary callable ON the UIA thread (for executor UIA actions,
+        which must touch controls on the same thread). Returns (value, ok): ok is
+        False on timeout/restart or if the callable raised."""
+        worker = self._ensure_worker()
+        box, timed_out = worker.submit(fn, timeout)
+        if timed_out or box is None or "error" in box:
+            if box is not None and "error" in box:
+                log.warning("UIA action failed: %s", box["error"])
+            return None, False
+        return box["value"], True
+
     @property
     def live(self) -> ScreenSnapshot | None:
         """Current L1 snapshot (may be stale between observes)."""
