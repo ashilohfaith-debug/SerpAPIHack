@@ -89,9 +89,8 @@ def notepad_demo() -> int:
         _line("verify saved file", o)
         passed = exists
     finally:
-        import subprocess
-        subprocess.run(["taskkill", "/IM", "Notepad.exe", "/F"],
-                       capture_output=True)
+        # SAFETY: never force-kill apps — a Notepad may hold the user's unsaved work.
+        # Leave the window open; the user closes it. Only our own temp file is removed.
         content_ok = False
         try:
             if out.exists():
@@ -100,6 +99,7 @@ def notepad_demo() -> int:
         except Exception:
             pass
         worker.stop()
+        print("(Left Notepad open — RELAY never force-closes apps that may hold unsaved work.)")
 
     print(f"\nP5 demo {'PASSED' if passed and content_ok else 'FAILED'} "
           f"(file created + verified on disk, content match={content_ok}). "
@@ -131,3 +131,51 @@ def injected_failure_demo() -> int:
         return 0 if honest else 1
     finally:
         worker.stop()
+
+
+def _speak_print(text: str) -> None:
+    if text:
+        print(f"  RELAY: {text}")
+
+
+def transparent_demo() -> int:
+    """Run a short real sequence through the Session, printing every narration line
+    so the transparency contract is visible: each action is announced before it runs
+    and every change is reported after."""
+    from relay.session import Session
+    setup_logging("WARNING")
+    lines: list[str] = []
+
+    def speak(t: str) -> None:
+        if t:
+            print(f"  RELAY: {t}")
+            lines.append(t)
+
+    s = Session(speak=speak)
+    try:
+        for cmd in ["what's on my screen", "open notepad",
+                    "type Hello, this is Relay narrating every step",
+                    "what changed", "what are my options"]:
+            print(f"\nUSER: {cmd}")
+            s.handle(cmd)
+            time.sleep(0.6)
+    finally:
+        s.close()  # SAFETY: never force-kill apps — the user closes their own windows
+    print(f"\nTransparent run complete: {len(lines)} narration lines "
+          "(every action announced before acting; every change reported after).")
+    print("(RELAY left every app open — it never force-closes windows that may hold "
+          "unsaved work.)")
+    return 0
+
+
+def do_command(command: str) -> int:
+    """Run one spoken command transparently against the real desktop."""
+    from relay.session import Session
+    setup_logging("WARNING")
+    s = Session(speak=_speak_print)
+    try:
+        print(f"USER: {command}")
+        s.handle(command)
+    finally:
+        s.close()  # SAFETY: never force-kill apps
+    return 0

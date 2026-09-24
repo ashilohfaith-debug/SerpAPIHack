@@ -132,6 +132,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="real perceive->act->verify demo: create + save + verify a file in Notepad")
     p.add_argument("--demo-fail", action="store_true",
                    help="prove failures are reported honestly (open a nonexistent app)")
+    p.add_argument("--demo-transparent", action="store_true",
+                   help="run a real command sequence, narrating every action and change")
+    p.add_argument("--do", metavar="COMMAND",
+                   help="run one spoken command transparently against the real desktop")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
@@ -145,6 +149,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.demo_fail:
         from relay.demo import injected_failure_demo
         return injected_failure_demo()
+    if args.demo_transparent:
+        from relay.demo import transparent_demo
+        return transparent_demo()
+    if args.do:
+        from relay.demo import do_command
+        return do_command(args.do)
     p.print_help()
     return 0
 
