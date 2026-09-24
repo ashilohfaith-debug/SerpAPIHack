@@ -54,6 +54,10 @@ class PiperTTS:
             log.warning("Piper unavailable: %s", e)
             return False
 
+    def unload(self) -> None:
+        """Drop the loaded voice to free RAM (reloaded lazily on next synth)."""
+        self._voice = None
+
 
 class SapiTTS:
     """Windows SAPI5 fallback. Always offline, no model download."""
