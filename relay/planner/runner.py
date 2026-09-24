@@ -90,17 +90,29 @@ class TransparentRunner:
             return True
         return bool(cancel is not None and cancel.is_set())
 
+    def _emit_task(self, state: str) -> None:
+        if self.bus is not None:
+            self.bus.emit("task.state", to=state)
+
     def run(self, steps, cancel=None) -> list[StepResult]:
         results: list[StepResult] = []
+        if steps:
+            self._emit_task("acting")
         for step in steps:
             if self._stopped(cancel):
                 self.say("Stopping.", pol.Priority.CONFIRMATION)
                 results.append(StepResult(step.description, "cancelled"))
+                self._emit_task("cancelled")
                 break
             r = self._run_step(step)
             results.append(r)
             if r.state in ("failed", "awaiting_confirmation"):
+                self._emit_task("waiting_for_confirmation" if r.state == "awaiting_confirmation"
+                                else "failed")
                 break  # stop the sequence; the user decides / confirms
+        else:
+            if steps:
+                self._emit_task("completed")
         return results
 
     # --- per-step ---

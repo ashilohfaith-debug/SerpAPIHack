@@ -306,3 +306,34 @@ def explorer_demo() -> int:
         s.close()  # never force-close
     print("\nRead-only Explorer demo complete — nothing was changed.")
     return 0
+
+
+def panel_run() -> int:
+    """Start the optional accessible panel (authenticated loopback HTTP+SSE) and keep
+    the core running. Closing the panel does not stop RELAY."""
+    import webbrowser
+
+    from relay.core import EventBus
+    from relay.ipc import IpcServer
+    from relay.session import Session
+    setup_logging("INFO")
+    bus = EventBus()
+    session = Session(speak=None, bus=bus)
+    server = IpcServer(session, bus)
+    url = server.start()
+    print(f"RELAY panel: {url}")
+    print("Open it in a browser. The panel mirrors RELAY; closing it won't stop the core. "
+          "Ctrl+C to stop.")
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nstopping panel…")
+    finally:
+        server.stop()
+        session.close()
+    return 0

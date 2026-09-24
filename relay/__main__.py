@@ -146,6 +146,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="print the honest supported-application matrix")
     p.add_argument("--demo-explorer", action="store_true",
                    help="read-only: open File Explorer and describe it (nothing changed)")
+    p.add_argument("--panel", action="store_true",
+                   help="start the optional accessible web panel (authenticated, loopback)")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
@@ -180,6 +182,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.demo_explorer:
         from relay.demo import explorer_demo
         return explorer_demo()
+    if args.panel:
+        from relay.demo import panel_run
+        return panel_run()
     p.print_help()
     return 0
 
