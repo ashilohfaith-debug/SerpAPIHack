@@ -25,6 +25,7 @@ from relay.memory.journal import ExecState
 from relay.memory.task_context import TaskContext, resolve_reference
 from relay.narration import delta as delta_mod
 from relay.narration import policy as pol
+from relay.recovery import detect as recovery_detect
 from relay.safety import Action
 
 log = get_logger("runner")
@@ -107,14 +108,21 @@ class TransparentRunner:
         if step.kind == "answer":
             return self._answer(step)
 
+        prev = self.ctx.last_narrated
         self.say(f"I'm going to {step.description}.")   # announce BEFORE acting
         outcome, detail = self._act(step)
         if outcome == "AWAIT":                          # needs spoken confirmation first
             return StepResult(step.description, "awaiting_confirmation", detail)
         new = self.worker.observe(3.0)
-        deltas = delta_mod.diff(self.ctx.last_narrated, new)
+        deltas = delta_mod.diff(prev, new)
         self.ctx.last_narrated = new
-        return self._narrate_outcome(step.description, outcome, detail, deltas)
+        result = self._narrate_outcome(step.description, outcome, detail, deltas)
+        # surface an UNEXPECTED dialog and offer to help (a save step expects one)
+        if step.kind != "save":
+            issue = recovery_detect(prev, new, result.state in ("verified", "uncertain"))
+            if issue is not None and issue.kind == "unexpected_dialog":
+                self.say(issue.spoken, pol.Priority.CONFIRMATION)
+        return result
 
     def _narrate_outcome(self, desc, outcome, detail, deltas) -> StepResult:
         if outcome is None:
@@ -143,6 +151,8 @@ class TransparentRunner:
             exe = _APP_EXE.get(app, app if app.endswith((".exe", ":")) else f"{app}.exe")
             o = self.ex.launch_app(exe)
             time.sleep(1.6)
+            # bring the app's window forward — it may not have grabbed the foreground
+            self.worker.activate_app(app)
             running = self.vf.app_running(exe) if exe.endswith(".exe") else True
             present = running or self.vf.window_present(app)
             return self.vf.verify(o, present, "app is on screen" if present

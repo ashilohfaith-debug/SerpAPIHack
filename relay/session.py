@@ -44,6 +44,7 @@ _MEMORY_KINDS = {
 }
 _ACCESS_KINDS = {
     Kind.SET_MODE, Kind.READ_DIALOG, Kind.NEXT_ELEMENT, Kind.PREV_ELEMENT, Kind.SPELL,
+    Kind.CAPABILITIES,
 }
 _REQ = pol.Priority.REQUESTED
 _CONF = pol.Priority.CONFIRMATION
@@ -137,7 +138,10 @@ class Session:
     # ---- accessibility read / navigate / spell / mode ----
     def _handle_access(self, intent):
         k, s = intent.kind, intent.slots
-        if k == Kind.SET_MODE:
+        if k == Kind.CAPABILITIES:
+            from relay.workflows import spoken_summary
+            self.say(spoken_summary(), _REQ)
+        elif k == Kind.SET_MODE:
             mode = s["mode"]
             self.narration_mode = mode
             self.runner.mode = mode

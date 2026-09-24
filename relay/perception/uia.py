@@ -194,6 +194,56 @@ def _detect_dialogs(fg) -> list[Dialog]:
     return dialogs
 
 
+def list_top_windows() -> list[dict]:
+    """All visible top-level windows (title + owning app + hwnd). Runs on the UIA
+    thread. Lets RELAY find a just-launched app that didn't grab the foreground."""
+    import uiautomation as auto
+    ensure_dpi_aware()
+    out: list[dict] = []
+    try:
+        root = auto.GetRootControl()
+        children = root.GetChildren()
+    except Exception:
+        return out
+    for w in children:
+        try:
+            if w.ControlTypeName != "WindowControl" or w.IsOffscreen:
+                continue
+            r = w.BoundingRectangle
+            if r.width() <= 0 or r.height() <= 0:
+                continue
+            out.append({"title": (w.Name or "").strip(), "app": _app_name(w),
+                        "hwnd": int(w.NativeWindowHandle)})
+        except Exception:
+            continue
+    return out
+
+
+def activate_window(hwnd: int) -> bool:
+    """Best-effort bring a window to the foreground (restore if minimised). Windows
+    can refuse a foreground change from a background process (a documented OS lock),
+    so this is best-effort and the caller must still verify."""
+    import time
+    user32 = ctypes.windll.user32
+    try:
+        user32.ShowWindow(hwnd, 9)       # SW_RESTORE
+        user32.BringWindowToTop(hwnd)
+        user32.SetForegroundWindow(hwnd)
+        time.sleep(0.2)
+        return int(user32.GetForegroundWindow()) == hwnd
+    except Exception:
+        return False
+
+
+def find_and_activate(app_or_title: str) -> bool:
+    """Find a top-level window whose app/title matches and bring it forward."""
+    t = app_or_title.lower().replace(".exe", "").strip()
+    for wd in list_top_windows():
+        if t and (t in wd["app"].lower() or t in wd["title"].lower()):
+            return activate_window(wd["hwnd"])
+    return False
+
+
 def observe(observation_version: int) -> ScreenSnapshot:
     """Read the current foreground window into a ScreenSnapshot. Runs on the UIA
     worker thread. Returns a snapshot with ``uia_available=False`` when the tree

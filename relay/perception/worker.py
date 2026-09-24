@@ -129,6 +129,19 @@ class UIAWorker:
             return None, False
         return box["value"], True
 
+    def activate_app(self, app: str, timeout: float = 3.0) -> bool:
+        """Bring a launched app's window to the foreground (best-effort — Windows
+        may refuse a foreground change; the caller still verifies)."""
+        from relay.perception import uia
+        val, ok = self.run(lambda: uia.find_and_activate(app), timeout)
+        return bool(ok and val)
+
+    def list_windows(self, timeout: float = 3.0) -> list[dict]:
+        """All visible top-level windows (title/app/hwnd)."""
+        from relay.perception import uia
+        val, ok = self.run(uia.list_top_windows, timeout)
+        return val if (ok and val) else []
+
     @property
     def live(self) -> ScreenSnapshot | None:
         """Current L1 snapshot (may be stale between observes)."""

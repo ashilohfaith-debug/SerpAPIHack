@@ -39,13 +39,16 @@ class Verifier:
         return False
 
     def window_present(self, title_substr: str, timeout: float = 3.0) -> bool:
+        t = title_substr.lower().replace(".exe", "").strip()
         snap = self.worker.observe(timeout)
-        if snap is None:
-            return False
-        t = title_substr.lower()
-        if t in (snap.foreground_title or "").lower():
+        if snap and (t in (snap.foreground_title or "").lower()
+                     or any(t in (e.window_title or "").lower() for e in snap.elements)):
             return True
-        return any(t in (e.window_title or "").lower() for e in snap.elements)
+        # also check ALL top-level windows — the app may be open but not foreground
+        for wd in self.worker.list_windows():
+            if t and (t in wd.get("title", "").lower() or t in wd.get("app", "").lower()):
+                return True
+        return False
 
     def focus_value_contains(self, text: str, timeout: float = 3.0) -> bool:
         snap = self.worker.observe(timeout)

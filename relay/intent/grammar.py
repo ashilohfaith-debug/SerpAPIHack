@@ -45,6 +45,7 @@ class Kind:
     PREV_ELEMENT = "prev_element"
     SPELL = "spell"
     SET_MODE = "set_mode"
+    CAPABILITIES = "capabilities"
     # memory (L3/L5) voice operations
     REMEMBER = "remember"
     WHAT_REMEMBER = "what_remember"
@@ -106,6 +107,9 @@ def parse(utterance: str) -> Intent:
         return Intent(Kind.READ_FOCUS, raw=raw)
     if low in ("help", "what can you do"):
         return Intent(Kind.HELP, raw=raw)
+    if re.search(r"\bwhat apps|which apps|what can you (control|operate)|"
+                 r"what (apps|programs) do you support\b", low):
+        return Intent(Kind.CAPABILITIES, raw=raw)
 
     # accessibility read / navigate / spell / mode
     if re.search(r"\bread the dialog|what does the dialog say|read dialog\b", low):

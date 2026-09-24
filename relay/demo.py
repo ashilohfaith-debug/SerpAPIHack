@@ -283,3 +283,26 @@ def confirm_demo() -> int:
     print(f"\nConfirm demo {'PASSED' if ok else 'FAILED'}: a casual reply never triggered "
           "the destructive action; only the action-specific phrase did.")
     return 0 if ok else 1
+
+
+def capabilities() -> int:
+    from relay.workflows import matrix_text
+    print(matrix_text())
+    return 0
+
+
+def explorer_demo() -> int:
+    """Safe, READ-ONLY: open File Explorer, bring it forward, and describe what's
+    there. No files are changed and no app is force-closed."""
+    from relay.session import Session
+    setup_logging("WARNING")
+    s = Session(speak=_speak_print)
+    try:
+        for cmd in ["open file explorer", "what's on my screen", "what are my options"]:
+            print(f"\nUSER: {cmd}")
+            s.handle(cmd)
+            time.sleep(0.6)
+    finally:
+        s.close()  # never force-close
+    print("\nRead-only Explorer demo complete — nothing was changed.")
+    return 0

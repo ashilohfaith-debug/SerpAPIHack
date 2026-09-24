@@ -142,6 +142,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="speak the voice-only onboarding through the local Piper voice")
     p.add_argument("--demo-confirm", action="store_true",
                    help="show the spoken-confirmation flow: a casual reply never acts")
+    p.add_argument("--capabilities", action="store_true",
+                   help="print the honest supported-application matrix")
+    p.add_argument("--demo-explorer", action="store_true",
+                   help="read-only: open File Explorer and describe it (nothing changed)")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
@@ -170,6 +174,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.demo_confirm:
         from relay.demo import confirm_demo
         return confirm_demo()
+    if args.capabilities:
+        from relay.demo import capabilities
+        return capabilities()
+    if args.demo_explorer:
+        from relay.demo import explorer_demo
+        return explorer_demo()
     p.print_help()
     return 0
 
