@@ -16,7 +16,15 @@ lands with tests. Nothing is claimed working unless its tests actually ran.
 - P1 foundation — done (this commit): env, config, per-user storage, logging, CLI, tests.
 - P2 runtime & safety — done: event bus, voice/task state machines, ids, worker
   supervisor, cancellation, emergency stop, risk/permission engine, action journal.
-- P3+ — pending.
+- P3 offline voice — done: faster-whisper STT (chosen over whisper.cpp by benchmark),
+  Piper TTS + SAPI fallback, webrtcvad VAD, wake word + control commands, mic capture,
+  speech queue with barge-in. Verified: offline TTS->STT round-trip, real mic stream.
+- P4+ — pending.
+
+## Voice models (not committed; download once)
+`uv run python -m piper.download_voices en_US-lessac-medium --data-dir models/piper`
+faster-whisper tiny.en downloads automatically into `models/whisper` on first use.
+Then: `uv run relay --voice-selftest`  (offline TTS->STT round-trip, no mic).
 
 ## Dev
 Requires Python 3.12 (via [uv](https://docs.astral.sh/uv/)).

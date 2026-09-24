@@ -11,8 +11,18 @@ license = { text = "MIT" }
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.5"]
-# voice  = [...]   # P3: sounddevice, numpy, webrtcvad/silero, STT, piper, pywin32
+dev = ["pytest>=8", "ruff>=0.5", "psutil>=5.9"]
+# P3 offline voice (verified importing on Windows/CPython 3.12):
+voice = [
+    "numpy>=1.26",
+    "sounddevice>=0.5",
+    "soundfile>=0.12",
+    "faster-whisper>=1.0",   # chosen STT (tiny.en int8); whisper.cpp is a fallback
+    "piper-tts>=1.8",        # preferred TTS; SAPI (pywin32) is the fallback
+    "webrtcvad-wheels>=2.0", # VAD (no torch — kept light for the 4 GB target)
+    "pywin32>=306",          # SAPI TTS + Win32
+    "onnxruntime>=1.17",     # piper backend
+]
 # percept = [...]  # P4: uiautomation, comtypes, pywin32, rapidocr-onnxruntime, pillow
 
 [project.scripts]
@@ -28,6 +38,9 @@ include = ["relay*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "integration: exercises real models/audio/OS (slower; needs voice deps installed)",
+]
 
 [tool.ruff]
 line-length = 100

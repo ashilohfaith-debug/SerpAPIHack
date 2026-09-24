@@ -61,13 +61,49 @@ def _selftest() -> int:
     return 0
 
 
+def _voice_selftest() -> int:
+    """Offline voice round-trip with no microphone: synthesize a known phrase with
+    the configured TTS (Piper if installed, else SAPI), transcribe it back with the
+    offline STT, and check the words survived. Proves the offline voice pipeline."""
+    import numpy as np
+
+    from relay.audio import WhisperSTT, make_tts
+    from relay.audio.wake import detect_wake, match_command
+    from relay.diagnostics import get_logger, setup_logging
+
+    setup_logging("INFO")
+    log = get_logger("voice-selftest")
+
+    phrase = "relay please open the file and read the text out loud"
+    tts = make_tts(prefer_piper=True)
+    audio, sr = tts.synth_to_array(phrase)
+    if sr != 16000 and len(audio):
+        n = int(len(audio) * 16000 / sr)
+        audio = np.interp(np.linspace(0, len(audio), n, endpoint=False),
+                          np.arange(len(audio)), audio).astype(np.float32)
+    text = WhisperSTT().transcribe(audio)
+    woke, cmd = detect_wake(text)
+    log.info("TTS engine=%s stt=%r woke=%s cmd=%r", type(tts).__name__, text, woke, cmd)
+    want = set(phrase.split()) - {"relay"}
+    heard = set(text.lower().replace(".", "").replace(",", "").split())
+    ok = len(want & heard) / len(want) >= 0.7  # content survived round-trip
+    print(f"voice-selftest {'OK' if ok else 'FAILED'}: "
+          f"tts={type(tts).__name__} heard={text!r} wake={woke} command={cmd!r}")
+    print(f"  (control-word check: 'stop' -> {match_command('stop')})")
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="relay", description="RELAY accessibility assistant")
     p.add_argument("--version", action="version", version=f"relay {__version__}")
     p.add_argument("--selftest", action="store_true", help="verify core wiring and exit")
+    p.add_argument("--voice-selftest", action="store_true",
+                   help="offline TTS->STT round-trip (no mic) and exit")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
+    if args.voice_selftest:
+        return _voice_selftest()
     p.print_help()
     return 0
 

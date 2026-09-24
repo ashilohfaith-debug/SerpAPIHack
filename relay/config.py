@@ -30,9 +30,12 @@ def user_data_dir() -> Path:
 
 
 def models_dir() -> Path:
-    """Where managed model files live. Kept out of the source tree and git."""
+    """Where managed model files live (gitignored). Defaults to ``<app>/models``
+    (next to the package, per the RELAY spec), overridable with RELAY_MODELS_DIR.
+    Models ship/are downloaded here rather than into per-user config, so a dev
+    checkout and a packaged build resolve them the same way."""
     override = os.environ.get("RELAY_MODELS_DIR")
-    d = Path(override) if override else user_data_dir() / "models"
+    d = Path(override) if override else Path(__file__).resolve().parent.parent / "models"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
