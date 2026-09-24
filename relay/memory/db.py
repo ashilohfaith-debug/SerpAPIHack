@@ -45,11 +45,13 @@ def has_fts5(conn: sqlite3.Connection) -> bool:
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
-    """Create P2 tables if absent. Additive; safe to call repeatedly.
+    """Create all RELAY tables if absent. Additive; safe to call repeatedly.
 
-    Full five-layer schema (preferences, application_profiles, workflow_templates,
-    learned_control_labels, episodic_memories, memory_permissions, FTS5) is added
-    in P7.
+    P2 tables: task_sessions, action_journal (append-only), task_checkpoints.
+    P7 five-layer memory: preferences (L3), application_profiles / workflow_templates
+    / learned_control_labels (L4), episodic_memories (L5), memory_permissions, plus
+    FTS5 mirrors for text search. Every persistent record carries provenance and,
+    where relevant, approval status, retention/expiry and validation state.
     """
     conn.executescript(
         """
@@ -83,5 +85,76 @@ def init_schema(conn: sqlite3.Connection) -> None:
             ts        REAL NOT NULL
         );
         CREATE INDEX IF NOT EXISTS ix_ckpt_task ON task_checkpoints(task_id, id);
+
+        -- L3: user preferences (scope='' is global, else an app key like 'notepad.exe')
+        CREATE TABLE IF NOT EXISTS preferences (
+            scope       TEXT NOT NULL DEFAULT '',
+            key         TEXT NOT NULL,
+            value       TEXT NOT NULL DEFAULT '',
+            provenance  TEXT NOT NULL DEFAULT 'explicit_instruction',
+            approval    TEXT NOT NULL DEFAULT 'approved',
+            updated     REAL NOT NULL,
+            PRIMARY KEY (scope, key)
+        );
+
+        -- L4: per-application profile blobs (verified navigation facts)
+        CREATE TABLE IF NOT EXISTS application_profiles (
+            app_key     TEXT PRIMARY KEY,
+            data_json   TEXT NOT NULL DEFAULT '{}',
+            updated     REAL NOT NULL
+        );
+
+        -- L4: reusable verified workflows (proposals, revalidated before use)
+        CREATE TABLE IF NOT EXISTS workflow_templates (
+            id            TEXT PRIMARY KEY,
+            app_key       TEXT NOT NULL DEFAULT '',
+            name          TEXT NOT NULL DEFAULT '',
+            steps_json    TEXT NOT NULL DEFAULT '[]',
+            preconditions TEXT NOT NULL DEFAULT '',
+            verification  TEXT NOT NULL DEFAULT '',
+            provenance    TEXT NOT NULL DEFAULT 'verified',
+            validation    TEXT NOT NULL DEFAULT 'unvalidated',
+            hits          INTEGER NOT NULL DEFAULT 0,
+            created       REAL NOT NULL,
+            updated       REAL NOT NULL,
+            expires_at    REAL
+        );
+        CREATE INDEX IF NOT EXISTS ix_wf_app ON workflow_templates(app_key);
+
+        -- L4: learned description -> control mappings (e.g. "the multiply sign" -> "Multiply")
+        CREATE TABLE IF NOT EXISTS learned_control_labels (
+            app_key      TEXT NOT NULL DEFAULT '',
+            description  TEXT NOT NULL,
+            control_name TEXT NOT NULL DEFAULT '',
+            control_type TEXT NOT NULL DEFAULT '',
+            provenance   TEXT NOT NULL DEFAULT 'verified',
+            hits         INTEGER NOT NULL DEFAULT 1,
+            updated      REAL NOT NULL,
+            PRIMARY KEY (app_key, description)
+        );
+
+        -- L5: opt-in episodic summaries (never raw screens/secrets)
+        CREATE TABLE IF NOT EXISTS episodic_memories (
+            id          TEXT PRIMARY KEY,
+            summary     TEXT NOT NULL,
+            app_key     TEXT NOT NULL DEFAULT '',
+            provenance  TEXT NOT NULL DEFAULT 'observed',
+            approval    TEXT NOT NULL DEFAULT 'approved',
+            retention   TEXT NOT NULL DEFAULT 'keep',
+            created     REAL NOT NULL,
+            expires_at  REAL
+        );
+
+        -- consent flags for capture (e.g. episodic capture off by default)
+        CREATE TABLE IF NOT EXISTS memory_permissions (
+            scope    TEXT PRIMARY KEY,
+            allowed  INTEGER NOT NULL DEFAULT 0,
+            updated  REAL NOT NULL
+        );
+
+        -- FTS5 mirrors for text search (kept in sync by MemoryStore)
+        CREATE VIRTUAL TABLE IF NOT EXISTS episodic_fts USING fts5(id UNINDEXED, summary);
+        CREATE VIRTUAL TABLE IF NOT EXISTS labels_fts
+            USING fts5(app_key UNINDEXED, description, control_name);
         """
     )

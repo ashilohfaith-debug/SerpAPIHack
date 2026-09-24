@@ -136,6 +136,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="run a real command sequence, narrating every action and change")
     p.add_argument("--do", metavar="COMMAND",
                    help="run one spoken command transparently against the real desktop")
+    p.add_argument("--demo-memory", action="store_true",
+                   help="offline five-layer memory demo: preference persists across restart")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
@@ -155,6 +157,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.do:
         from relay.demo import do_command
         return do_command(args.do)
+    if args.demo_memory:
+        from relay.demo import memory_demo
+        return memory_demo()
     p.print_help()
     return 0
 

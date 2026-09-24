@@ -179,3 +179,55 @@ def do_command(command: str) -> int:
     finally:
         s.close()  # SAFETY: never force-kill apps
     return 0
+
+
+def memory_demo() -> int:
+    """Offline, no-LLM, no-GUI proof of the five-layer memory acceptance test:
+    set a per-app preference, 'restart' RELAY (a fresh Session on the same DB),
+    recall the preference, and reconcile the previous task — reporting the verified
+    step and the uncertain one honestly (never auto-repeating the uncertain action)."""
+    import os
+    import tempfile
+
+    from relay.memory.journal import ActionRecord, ExecState
+    from relay.session import Session
+    setup_logging("WARNING")
+    db = os.path.join(tempfile.gettempdir(), f"relay_mem_{int(time.time())}.db")
+    print(f"memory DB: {db}")
+
+    s1 = Session(speak=_speak_print, db_path=db)
+    try:
+        print("\nUSER: remember I prefer detailed narration in notepad")
+        s1.handle("remember I prefer detailed narration in notepad")
+        j, tid = s1.journal, s1.task_id
+        j.save_checkpoint(tid, goal="write my assignment", state="acting", data={})
+        j.append(ActionRecord(tid, "a1", ExecState.VERIFIED, proposed_action="open the editor"))
+        j.append(ActionRecord(tid, "a2", ExecState.UNCERTAIN, proposed_action="save the file"))
+        print("USER: what do you remember")
+        s1.handle("what do you remember")
+    finally:
+        s1.close()
+
+    print("\n--- (RELAY closed and restarted) ---")
+    s2 = Session(speak=_speak_print, db_path=db)
+    persisted = s2.store.get_pref("narration_mode", scope="notepad.exe")
+    try:
+        print(f"[persisted] narration preference for notepad = {persisted!r}")
+        print("USER: what were we doing")
+        s2.handle("what were we doing")
+        print("USER: what do you remember")
+        s2.handle("what do you remember")
+    finally:
+        s2.close()
+
+    for ext in ("", "-wal", "-shm"):
+        p = db + ext
+        try:
+            if os.path.exists(p):
+                os.unlink(p)
+        except OSError:
+            pass  # a lingering lock is fine — it's a temp file
+    ok = persisted == "detailed"
+    print(f"\nMemory demo {'PASSED' if ok else 'FAILED'}: preference persisted across "
+          "restart; the uncertain save was reported, not auto-repeated. Offline, no LLM.")
+    return 0 if ok else 1

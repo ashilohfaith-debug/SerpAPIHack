@@ -40,6 +40,14 @@ class Kind:
     SWITCH_APP = "switch_app"
     HELP = "help"
     CONTROL = "control"     # stop/pause/continue/cancel/emergency/repeat
+    # memory (L3/L5) voice operations
+    REMEMBER = "remember"
+    WHAT_REMEMBER = "what_remember"
+    WHY_REMEMBER = "why_remember"
+    FORGET = "forget"
+    CLEAR_HISTORY = "clear_history"
+    EXPORT_PREFS = "export_prefs"
+    WHAT_DOING = "what_doing"
     UNKNOWN = "unknown"
 
 
@@ -82,6 +90,31 @@ def parse(utterance: str) -> Intent:
         return Intent(Kind.READ_FOCUS, raw=raw)
     if low in ("help", "what can you do"):
         return Intent(Kind.HELP, raw=raw)
+
+    # memory (L3/L5) voice operations
+    if re.search(r"\bwhat do you remember|what have you remembered\b", low):
+        return Intent(Kind.WHAT_REMEMBER, raw=raw)
+    if re.search(r"\bwhy (did|do) you remember\b", low):
+        return Intent(Kind.WHY_REMEMBER, raw=raw)
+    if re.search(r"\bforget (this|that|it)\b", low):
+        return Intent(Kind.FORGET, raw=raw)
+    if re.search(r"\bclear (my )?(task )?history\b|\bforget (my )?history\b", low):
+        return Intent(Kind.CLEAR_HISTORY, raw=raw)
+    if re.search(r"\bexport (my )?(preferences|settings|prefs)\b", low):
+        return Intent(Kind.EXPORT_PREFS, raw=raw)
+    if re.search(r"\bwhat (were we|was i) doing\b|\bwhat did we do\b", low):
+        return Intent(Kind.WHAT_DOING, raw=raw)
+    m = re.match(r"remember (?:that )?i (?:prefer|like|want) "
+                 r"(quick|detailed|guided|quiet) narration(?:\s+(?:in|for)\s+(?:the\s+)?(.+))?",
+                 low)
+    if m:
+        slots = {"mode": m.group(1)}
+        if m.group(2):
+            slots["app"] = m.group(2).strip()
+        return Intent(Kind.REMEMBER, slots, raw)
+    m = re.match(r"remember (?:that )?(.+)", raw, re.IGNORECASE)
+    if m:
+        return Intent(Kind.REMEMBER, {"fact": m.group(1).strip()}, raw)
 
     # actions
     m = re.match(r"(?:open|launch|start|run)\s+(?:the\s+)?(.+)", low)
