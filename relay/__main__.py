@@ -93,17 +93,48 @@ def _voice_selftest() -> int:
     return 0 if ok else 1
 
 
+def _observe() -> int:
+    """Read the current foreground window via UI Automation and describe it —
+    proves real perception on this machine."""
+    from relay.diagnostics import setup_logging
+    from relay.perception import UIAWorker
+
+    setup_logging("INFO")
+    worker = UIAWorker()
+    snap = worker.observe(timeout=5.0)
+    if snap is None:
+        print("observe: timed out or no foreground window")
+        return 1
+    print(snap.summary())
+    if snap.dialogs:
+        for d in snap.dialogs:
+            print(f"  dialog: {d.title!r} buttons={list(d.buttons)}")
+    focus_role = snap.focus.role if snap.focus else None
+    focus_name = snap.focus.name if snap.focus else ""
+    print(f"  focus: {focus_role} {focus_name!r}")
+    print(f"  first controls (of {len(snap.elements)}):")
+    for e in snap.elements[:12]:
+        name = (e.name[:40]) if e.name else ""
+        print(f"    [{e.uid}] {e.role:12} {name!r:44} actions={list(e.actions)}")
+    worker.stop()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="relay", description="RELAY accessibility assistant")
     p.add_argument("--version", action="version", version=f"relay {__version__}")
     p.add_argument("--selftest", action="store_true", help="verify core wiring and exit")
     p.add_argument("--voice-selftest", action="store_true",
                    help="offline TTS->STT round-trip (no mic) and exit")
+    p.add_argument("--observe", action="store_true",
+                   help="describe the current foreground window via UI Automation")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
     if args.voice_selftest:
         return _voice_selftest()
+    if args.observe:
+        return _observe()
     p.print_help()
     return 0
 

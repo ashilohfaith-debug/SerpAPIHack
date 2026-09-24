@@ -23,7 +23,15 @@ voice = [
     "pywin32>=306",          # SAPI TTS + Win32
     "onnxruntime>=1.17",     # piper backend
 ]
-# percept = [...]  # P4: uiautomation, comtypes, pywin32, rapidocr-onnxruntime, pillow
+# P4 perception (verified importing + real UIA read on Windows/CPython 3.12):
+percept = [
+    "uiautomation>=2.0",
+    "comtypes>=1.2",
+    "psutil>=5.9",              # foreground process -> app name
+    "rapidocr-onnxruntime>=1.3",  # on-demand OCR fallback (last resort)
+    "pillow>=10",
+    "mss>=9",                  # screen capture for OCR
+]
 
 [project.scripts]
 relay = "relay.__main__:main"
