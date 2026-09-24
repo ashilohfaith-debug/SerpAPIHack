@@ -48,6 +48,7 @@ class Executor:
         self.task_id = task_id
         self.emergency = emergency
         self._confirm = confirm  # callable(Decision) -> bool
+        self._granted = False    # one-shot confirmation grant (see grant_next_confirmation)
         self.input: InputBackend = input_backend or PyAutoGuiBackend()
         self._n = 0
 
@@ -56,6 +57,12 @@ class Executor:
         self._n += 1
         return f"{self.task_id}.a{self._n}"
 
+    def grant_next_confirmation(self) -> None:
+        """One-shot: allow the very next confirmation-required action to proceed.
+        The Session sets this only after the user has said the exact confirmation
+        phrase (or completed a keyboard confirm). Consumed by a single _gate call."""
+        self._granted = True
+
     def _gate(self, action: Action) -> tuple[bool, str]:
         if self.emergency is not None and self.emergency.is_engaged:
             return False, "emergency stop engaged"
@@ -63,7 +70,8 @@ class Executor:
         if not dec.allowed:
             return False, f"blocked: {dec.reason}"
         if dec.requires_confirmation:
-            ok = bool(self._confirm(dec)) if self._confirm else False
+            ok = self._granted or (bool(self._confirm(dec)) if self._confirm else False)
+            self._granted = False  # consume the one-shot grant regardless
             if not ok:
                 return False, f"not confirmed ({dec.confirmation.value}): {dec.reason}"
         return True, ""

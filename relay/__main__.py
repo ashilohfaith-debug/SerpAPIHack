@@ -138,6 +138,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="run one spoken command transparently against the real desktop")
     p.add_argument("--demo-memory", action="store_true",
                    help="offline five-layer memory demo: preference persists across restart")
+    p.add_argument("--onboard", action="store_true",
+                   help="speak the voice-only onboarding through the local Piper voice")
+    p.add_argument("--demo-confirm", action="store_true",
+                   help="show the spoken-confirmation flow: a casual reply never acts")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
@@ -160,6 +164,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.demo_memory:
         from relay.demo import memory_demo
         return memory_demo()
+    if args.onboard:
+        from relay.demo import onboard_demo
+        return onboard_demo()
+    if args.demo_confirm:
+        from relay.demo import confirm_demo
+        return confirm_demo()
     p.print_help()
     return 0
 

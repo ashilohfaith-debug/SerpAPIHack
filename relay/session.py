@@ -1,16 +1,28 @@
 """Session orchestrator — one utterance in, transparent narrated action out.
 
-Ties the pieces together: parse the utterance into an Intent, handle control words
-(stop/pause/cancel/emergency) immediately, otherwise plan and run it through the
+Parses the utterance, handles control words (stop/pause/cancel/emergency) and memory
+and accessibility commands directly, and otherwise plans and runs it through the
 TransparentRunner. RELAY acts only in response to a command and narrates every step;
-it does not loop on its own. High-risk actions that need a spoken confirmation phrase
-are announced and declined here in Essential P6 (the phrase flow arrives in P8).
+it never loops on its own.
+
+High-risk actions do not run automatically: the runner asks the Session for an
+accessible spoken confirmation (an action-specific phrase, never a bare "yes"); the
+most sensitive actions require a keyboard/Windows-auth confirm and are declined by
+voice. Narration verbosity follows the current mode; onboarding is fully spoken.
 """
 
 from __future__ import annotations
 
 import threading
 
+from relay.accessibility import (
+    PendingConfirmation,
+    confirmation_phrase,
+    is_cancel,
+    is_first_run,
+    mark_onboarded,
+    onboarding_script,
+)
 from relay.audio.wake import Command
 from relay.core import EmergencyStop, new_task_id
 from relay.executor import Executor
@@ -20,15 +32,21 @@ from relay.memory.journal import ActionJournal
 from relay.memory.reconcile import latest_task_id, reconcile
 from relay.memory.store import MemoryStore
 from relay.memory.task_context import TaskContext
+from relay.narration import policy as pol
 from relay.perception import UIAWorker
 from relay.planner import TransparentRunner, plan
-from relay.safety import PermissionEngine
+from relay.safety import ConfirmationStrength, PermissionEngine
 from relay.verifier import Verifier
 
 _MEMORY_KINDS = {
     Kind.REMEMBER, Kind.WHAT_REMEMBER, Kind.WHY_REMEMBER, Kind.FORGET,
     Kind.CLEAR_HISTORY, Kind.EXPORT_PREFS, Kind.WHAT_DOING,
 }
+_ACCESS_KINDS = {
+    Kind.SET_MODE, Kind.READ_DIALOG, Kind.NEXT_ELEMENT, Kind.PREV_ELEMENT, Kind.SPELL,
+}
+_REQ = pol.Priority.REQUESTED
+_CONF = pol.Priority.CONFIRMATION
 
 
 class Session:
@@ -39,47 +57,123 @@ class Session:
         self.bus = bus
         self.worker = UIAWorker(bus=bus)
         self.worker.start()
-        engine = PermissionEngine()
+        self.engine = PermissionEngine()
         self.conn = connect(db_path)
         self.journal = ActionJournal(self.conn)
         self.store = MemoryStore(self.conn)
         self.task_id = new_task_id()
         self.ctx = TaskContext(self.task_id)
-        self._last_pref: tuple[str, str] | None = None  # for "forget this" / "why"
-        self.executor = Executor(engine, self.worker, self.journal, self.task_id,
-                                 emergency=self.emergency, confirm=self._confirm)
+        self._last_pref: tuple[str, str] | None = None
+        self._pending: PendingConfirmation | None = None
+        self._nav_index = -1
+        self.executor = Executor(self.engine, self.worker, self.journal, self.task_id,
+                                 emergency=self.emergency, confirm=lambda d: False)
         self.verifier = Verifier(self.worker, self.journal)
-        # Apply persisted global narration preference, if any (L3).
         self.narration_mode = self.store.get_pref("narration_mode", default="quick")
-        self.runner = TransparentRunner(self.executor, self.worker, self.verifier,
-                                        self.ctx, speak=speak, emergency=self.emergency,
-                                        bus=bus)
+        self.runner = TransparentRunner(
+            self.executor, self.worker, self.verifier, self.ctx, speak=speak,
+            emergency=self.emergency, bus=bus, engine=self.engine,
+            on_confirm_needed=self._on_confirm_needed, mode=self.narration_mode)
 
-    def say(self, text: str) -> None:
-        self.runner.say(text)
+    # ---- narration ----
+    def say(self, text: str, priority: int = pol.Priority.TASK) -> None:
+        self.runner.say(text, priority)
 
-    def _confirm(self, decision) -> bool:
-        # Essential P6: announce the exact consequence and decline high-risk actions
-        # that need a spoken confirmation phrase (that flow lands in P8). This is safe
-        # by default — RELAY never performs a high-risk action without real consent.
-        self.say(decision.spoken_summary)
-        self.say("This needs your confirmation, which I'll support by voice soon. "
-                 "For now I won't do it automatically.")
-        return False
+    def onboard(self) -> None:
+        wake = self.store.get_pref("wake_word", default="relay")
+        for line in onboarding_script(wake_word=wake, first_run=is_first_run()):
+            self.say(line, _REQ)
+        mark_onboarded()
 
+    # ---- dispatch ----
     def handle(self, utterance: str):
+        if self._pending is not None:
+            return self._resolve_pending(utterance)
         intent = parse(utterance)
         if intent.kind == Kind.CONTROL:
             return self._handle_control(intent.slots.get("command"))
         if intent.kind in _MEMORY_KINDS:
             return self._handle_memory(intent)
+        if intent.kind in _ACCESS_KINDS:
+            return self._handle_access(intent)
         self.cancel.clear()
         steps, clarification = plan(intent)
         if clarification:
-            self.say(clarification)
+            self.say(clarification, _REQ)
             return []
         return self.runner.run(steps, cancel=self.cancel)
 
+    # ---- confirmation flow ----
+    def _on_confirm_needed(self, decision, target_label, retry) -> None:
+        self.say(decision.spoken_summary, _CONF)
+        if decision.confirmation is ConfirmationStrength.KEYBOARD:
+            self.say("This one is especially sensitive. Please confirm with your keyboard "
+                     "or Windows sign-in — I won't do it by voice alone.", _CONF)
+            return  # not voice-confirmable
+        phrase = confirmation_phrase(target_label, decision.risk.value)
+        self._pending = PendingConfirmation(phrase=phrase, summary=decision.spoken_summary,
+                                            retry=retry)
+        self.say(f"To confirm, say: {phrase}. Or say cancel.", _CONF)
+
+    def _resolve_pending(self, utterance: str):
+        p = self._pending
+        low = utterance.lower().strip()
+        if p.phrase in low or low == p.phrase:
+            self._pending = None
+            self.say("Confirmed.", _CONF)
+            return [p.retry()]
+        if is_cancel(low):
+            self._pending = None
+            self.say("Cancelled — I won't do it.", _CONF)
+            return []
+        p.reprompts += 1
+        if p.reprompts > 2:
+            self._pending = None
+            self.say("Okay, cancelling that.", _CONF)
+            return []
+        self.say(f"To confirm, say {p.phrase}, or say cancel.", _CONF)
+        return []
+
+    # ---- accessibility read / navigate / spell / mode ----
+    def _handle_access(self, intent):
+        k, s = intent.kind, intent.slots
+        if k == Kind.SET_MODE:
+            mode = s["mode"]
+            self.narration_mode = mode
+            self.runner.mode = mode
+            self.store.set_pref("narration_mode", mode)
+            self.say(f"Okay, {mode} narration.", _REQ)
+        elif k == Kind.READ_DIALOG:
+            snap = self.worker.observe(3.0)
+            if snap and snap.dialogs:
+                d = snap.dialogs[0]
+                btns = f" Buttons: {', '.join(d.buttons)}." if d.buttons else ""
+                self.say(f"Dialog: {d.title}.{btns}", _REQ)
+            else:
+                self.say("There's no dialog open.", _REQ)
+        elif k in (Kind.NEXT_ELEMENT, Kind.PREV_ELEMENT):
+            snap = self.worker.observe(3.0)
+            els = [e for e in (snap.elements if snap else []) if e.name]
+            if not els:
+                self.say("There's nothing to move through here.", _REQ)
+                return []
+            self._nav_index += 1 if k == Kind.NEXT_ELEMENT else -1
+            self._nav_index = max(0, min(self._nav_index, len(els) - 1))
+            e = els[self._nav_index]
+            self.ctx.remember("last", e, snap.observation_version)
+            self.say(f"{e.role}: {e.name}." + (f" {e.value}" if e.value else ""), _REQ)
+        elif k == Kind.SPELL:
+            snap = self.worker.observe(3.0)
+            text = ""
+            if snap and snap.selection:
+                text = snap.selection
+            elif snap and snap.focus:
+                text = snap.focus.value or snap.focus.name
+            text = text or self.runner.last_said
+            self.say(pol.spell(text), _REQ)
+        return []
+
+    # ---- memory ----
     def _handle_memory(self, intent):
         k, s = intent.kind, intent.slots
         if k == Kind.REMEMBER:
@@ -88,6 +182,9 @@ class Session:
                 self.store.set_pref("narration_mode", s["mode"], scope=scope)
                 self._last_pref = (scope, "narration_mode")
                 where = f" in {s['app']}" if s.get("app") else ""
+                if not s.get("app"):
+                    self.narration_mode = s["mode"]
+                    self.runner.mode = s["mode"]
                 self.say(f"Got it — I'll use {s['mode']} narration{where}.")
             else:
                 fact = s.get("fact", "")
@@ -119,10 +216,8 @@ class Session:
                      "I can write them to a file you choose.")
         elif k == Kind.WHAT_DOING:
             tid = latest_task_id(self.conn)
-            if tid is None:
-                self.say("I don't have a record of a task in progress.")
-            else:
-                self.say(reconcile(self.journal, tid).spoken)
+            self.say(reconcile(self.journal, tid).spoken if tid
+                     else "I don't have a record of a task in progress.")
         return []
 
     @staticmethod
@@ -134,19 +229,20 @@ class Session:
     def _handle_control(self, command: str | None):
         if command == Command.EMERGENCY_STOP:
             self.emergency.engage("user")
-            self.say("Emergency stop. I've stopped everything.")
+            self.say("Emergency stop. I've stopped everything.", _CONF)
         elif command == Command.CANCEL_TASK:
             self.cancel.set()
-            self.say("Cancelling.")
+            self._pending = None
+            self.say("Cancelling.", _CONF)
         elif command == Command.STOP_TALKING:
-            self.say("")  # a real speech queue interrupts here (P3 barge-in)
+            pass  # a real speech queue interrupts here (P3 barge-in)
         elif command == Command.PAUSE:
             self.cancel.set()
-            self.say("Paused. Say continue when you're ready.")
+            self.say("Paused. Say continue when you're ready.", _CONF)
         elif command == Command.CONTINUE:
-            self.say("Okay.")
+            self.say("Okay.", _CONF)
         elif command == Command.REPEAT:
-            self.say("Repeating.")
+            self.say(self.runner.last_said or "I haven't said anything yet.", _REQ)
         return []
 
     def close(self) -> None:

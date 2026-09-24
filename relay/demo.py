@@ -231,3 +231,55 @@ def memory_demo() -> int:
     print(f"\nMemory demo {'PASSED' if ok else 'FAILED'}: preference persisted across "
           "restart; the uncertain save was reported, not auto-repeated. Offline, no LLM.")
     return 0 if ok else 1
+
+
+def onboard_demo() -> int:
+    """Speak the voice-only onboarding through the real Piper voice — proof a blind
+    user can start and understand RELAY with no visual step."""
+    from relay.accessibility import onboarding_script
+    from relay.audio import make_tts
+    setup_logging("WARNING")
+    tts = make_tts(prefer_piper=True)
+    for line in onboarding_script(first_run=True):
+        print(f"  RELAY: {line}")
+        try:
+            import sounddevice as sd
+            audio, sr = tts.synth_to_array(line)
+            if len(audio):
+                sd.play(audio, sr)
+                sd.wait()
+        except Exception as e:
+            print(f"    (audio unavailable: {e})")
+    print("\nSpoken onboarding complete — voice-only, no visual step required.")
+    return 0
+
+
+def confirm_demo() -> int:
+    """Show the accessible spoken-confirmation flow: a casual 'yeah' must NOT trigger
+    a dangerous action — only the exact action-specific phrase does."""
+    from relay.safety import Action
+    from relay.session import Session
+    setup_logging("WARNING")
+    s = Session(speak=_speak_print)
+    performed = {"n": 0}
+
+    def do_delete():
+        performed["n"] += 1
+        print("  [ACTION EXECUTED] Delete performed")
+
+    try:
+        dec = s.engine.classify(Action(kind="invoke", target_label="Delete", target_app="Files"))
+        print("USER: click delete")
+        s._on_confirm_needed(dec, "Delete", retry=do_delete)
+        print("\nUSER: yeah sure   (a casual reply — NOT the confirmation phrase)")
+        s.handle("yeah sure")
+        print(f"  performed so far: {performed['n']}  (expected 0 — not confirmed)")
+        print("\nUSER: confirm delete   (the exact phrase)")
+        s.handle("confirm delete")
+        print(f"  performed after phrase: {performed['n']}  (expected 1)")
+    finally:
+        s.close()
+    ok = performed["n"] == 1
+    print(f"\nConfirm demo {'PASSED' if ok else 'FAILED'}: a casual reply never triggered "
+          "the destructive action; only the action-specific phrase did.")
+    return 0 if ok else 1

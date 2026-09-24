@@ -40,6 +40,11 @@ class Kind:
     SWITCH_APP = "switch_app"
     HELP = "help"
     CONTROL = "control"     # stop/pause/continue/cancel/emergency/repeat
+    READ_DIALOG = "read_dialog"
+    NEXT_ELEMENT = "next_element"
+    PREV_ELEMENT = "prev_element"
+    SPELL = "spell"
+    SET_MODE = "set_mode"
     # memory (L3/L5) voice operations
     REMEMBER = "remember"
     WHAT_REMEMBER = "what_remember"
@@ -72,6 +77,17 @@ def parse(utterance: str) -> Intent:
     if not low:
         return Intent(Kind.UNKNOWN, raw=raw)
 
+    # Explicit narration-mode change ("quiet mode", "set narration to detailed") is
+    # matched before control words so "quiet mode" isn't caught by the "quiet" stop
+    # command. Excluded when it's a "remember ... narration" preference.
+    if not low.startswith("remember"):
+        mode_m = re.search(r"\b(quick|detailed|guided|quiet)\s+(?:mode|narration)\b", low)
+        if mode_m is None:
+            mode_m = re.match(r"set (?:narration|verbosity) to (?:the )?"
+                              r"(quick|detailed|guided|quiet)", low)
+        if mode_m:
+            return Intent(Kind.SET_MODE, {"mode": mode_m.group(1)}, raw)
+
     # control commands take priority (stop/pause/continue/cancel/emergency/repeat)
     cmd = match_command(low)
     if cmd is not None:
@@ -90,6 +106,16 @@ def parse(utterance: str) -> Intent:
         return Intent(Kind.READ_FOCUS, raw=raw)
     if low in ("help", "what can you do"):
         return Intent(Kind.HELP, raw=raw)
+
+    # accessibility read / navigate / spell / mode
+    if re.search(r"\bread the dialog|what does the dialog say|read dialog\b", low):
+        return Intent(Kind.READ_DIALOG, raw=raw)
+    if re.fullmatch(r"(next|next (element|control|one|item))", low):
+        return Intent(Kind.NEXT_ELEMENT, raw=raw)
+    if re.fullmatch(r"(previous|prev|go back one|previous (element|control|one|item))", low):
+        return Intent(Kind.PREV_ELEMENT, raw=raw)
+    if re.search(r"\bspell (that|it|this|the selection)\b|^spell$", low):
+        return Intent(Kind.SPELL, raw=raw)
 
     # memory (L3/L5) voice operations
     if re.search(r"\bwhat do you remember|what have you remembered\b", low):

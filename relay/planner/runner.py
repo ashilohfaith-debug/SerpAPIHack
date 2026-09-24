@@ -4,14 +4,14 @@ RELAY is NOT an autonomous agent. It runs the steps the user asked for, ONE at a
 time, and for every action it:
   1. ANNOUNCES what it is about to do, before doing it;
   2. does the single action through the central executor (gated + verified);
-  3. re-observes and ANNOUNCES the result plus every task-relevant CHANGE on screen
-     (the delta versus what the user was last told).
-Between steps it checks for cancel / emergency-stop and stops immediately. It never
-runs silently to completion, and it goes idle when the plan is done — no background
-loop. Answering intents ("what's on my screen", "what changed") never touch the OS.
+  3. re-observes and ANNOUNCES the result plus every task-relevant CHANGE on screen.
+Between steps it checks for cancel / emergency-stop and stops immediately. Idle when
+the plan is done — no background loop.
 
-Narration is emitted through an injected ``speak`` callable (real = the Piper speech
-queue) and on the event bus, so both the ear and the optional UI stay in sync.
+High-risk clicks (a control whose label is dangerous, or an elevated action) do not
+run automatically: the runner asks the Session to obtain an accessible spoken
+confirmation first, via ``on_confirm_needed``. Narration verbosity follows the
+current mode (quick / detailed / guided / quiet).
 """
 
 from __future__ import annotations
@@ -24,6 +24,8 @@ from relay.intent.grammar import Kind
 from relay.memory.journal import ExecState
 from relay.memory.task_context import TaskContext, resolve_reference
 from relay.narration import delta as delta_mod
+from relay.narration import policy as pol
+from relay.safety import Action
 
 log = get_logger("runner")
 
@@ -48,14 +50,16 @@ _REF_ERROR_SPEECH = {
 @dataclass
 class StepResult:
     description: str
-    state: str            # verified | executed | uncertain | failed | cancelled | answered
+    # verified | uncertain | failed | cancelled | answered | awaiting_confirmation
+    state: str
     detail: str = ""
     deltas: list[str] = field(default_factory=list)
 
 
 class TransparentRunner:
-    def __init__(self, executor, worker, verifier, ctx: TaskContext,
-                 speak=None, emergency=None, bus=None) -> None:
+    def __init__(self, executor, worker, verifier, ctx: TaskContext, speak=None,
+                 emergency=None, bus=None, engine=None, on_confirm_needed=None,
+                 mode: str = "quick") -> None:
         self.ex = executor
         self.worker = worker
         self.vf = verifier
@@ -63,10 +67,15 @@ class TransparentRunner:
         self._speak = speak
         self.emergency = emergency
         self.bus = bus
+        self.engine = engine
+        self._on_confirm_needed = on_confirm_needed
+        self.mode = mode
+        self.last_said = ""
 
-    def say(self, text: str) -> None:
-        if not text:
+    def say(self, text: str, priority: int = pol.Priority.TASK) -> None:
+        if not text or not pol.should_speak(priority, self.mode):
             return
+        self.last_said = text
         if self._speak is not None:
             try:
                 self._speak(text)
@@ -84,14 +93,13 @@ class TransparentRunner:
         results: list[StepResult] = []
         for step in steps:
             if self._stopped(cancel):
-                self.say("Stopping.")
+                self.say("Stopping.", pol.Priority.CONFIRMATION)
                 results.append(StepResult(step.description, "cancelled"))
                 break
             r = self._run_step(step)
             results.append(r)
-            if r.state == "failed":
-                # do not blindly continue a sequence after a failure; the user decides
-                break
+            if r.state in ("failed", "awaiting_confirmation"):
+                break  # stop the sequence; the user decides / confirms
         return results
 
     # --- per-step ---
@@ -100,33 +108,37 @@ class TransparentRunner:
             return self._answer(step)
 
         self.say(f"I'm going to {step.description}.")   # announce BEFORE acting
-        outcome, ok = self._act(step)
+        outcome, detail = self._act(step)
+        if outcome == "AWAIT":                          # needs spoken confirmation first
+            return StepResult(step.description, "awaiting_confirmation", detail)
         new = self.worker.observe(3.0)
         deltas = delta_mod.diff(self.ctx.last_narrated, new)
         self.ctx.last_narrated = new
+        return self._narrate_outcome(step.description, outcome, detail, deltas)
 
-        if outcome is None:                       # could not even attempt (e.g. bad ref)
-            return StepResult(step.description, "failed", ok, deltas)
+    def _narrate_outcome(self, desc, outcome, detail, deltas) -> StepResult:
+        if outcome is None:
+            self.say(f"I couldn't do that. {detail}", pol.Priority.CRITICAL)
+            return StepResult(desc, "failed", detail, deltas)
         if outcome.state == ExecState.VERIFIED:
-            self.say(f"Done. {step.description.capitalize()}.")
+            self.say(f"Done. {desc.capitalize()}.")
             state = "verified"
         elif outcome.state == ExecState.EXECUTED:
             self.say("I did that, but I couldn't fully confirm it.")
             state = "uncertain"
         elif outcome.state == ExecState.CANCELLED:
-            self.say(f"I didn't do that: {outcome.detail}.")
+            self.say(f"I didn't do that: {outcome.detail}.", pol.Priority.CONFIRMATION)
             state = "cancelled"
         else:
-            self.say(f"That didn't work: {outcome.detail}.")
+            self.say(f"That didn't work: {outcome.detail}.", pol.Priority.CRITICAL)
             state = "failed"
-        for d in deltas:                          # tell the user every change
+        for d in deltas:                                # tell the user every change
             self.say(d)
-        return StepResult(step.description, state, outcome.detail, deltas)
+        return StepResult(desc, state, outcome.detail if outcome else detail, deltas)
 
     def _act(self, step):
-        kind = step.kind
-        p = step.payload
-        if kind == "open" or kind == "switch":
+        kind, p = step.kind, step.payload
+        if kind in ("open", "switch"):
             app = p["app"].lower().strip()
             exe = _APP_EXE.get(app, app if app.endswith((".exe", ":")) else f"{app}.exe")
             o = self.ex.launch_app(exe)
@@ -138,7 +150,7 @@ class TransparentRunner:
         if kind == "type":
             o = self.ex.type_text(p["text"])
             time.sleep(0.4)
-            snippet = p["text"].split()[0] if p["text"].split() else p["text"]
+            snippet = (p["text"].split() or [p["text"]])[0]
             seen = self.vf.focus_value_contains(snippet[:12])
             return self.vf.verify(o, seen, "the text is there" if seen
                                   else "couldn't confirm the text"), ""
@@ -149,21 +161,41 @@ class TransparentRunner:
             return self.vf.verify(o, dlg, "a save dialog opened" if dlg
                                   else "no save dialog appeared"), ""
         if kind in ("press", "scroll"):
-            o = self.ex.press(p["key"])
-            return o, ""   # generic key press: executed (no universal postcondition)
+            return self.ex.press(p["key"]), ""
         if kind == "activate":
             snap = self.worker.observe(3.0)
             el, err = resolve_reference(self.ctx, snap, target=p.get("target"),
                                         ordinal=p.get("ordinal"))
             if el is None:
                 return None, _REF_ERROR_SPEECH.get(err, "I couldn't do that.")
-            o = self.ex.invoke_element(el)
-            time.sleep(0.6)
-            after = self.worker.observe(3.0)
-            changed = bool(delta_mod.diff(snap, after))
-            return self.vf.verify(o, changed, "it responded" if changed
-                                  else "nothing seemed to change"), ""
+            if self.engine is not None and self._on_confirm_needed is not None:
+                dec = self.engine.classify(Action(
+                    kind="invoke", target_app=el.window_title,
+                    target_label=el.name, target_role=el.role))
+                if dec.requires_confirmation:
+                    self._on_confirm_needed(
+                        dec, el.name,
+                        lambda e=el, s=snap, d=step.description: self._confirmed_activate(d, e, s))
+                    return "AWAIT", dec.spoken_summary
+            return self._invoke_verify(el, snap), ""
         return None, "unsupported step"
+
+    def _invoke_verify(self, el, prev_snap):
+        o = self.ex.invoke_element(el)
+        time.sleep(0.6)
+        after = self.worker.observe(3.0)
+        changed = bool(delta_mod.diff(prev_snap, after))
+        return self.vf.verify(o, changed, "it responded" if changed
+                              else "nothing seemed to change")
+
+    def _confirmed_activate(self, desc, el, prev_snap) -> StepResult:
+        """Run an activation the user has just confirmed by phrase, and narrate it."""
+        self.ex.grant_next_confirmation()
+        outcome = self._invoke_verify(el, prev_snap)
+        new = self.worker.observe(3.0)
+        deltas = delta_mod.diff(self.ctx.last_narrated, new)
+        self.ctx.last_narrated = new
+        return self._narrate_outcome(desc, outcome, "", deltas)
 
     # --- answering intents (no OS action) ---
     def _answer(self, step) -> StepResult:
@@ -172,28 +204,32 @@ class TransparentRunner:
         if ak == Kind.WHAT_CHANGED:
             deltas = delta_mod.diff(self.ctx.last_narrated, snap)
             self.ctx.last_narrated = snap
-            self.say("Nothing has changed." if not deltas else " ".join(deltas))
+            self.say("Nothing has changed." if not deltas else " ".join(deltas),
+                     pol.Priority.REQUESTED)
             return StepResult("what changed", "answered", deltas=deltas)
         if snap is None:
-            self.say("I can't read the screen right now.")
+            self.say("I can't read the screen right now.", pol.Priority.REQUESTED)
             return StepResult("answer", "answered")
         if ak == Kind.WHERE_AM_I:
-            self.say(snap.summary())
+            self.say(pol.describe(snap, self.mode), pol.Priority.REQUESTED)
         elif ak == Kind.LIST_OPTIONS:
             names = [e.name for e in snap.elements if e.name][:8]
             self.say("Your options include: " + ", ".join(names) + "." if names
-                     else "I don't see any labelled controls to choose from.")
+                     else "I don't see any labelled controls to choose from.",
+                     pol.Priority.REQUESTED)
         elif ak == Kind.READ_FOCUS:
             if snap.selection:
-                self.say(f"Selected text: {snap.selection}")
+                self.say(f"Selected text: {snap.selection}", pol.Priority.REQUESTED)
             elif snap.focus and (snap.focus.value or snap.focus.name):
-                self.say(f"{snap.focus.role}: {snap.focus.value or snap.focus.name}")
+                self.say(f"{snap.focus.role}: {snap.focus.value or snap.focus.name}",
+                         pol.Priority.REQUESTED)
             else:
-                self.say("Nothing is focused right now.")
+                self.say("Nothing is focused right now.", pol.Priority.REQUESTED)
         elif ak == Kind.HELP:
             self.say("You can say: what's on my screen, open an app, click something, "
-                     "type text, save, what changed, stop, or cancel.")
+                     "type text, save, what changed, next, spell that, quiet mode, "
+                     "stop, or cancel.", pol.Priority.REQUESTED)
         else:  # DESCRIBE_SCREEN
-            self.say(snap.summary())
+            self.say(pol.describe(snap, self.mode), pol.Priority.REQUESTED)
         self.ctx.last_narrated = snap
         return StepResult("answer", "answered")
