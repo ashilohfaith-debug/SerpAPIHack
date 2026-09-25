@@ -195,7 +195,8 @@ class PermissionEngine:
 
     @staticmethod
     def _summary(kind: str, target: str, app: str, high: bool) -> str:
-        verb = kind.replace("_", " ")
+        verb = {"invoke": "click", "set_value": "change", "key": "press",
+                "delete_file": "delete", "launch_app": "open"}.get(kind, kind.replace("_", " "))
         if high:
             return (f"I am about to {verb} {target} in {app}. "
                     f"This can't be undone.")

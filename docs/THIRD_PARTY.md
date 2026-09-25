@@ -25,6 +25,8 @@ with RELAY's MIT distribution. No GPL or unlicensed code is linked or bundled.
 | pyperclip | clipboard for reliable text entry | BSD-3 |
 | psutil | process/app + perf measurement | BSD-3 |
 | tokenizers / huggingface_hub | pulled by faster-whisper | Apache-2.0 |
+| pycaw | exact master volume / mute (Core Audio) | MIT |
+| pypdf | read PDFs aloud | BSD-3 |
 
 Dev/packaging only: pytest, ruff, pyinstaller (all permissive).
 
@@ -34,6 +36,12 @@ Dev/packaging only: pytest, ruff, pyinstaller (all permissive).
 | Whisper tiny.en (via faster-whisper) | MIT | OpenAI Whisper weights, MIT |
 | RapidOCR ONNX det/rec | Apache-2.0 | ships in the package |
 | Piper voice `en_US-lessac-medium` | **verify at release** | Piper code is MIT; individual voice datasets vary — confirm the chosen voice's license before redistribution |
+
+## External service (Connected mode only, opt-in)
+**Sarvam AI** (https://www.sarvam.ai) — Saaras speech-to-text, Mayura/Sarvam-Translate,
+Bulbul text-to-speech and the Sarvam chat model, called over HTTPS with the user's own
+API key (stdlib `urllib`; no Sarvam SDK is bundled). Use is governed by Sarvam's terms;
+nothing is sent unless the user turns Connected mode on with the spoken consent phrase.
 
 ## Reference projects (audited, see NOTICE)
 - **screen-use** (MIT), **clacky** (MIT) — small components/patterns adapted, with attribution in `NOTICE`.

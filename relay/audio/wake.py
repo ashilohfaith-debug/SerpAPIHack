@@ -20,26 +20,25 @@ _WAKE_VARIANTS = (
     "hey relay", "ok relay", "hi relay",
 )
 
-_LEAD = re.compile(r"^(hey|ok|okay|hi|yo)\s+", re.IGNORECASE)
+_LEAD = re.compile(r"^(?:(?:hey|ok|okay|hi|yo|um+|uh+|so|oh)[\s,.!]+)+", re.IGNORECASE)
+_WAKE_RE = re.compile(
+    r"^(?:" + "|".join(re.escape(v) for v in sorted(_WAKE_VARIANTS, key=len, reverse=True))
+    + r")(?=$|[\s,.!?:;])[\s,.!?:;]*", re.IGNORECASE)
 
 
 def detect_wake(text: str) -> tuple[bool, str]:
-    """Return (detected, remaining_command). Strips the wake word + a leading
-    'hey/ok' so 'hey relay, open notepad' -> (True, 'open notepad')."""
-    low = " " + text.lower().strip() + " "
-    for v in _WAKE_VARIANTS:
-        idx = low.find(" " + v + " ")
-        if idx == -1 and low.strip() == v:
-            return True, ""
-        if idx != -1:
-            after = low[idx + len(v) + 1:].strip()
-            return True, after.lstrip(",. ").strip()
-    # also catch the bare word possibly with trailing punctuation
-    stripped = _LEAD.sub("", text.strip().lower())
-    if stripped.split(" ", 1)[0].strip(",.!?") == WAKE_WORD:
-        rest = stripped.split(" ", 1)[1].strip() if " " in stripped else ""
-        return True, rest
-    return False, ""
+    """Return (detected, remaining_command). The wake word must START the utterance
+    (after an optional 'hey'/'ok'), so 'hey relay, open notepad' -> (True, 'open
+    notepad') but ambient talk that merely mentions relay mid-sentence is ignored."""
+    t = (text or "").strip().replace("’", "'")
+    t = re.sub(r"^[\"'“”.,!?\s-]+", "", t)
+    t = _LEAD.sub("", t)
+    m = _WAKE_RE.match(t)
+    if not m:
+        return False, ""
+    rest = t[m.end():].strip()
+    rest = re.sub(r"^[,.!?:;\s]+", "", rest).strip()
+    return True, rest
 
 
 # Control commands -> canonical action. Order matters (emergency first).

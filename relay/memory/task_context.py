@@ -19,6 +19,18 @@ from relay.perception.semantic import ScreenSnapshot, UIElement
 CLICKABLE = {"Button", "Hyperlink", "MenuItem", "ListItem", "TabItem",
              "CheckBox", "RadioButton", "TreeItem", "SplitButton"}
 _DEMONSTRATIVES = {"that", "it", "this", "the same", "them", "the one"}
+# spoken role word -> UIA roles it covers
+ROLE_WORDS = {
+    "link": {"Hyperlink"}, "result": {"Hyperlink"}, "button": {"Button", "SplitButton"},
+    "item": {"ListItem", "TreeItem", "MenuItem"}, "option": CLICKABLE,
+    "checkbox": {"CheckBox"}, "tab": {"TabItem"}, "menu item": {"MenuItem"},
+    "field": {"Edit", "ComboBox"}, "heading": {"Text"},
+}
+
+
+def reading_order(elements):
+    """Top-to-bottom, then left-to-right — the order a user means by 'the second one'."""
+    return sorted(elements, key=lambda e: (e.bbox[1] // 12, e.bbox[0]))
 
 
 @dataclass(frozen=True)
@@ -43,15 +55,19 @@ class TaskContext:
 
 
 def resolve_reference(ctx: TaskContext, current: ScreenSnapshot | None,
-                      target: str | None = None,
-                      ordinal: int | None = None) -> tuple[UIElement | None, str | None]:
+                      target: str | None = None, ordinal: int | None = None,
+                      role: str | None = None) -> tuple[UIElement | None, str | None]:
     """Return (element, error). error is a machine code the caller narrates:
     no_screen | out_of_range | no_prior_reference | reference_stale | not_found | no_target."""
     if current is None:
         return None, "no_screen"
 
     if ordinal is not None:
-        pool = [e for e in current.elements if e.role in CLICKABLE] or current.elements
+        roles = ROLE_WORDS.get(role or "", CLICKABLE)
+        pool = [e for e in current.elements if e.role in roles and e.name]
+        if not pool and not role:
+            pool = [e for e in current.elements if e.name]
+        pool = reading_order(pool)
         idx = ordinal - 1 if ordinal > 0 else len(pool) - 1
         if 0 <= idx < len(pool):
             el = pool[idx]
@@ -71,6 +87,11 @@ def resolve_reference(ctx: TaskContext, current: ScreenSnapshot | None,
                     return e, None
             return None, "reference_stale"
         matches = current.find(target)
+        if not matches:                   # "click the login button" -> "login"
+            bare = " ".join(w for w in t.split() if w not in ROLE_WORDS and w not in (
+                "the", "a", "an", "on", "named", "called"))
+            if bare and bare != t:
+                matches = current.find(bare)
         if matches:
             ctx.remember("last", matches[0], current.observation_version)
             return matches[0], None

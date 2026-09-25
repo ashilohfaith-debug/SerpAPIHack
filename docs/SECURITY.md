@@ -6,7 +6,23 @@ references) and the honest limits.
 
 ## Privacy (implemented)
 - **Local by default.** No screenshots, audio, documents or activity are transmitted
-  anywhere. Essential mode has no network dependency at all.
+  anywhere. Essential mode has no network dependency at all. (Status questions like
+  "am I online" ask Windows locally — no packets are sent.)
+- **Connected mode is opt-in, with spoken consent** (`relay/session.py::set_connected`,
+  `relay/connected/`). Turning it on explains exactly what is sent (voice addressed to
+  RELAY, and text RELAY reads aloud, to Sarvam AI) and requires the phrase "confirm
+  connect" — a bare "yes" is refused. It can be turned off by voice at any time.
+- **Ambient speech never leaves the device.** In Connected mode the wake word is
+  checked by the local recogniser first (`relay/loop.py::on_utterance`); only speech
+  addressed to RELAY (wake word verified on-device, or the talk key pressed) is sent.
+- **Secrets are never sent to the cloud.** Text that looks like a password/OTP/code is
+  spoken with the offline voice instead (`relay/connected/mode.py::synth_to_array`);
+  protected fields are never read in the first place. The API key is read from the
+  environment or a local file and never logged, spoken or included in `repr`.
+- **Cloud output is untrusted.** A command suggested by Sarvam's chat model must parse
+  to a known, non-destructive intent, can never be a confirmation phrase, is announced
+  ("I understood that as …") and still passes the permission gate
+  (`relay/connected/nlu.py::validate`).
 - **No screenshot retention.** Screen state (L1) lives in RAM and is replaced, not
   stored (`relay/perception/worker.py`). OCR captures are used and discarded.
 - **Secret redaction in logs.** The logger drops password/OTP/token-shaped values
@@ -34,7 +50,24 @@ references) and the honest limits.
 - **Untrusted content isolation:** text read from screens/pages/docs is data, never a
   command, and can't change permissions.
 - **No force-closing apps / no destructive cleanup** (policy adopted after an early demo
-  incident): RELAY never kills an app that may hold unsaved work.
+  incident): RELAY never kills an app that may hold unsaved work. "Close" posts
+  WM_CLOSE — the window's own X button — so the app's "save changes?" prompt appears
+  and is read out (`relay/system/windows.py::request_close`).
+- **Messages are read back before sending.** Enter in a chat/mail app (WhatsApp, Teams,
+  Telegram, Slack, Discord, Signal, Outlook) is treated as *send*: RELAY reads the draft
+  aloud and requires "confirm send" (`relay/skills.py::_send_guard`) — a speech-
+  recognition slip can't silently send the wrong text.
+- **Delete in File Explorer needs "confirm delete"** (`_explorer_delete_guard`).
+- **RELAY never obeys its own voice.** The microphone is ignored while RELAY speaks
+  (half-duplex, `relay/loop.py`), and the recogniser's bias prompt ("Hey Relay.")
+  contains no command, so even a prompt echo on noise could not trigger an action
+  (measured: silence, noise and hum transcribe to nothing).
+- **Wake word only at the start.** "Relay" mid-sentence ("the relay race…") is not a
+  command (`relay/audio/wake.py::detect_wake`); in open-mic dictation, recogniser
+  hallucinations on noise ("Thank you.") are dropped, not typed.
+- **Serialized commands, instant stop.** Commands run one at a time; stop / cancel /
+  pause / emergency stop bypass the queue (`relay/loop.py::Dispatcher`). After an
+  emergency stop nothing runs until the user says "continue".
 
 ## IPC (optional panel) — locked down
 `relay/ipc/server.py`:
@@ -48,6 +81,11 @@ references) and the honest limits.
 - Runs at the user's integrity level: it **cannot** drive elevated/admin apps or the UAC
   secure desktop, and does not try to. It says so rather than failing silently.
 - No administrator privileges are requested by default.
+
+## Global hotkeys
+Registered with Win32 `RegisterHotKey` (`relay/audio/hotkeys.py`) — no keyboard hooks,
+no keystroke logging, no admin rights. If a combination is owned by another program,
+RELAY says so at start-up instead of silently having no talk key.
 
 ## Not yet done (release gates)
 - Code signing (needs a certificate) — see `docs/PACKAGING.md`.

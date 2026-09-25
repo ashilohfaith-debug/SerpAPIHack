@@ -29,7 +29,8 @@ from relay.diagnostics import get_logger
 log = get_logger("ipc")
 
 # Only these bus event types are forwarded to the panel.
-_FORWARD_EVENTS = {"voice.state", "task.state", "perception.change", "narration.say"}
+_FORWARD_EVENTS = {"voice.state", "task.state", "perception.change", "narration.say",
+                   "reading.start", "reading.part", "reading.end", "reminder.due"}
 # Only these commands are accepted from the panel (all go through the safety pipeline).
 _ALLOWED_COMMANDS = {"handle", "set_mode", "onboard", "ping"}
 

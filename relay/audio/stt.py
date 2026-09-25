@@ -18,12 +18,19 @@ from relay.diagnostics import get_logger
 
 log = get_logger("audio.stt")
 SAMPLE_RATE = 16000
+# Biases recognition toward the wake word: without it tiny.en hears "Relay," as
+# "Really," about a third of the time. Deliberately contains no command, so even if the
+# model echoed its prompt on noise it could not trigger an action (measured: silence,
+# noise and mains hum all transcribe to "").
+WAKE_PROMPT = "Hey Relay."
 
 
 class WhisperSTT:
-    def __init__(self, model_name: str = "tiny.en", compute_type: str = "int8") -> None:
+    def __init__(self, model_name: str = "tiny.en", compute_type: str = "int8",
+                 prompt: str | None = WAKE_PROMPT) -> None:
         self.model_name = model_name
         self.compute_type = compute_type
+        self.prompt = prompt
         self._model = None
 
     def _ensure(self):
@@ -45,7 +52,8 @@ class WhisperSTT:
         audio = np.asarray(audio, dtype=np.float32)
         model = self._ensure()
         segments, _ = model.transcribe(audio, language=language, beam_size=1,
-                                       condition_on_previous_text=False)
+                                       condition_on_previous_text=False,
+                                       initial_prompt=self.prompt)
         return " ".join(s.text for s in segments).strip()
 
     def unload(self) -> None:

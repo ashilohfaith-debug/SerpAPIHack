@@ -72,7 +72,9 @@ class Verifier:
     def verify(self, outcome: ActionOutcome, ok: bool, detail: str = "") -> ActionOutcome:
         """Given an EXECUTED outcome and a verification result, produce the final
         VERIFIED/UNCERTAIN outcome and record it in the journal."""
-        if outcome.state == ExecState.FAILED:
+        if outcome.state != ExecState.EXECUTED:
+            # FAILED / CANCELLED (blocked, not confirmed, emergency stop) stay exactly
+            # that — an action that never ran can't be "verified" by a lucky screen.
             return outcome
         state = ExecState.VERIFIED if ok else ExecState.UNCERTAIN
         result = ActionOutcome(outcome.action_id, state, detail or outcome.detail)

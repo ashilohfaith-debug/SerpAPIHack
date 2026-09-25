@@ -143,6 +143,13 @@
       if (d.summary) addLog("👁 " + d.summary);
     } else if (msg.type === "narration.say") {
       if (d.text) { addLog(d.text); maybePermission(d.text); }
+    } else if (msg.type === "reading.part") {
+      const chip = $("task"); chip.textContent = `reading ${d.index}/${d.of}`;
+      chip.className = "chip speaking";
+    } else if (msg.type === "reading.end") {
+      const chip = $("task"); chip.textContent = "finished reading"; chip.className = "chip";
+    } else if (msg.type === "reminder.due") {
+      addLog("⏰ Reminder: " + (d.text || ""));
     }
   };
 

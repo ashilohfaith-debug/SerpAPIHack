@@ -120,6 +120,26 @@ def _observe() -> int:
     return 0
 
 
+def _start(panel: bool = False) -> int:
+    """Run the app. Launched from the Ctrl+Alt+R shortcut there is no console, so a
+    start-up failure must be SPOKEN, or a blind user just hears silence."""
+    from relay.diagnostics import get_logger, setup_logging
+    setup_logging("INFO")
+    try:
+        from relay.app import RelayApp
+        return RelayApp(panel=panel).run()
+    except Exception as e:
+        get_logger("main").exception("Relay failed to start: %s", e)
+        reason = str(e).split("\n")[0][:120] or type(e).__name__
+        try:
+            from relay.audio import SapiTTS
+            SapiTTS().speak_blocking("Sorry, Relay could not start. " + reason +
+                                     ". Details are in the Relay log file.")
+        except Exception:
+            print("Relay could not start:", reason)
+        return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="relay", description="RELAY accessibility assistant")
     p.add_argument("--version", action="version", version=f"relay {__version__}")
@@ -157,6 +177,16 @@ def main(argv: list[str] | None = None) -> int:
                    help="download/verify Essential models for offline use")
     p.add_argument("--acceptance", action="store_true",
                    help="run the offline acceptance suite (safe, no desktop changes)")
+    p.add_argument("--install", action="store_true",
+                   help="create the desktop shortcut (Ctrl+Alt+R) and Start-menu entry")
+    p.add_argument("--uninstall", action="store_true", help="remove Relay's shortcuts")
+    p.add_argument("--autostart", choices=["on", "off"],
+                   help="start Relay automatically when you sign in to Windows")
+    p.add_argument("--sarvam-selftest", action="store_true",
+                   help="check Connected mode (Sarvam STT/translate/TTS/chat) with your key")
+    p.add_argument("--say", metavar="TEXT", help="speak TEXT with Relay's voice and exit")
+    p.add_argument("--demo-daily", action="store_true",
+                   help="safe offline demo of everyday skills (time, battery, maths, notes...)")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
@@ -208,9 +238,36 @@ def main(argv: list[str] | None = None) -> int:
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
         import acceptance
         return acceptance.main()
+    if args.install:
+        from relay.config import Config
+        from relay.install import install
+        for pth in install(hotkey=Config.load().launch_hotkey):
+            print("created", pth)
+        print("Press Ctrl+Alt+R from anywhere to start Relay.")
+        return 0
+    if args.uninstall:
+        from relay.install import uninstall
+        for pth in uninstall():
+            print("removed", pth)
+        return 0
+    if args.autostart:
+        from relay.install import set_autostart
+        pth = set_autostart(args.autostart == "on")
+        print(("Relay will start when you sign in: " if args.autostart == "on"
+               else "Relay will no longer start automatically: ") + str(pth))
+        return 0
+    if args.sarvam_selftest:
+        from relay.demo import sarvam_selftest
+        return sarvam_selftest()
+    if args.say:
+        from relay.app import speak_once
+        speak_once(args.say)
+        return 0
+    if args.demo_daily:
+        from relay.demo import daily_demo
+        return daily_demo()
     if args.start:
-        from relay.app import RelayApp
-        return RelayApp(panel=args.with_panel).run()
+        return _start(panel=args.with_panel)
     p.print_help()
     return 0
 

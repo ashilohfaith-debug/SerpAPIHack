@@ -6,14 +6,20 @@ locating here is the "revalidate the target immediately before executing" rule m
 concrete: if the element is gone, the action fails cleanly instead of clicking a
 stale coordinate.
 
-Matching is by (name, role) with a tie-break on proximity to the last-known bbox
-centre, so the right control is picked even when several share a name.
+Re-location uses a native UIA search (FindAll by control type, then name match),
+which reaches controls deep inside web pages that a bounded Python walk would miss,
+with a tie-break on proximity to the last-known bbox centre so the right control is
+picked when several share a name.
 """
 
 from __future__ import annotations
 
-_MAX_VISITED = 2500
-_MAX_DEPTH = 12
+TS_DESCENDANTS = 4
+
+
+def _ua():
+    from uiautomation.uiautomation import _AutomationClient
+    return _AutomationClient.instance().IUIAutomation
 
 
 def _walk_find(name: str, role: str, bbox: tuple[int, int, int, int] | None):
@@ -21,53 +27,39 @@ def _walk_find(name: str, role: str, bbox: tuple[int, int, int, int] | None):
     fg = auto.GetForegroundControl()
     if fg is None:
         return None
-    want_name = (name or "").strip().lower()
-    want_role = (role or "").strip().lower()
-    target_cx = (bbox[0] + bbox[2]) // 2 if bbox else None
-    target_cy = (bbox[1] + bbox[3]) // 2 if bbox else None
-
-    best = None
-    best_dist = None
-    visited = [0]
-
-    def walk(ctrl, depth):
-        nonlocal best, best_dist
-        if visited[0] >= _MAX_VISITED or depth > _MAX_DEPTH:
-            return
-        visited[0] += 1
+    want_name = " ".join((name or "").split()).lower()
+    want_role = (role or "").strip()
+    ua = _ua()
+    ct = getattr(auto.ControlType, f"{want_role}Control", None) if want_role else None
+    if ct is not None:
+        cond = ua.CreatePropertyCondition(auto.PropertyId.ControlTypeProperty, ct)
+    elif want_name:
+        cond = ua.CreatePropertyConditionEx(auto.PropertyId.NameProperty, name.strip(), 1)
+    else:
+        return None
+    try:
+        arr = fg.Element.FindAll(TS_DESCENDANTS, cond)
+    except Exception:
+        return None
+    tx = (bbox[0] + bbox[2]) // 2 if bbox else None
+    ty = (bbox[1] + bbox[3]) // 2 if bbox else None
+    best, best_dist = None, None
+    for i in range(arr.Length):
+        e = arr.GetElement(i)
         try:
-            n = (ctrl.Name or "").strip().lower()
-            r = (ctrl.ControlTypeName or "").replace("Control", "").lower()
+            n = " ".join((e.CurrentName or "").split()).lower()
+            if want_name and n != want_name:
+                continue
+            r = e.CurrentBoundingRectangle
+            if r.right - r.left <= 0 or r.bottom - r.top <= 0:
+                continue
+            dist = 0 if tx is None else abs((r.left + r.right) // 2 - tx) \
+                + abs((r.top + r.bottom) // 2 - ty)
         except Exception:
-            n, r = "", ""
-        name_ok = (n == want_name) if want_name else True
-        role_ok = (r == want_role) if want_role else True
-        if name_ok and role_ok and (want_name or want_role):
-            try:
-                rect = ctrl.BoundingRectangle
-                if rect.width() > 0 and rect.height() > 0:
-                    if target_cx is None:
-                        return_ctrl(ctrl, 0)
-                    else:
-                        cx = (rect.left + rect.right) // 2
-                        cy = (rect.top + rect.bottom) // 2
-                        dist = abs(cx - target_cx) + abs(cy - target_cy)
-                        return_ctrl(ctrl, dist)
-            except Exception:
-                pass
-        try:
-            for c in ctrl.GetChildren():
-                walk(c, depth + 1)
-        except Exception:
-            pass
-
-    def return_ctrl(ctrl, dist):
-        nonlocal best, best_dist
+            continue
         if best is None or dist < best_dist:
-            best, best_dist = ctrl, dist
-
-    walk(fg, 0)
-    return best
+            best, best_dist = e, dist
+    return auto.Control.CreateControlFromElement(best) if best is not None else None
 
 
 def invoke(name: str, role: str, bbox) -> bool:
@@ -86,6 +78,13 @@ def invoke(name: str, role: str, bbox) -> bool:
         sp = ctrl.GetSelectionItemPattern()
         if sp is not None:
             sp.Select()
+            return True
+    except Exception:
+        pass
+    try:  # check boxes / toggle buttons
+        tp = ctrl.GetTogglePattern()
+        if tp is not None:
+            tp.Toggle()
             return True
     except Exception:
         pass

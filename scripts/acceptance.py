@@ -113,6 +113,39 @@ def check_capabilities():
     return ok, "honest capability matrix present"
 
 
+def check_everyday_language():
+    from relay.intent import Kind, parse
+    cases = {
+        "Um, can you open WhatsApp for me, please?": Kind.OPEN_APP,
+        "What's the time?": Kind.TIME, "How's my battery?": Kind.BATTERY,
+        "search for bus stop near me": Kind.WEB_SEARCH, "read the page": Kind.READ_ALL,
+        "remind me in 10 minutes to call mom": Kind.SET_REMINDER,
+        "what is 15 percent of 2 lakh": Kind.CALCULATE, "stop": Kind.CONTROL,
+        "send the message": Kind.SEND, "turn on connected mode": Kind.CONNECTED,
+    }
+    wrong = [u for u, k in cases.items() if parse(u).kind != k]
+    return not wrong, (f"{len(cases)} natural phrasings routed correctly" if not wrong
+                       else f"misrouted: {wrong}")
+
+
+def check_send_needs_readback():
+    from relay.executor.input_backend import RecordingBackend
+    from relay.session import Session
+    said = []
+    s = Session(speak=said.append, db_path=":memory:")
+    try:
+        s.executor.input = RecordingBackend()
+        s.skills._fg_app = lambda: "whatsapp.root.exe"
+        s.skills._focus_value = lambda: "see you at five"
+        s.handle("send it")
+        s.handle("yeah")
+        sent = ("press", "enter") in s.executor.input.calls
+        read_back = any("see you at five" in t for t in said)
+        return not sent and read_back, "draft read back; a casual 'yeah' did not send"
+    finally:
+        s.close()
+
+
 CHECKS = [
     ("single instance guard", check_single_instance),
     ("five-layer memory: persist + reconcile (offline)", check_memory_persist_and_reconcile),
@@ -120,6 +153,8 @@ CHECKS = [
     ("offline voice round-trip (TTS->STT)", check_voice_roundtrip_offline),
     ("optional panel IPC auth", check_ipc_auth),
     ("application capability matrix", check_capabilities),
+    ("everyday natural language (offline grammar)", check_everyday_language),
+    ("messages read back before sending", check_send_needs_readback),
 ]
 
 
@@ -135,9 +170,10 @@ def main() -> int:
         print(f"  [{'PASS' if ok else 'FAIL'}] {name}\n         {detail}")
     print("=" * 40)
     print(f"{passed}/{len(CHECKS)} offline acceptance checks passed.")
-    print("Still required before release (need hardware/people): real-app end-to-end on a "
-          "quiet desktop, NVDA coexistence (install NVDA), clean-VM offline install, "
-          "supervised blind-user testing, and 4 GB-hardware latency.")
+    print("Live checks: scripts/e2e_voice.py, scripts/live_app_check.py, "
+          "scripts/live_window_check.py. Still required (need hardware/people/keys): "
+          "live Sarvam calls (relay --sarvam-selftest), NVDA coexistence, clean-VM "
+          "offline install, supervised blind-user testing, 4 GB-hardware latency.")
     return 0 if passed == len(CHECKS) else 1
 
 

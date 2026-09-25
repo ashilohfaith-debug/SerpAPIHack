@@ -17,4 +17,4 @@ Subsystems (built phase by phase; see ../docs/04-phase-plan.md):
   ipc/           authenticated local channel for optional UI   [P10]
 """
 
-__version__ = "0.0.1"
+__version__ = "0.2.0"

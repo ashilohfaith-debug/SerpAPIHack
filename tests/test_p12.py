@@ -41,6 +41,7 @@ class _FakeSession:
     def __init__(self):
         self.handled = []
         self.said = []
+        self.earcons = []
 
     def handle(self, text):
         self.handled.append(text)
@@ -50,9 +51,10 @@ class _FakeSession:
         self.said.append(text)
 
 
-def _loop(session, wake_required):
-    # pass a sentinel stt so VoiceLoop does not construct a real WhisperSTT
-    return VoiceLoop(session, stt=object(), wake_required=wake_required)
+def _loop(session, wake_required, stt=None):
+    # a sentinel stt so VoiceLoop does not construct a real WhisperSTT
+    return VoiceLoop(session.handle, stt=stt or object(), wake_required=wake_required,
+                     say=session.say, play_earcon=session.earcons.append, threaded=False)
 
 
 def test_wake_required_ignores_unaddressed_speech():
@@ -67,23 +69,44 @@ def test_wake_required_dispatches_command_after_wake_word():
     assert s.handled == ["open notepad"]
 
 
-def test_bare_wake_word_prompts_and_does_not_act():
+def test_bare_wake_word_arms_listening_and_does_not_act():
     s = _FakeSession()
-    _loop(s, True).on_transcript("relay")
+    loop = _loop(s, True)
+    loop.on_transcript("relay")
     assert s.handled == []
-    assert s.said and "?" in s.said[0]
+    assert "listen" in s.earcons and loop._armed      # chirps, then takes the next command
 
 
-def test_push_to_talk_dispatches_every_utterance():
+def test_wake_word_mid_sentence_is_not_a_command():
     s = _FakeSession()
-    _loop(s, False).on_transcript("open notepad")
+    _loop(s, True).on_transcript("the relay race was great open notepad")
+    assert s.handled == []
+
+
+def test_prompted_speech_needs_no_wake_word():
+    s = _FakeSession()
+    _loop(s, False).on_transcript("open notepad", prompted=True)
     assert s.handled == ["open notepad"]
 
 
-def test_empty_transcript_is_ignored():
+def test_prompted_speech_strips_a_spoken_wake_word():
+    s = _FakeSession()
+    _loop(s, False).on_transcript("Relay, open notepad", prompted=True)
+    assert s.handled == ["open notepad"]
+
+
+def test_wake_off_ignores_ambient_speech():
+    s = _FakeSession()
+    _loop(s, False).on_transcript("relay open notepad")   # not prompted, wake word off
+    assert s.handled == []
+
+
+def test_empty_transcript_is_ignored_and_prompted_empty_says_so():
     s = _FakeSession()
     _loop(s, False).on_transcript("   ")
-    assert s.handled == []
+    assert s.handled == [] and s.said == []
+    _loop(s, False).on_transcript("", prompted=True)
+    assert s.handled == [] and any("didn't catch" in t for t in s.said)
 
 
 def test_on_utterance_survives_stt_error():
@@ -92,17 +115,18 @@ def test_on_utterance_survives_stt_error():
             raise RuntimeError("decode blew up")
 
     s = _FakeSession()
-    loop = VoiceLoop(s, stt=BadSTT(), wake_required=False)
-    loop.on_utterance(b"\x00\x01" * 100)      # must not raise
+    loop = _loop(s, False, stt=BadSTT())
+    loop.on_utterance(b"\x00\x01" * 100, prompted=True)      # must not raise
     assert s.handled == []
+    assert any("couldn't process" in t for t in s.said)
 
 
-def test_on_utterance_transcribes_and_dispatches():
+def test_on_utterance_transcribes_and_dispatches_when_prompted():
     class FixedSTT:
         def transcribe(self, audio):
             return "open notepad"
 
     s = _FakeSession()
-    loop = VoiceLoop(s, stt=FixedSTT(), wake_required=False)
-    loop.on_utterance(b"\x00\x01" * 100)
+    loop = _loop(s, False, stt=FixedSTT())
+    loop.on_utterance(b"\x00\x01" * 100, prompted=True)
     assert s.handled == ["open notepad"]

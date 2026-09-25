@@ -28,21 +28,26 @@ def mark_onboarded() -> None:
         pass
 
 
-def onboarding_script(wake_word: str = "relay", first_run: bool = True) -> list[str]:
-    """The lines RELAY speaks to introduce itself. Kept short and concrete."""
-    lines = []
-    if first_run:
-        lines.append("Hello, I'm Relay. I help you use this computer by voice.")
-    else:
-        lines.append("Relay here.")
-    lines.append(f"To get my attention, say {wake_word}, then tell me what you want. "
-                 "You can also hold the talk key.")
-    lines.append("Ask me things like: what's on my screen, open an app, click something, "
-                 "type text, or save. I'll tell you before I do anything, and tell you "
-                 "what changed.")
-    lines.append("Say stop to interrupt me, cancel to stop a task, "
-                 "or emergency stop to halt everything at once.")
+def onboarding_script(wake_word: str = "relay", first_run: bool = True,
+                      talk_key: str = "Control Alt Space") -> list[str]:
+    """The lines RELAY speaks to introduce itself. Kept short and concrete: a first
+    run explains everything once; later starts are a one-line 'ready'."""
     running, name = screen_reader_running()
+    if not first_run:
+        lines = [f"Relay is ready. Press {talk_key}, or say {wake_word}, to talk to me."]
+        if running:
+            lines.append(f"{name} is running too; I'll stay out of its way.")
+        return lines
+    lines = [
+        "Hello, I'm Relay. I help you use this computer by voice.",
+        f"To talk to me, press {talk_key} from anywhere — you'll hear a short chirp — "
+        f"then speak. Or just say {wake_word}, then your request.",
+        "You can ask me things like: what time is it, open WhatsApp, search for today's "
+        "news, read the page, take a note, or what's on my screen. I'll tell you before I "
+        "do anything, and tell you what changed.",
+        "Say stop to interrupt me, cancel to stop a task, or emergency stop to halt "
+        "everything at once. Say help at any time to hear more.",
+    ]
     if running:
         lines.append(coexistence_advice(name))
     lines.append("What would you like to do?")

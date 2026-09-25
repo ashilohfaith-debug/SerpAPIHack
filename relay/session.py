@@ -1,19 +1,29 @@
 """Session orchestrator — one utterance in, transparent narrated action out.
 
-Parses the utterance, handles control words (stop/pause/cancel/emergency) and memory
-and accessibility commands directly, and otherwise plans and runs it through the
+Parses the utterance, handles control words (stop/pause/continue/cancel/emergency),
+memory and accessibility commands directly, routes everyday skills (status, apps,
+windows, web, files, reading, notes, reminders, dictation, languages) to
+``relay.skills``, and runs anything that changes the screen through the
 TransparentRunner. RELAY acts only in response to a command and narrates every step;
 it never loops on its own.
 
-High-risk actions do not run automatically: the runner asks the Session for an
-accessible spoken confirmation (an action-specific phrase, never a bare "yes"); the
-most sensitive actions require a keyboard/Windows-auth confirm and are declined by
-voice. Narration verbosity follows the current mode; onboarding is fully spoken.
+Turn-taking the user can rely on:
+  * a pending high-risk confirmation only accepts its exact phrase (or cancel);
+  * a yes/no offer ("Do you want me to search the web instead?") takes yes or no —
+    anything else is treated as a new command;
+  * a follow-up question ("What should the note say?") takes the next utterance;
+  * in dictation, speech is typed, except control words and "stop dictation".
+In Connected mode, a request the offline grammar can't parse is mapped by Sarvam's
+chat model onto one of RELAY's fixed commands; RELAY says how it understood the
+request, then runs it through the same safety gate.
 """
 
 from __future__ import annotations
 
+import re
 import threading
+import time
+from typing import Callable
 
 from relay.accessibility import (
     PendingConfirmation,
@@ -27,15 +37,21 @@ from relay.audio.wake import Command
 from relay.core import EmergencyStop, new_task_id
 from relay.executor import Executor
 from relay.intent import Kind, parse
+from relay.intent.normalize import normalize
 from relay.memory.db import connect
 from relay.memory.journal import ActionJournal
+from relay.memory.notes import NotesStore
 from relay.memory.reconcile import latest_task_id, reconcile
 from relay.memory.store import MemoryStore
 from relay.memory.task_context import TaskContext
 from relay.narration import policy as pol
 from relay.perception import UIAWorker
+from relay.perception.ocr import OCR
 from relay.planner import TransparentRunner, plan
+from relay.reading import Reader
+from relay.reminders import ReminderScheduler
 from relay.safety import ConfirmationStrength, PermissionEngine
+from relay.skills import Skills
 from relay.verifier import Verifier
 
 _MEMORY_KINDS = {
@@ -48,25 +64,51 @@ _ACCESS_KINDS = {
 }
 _REQ = pol.Priority.REQUESTED
 _CONF = pol.Priority.CONFIRMATION
+_YES = re.compile(r"^(?:yes|yeah|yep|yup|sure|ok|okay|please do|do it|go ahead|haan|ha|"
+                  r"yes please|of course|alright|all right)\b", re.I)
+_NO = re.compile(r"^(?:no|nope|nah|don't|do not|not now|cancel|never mind|nahi)\b", re.I)
 
 
 class Session:
-    def __init__(self, speak=None, bus=None, db_path: str = ":memory:") -> None:
+    def __init__(self, speak=None, bus=None, db_path: str = ":memory:", speech=None,
+                 apps=None, on_quit: Callable[[], None] | None = None,
+                 on_wake_word: Callable[[bool], None] | None = None,
+                 on_connected: Callable[[object], None] | None = None,
+                 talk_key: str = "ctrl+alt+space") -> None:
         self.emergency = EmergencyStop()
         self.cancel = threading.Event()
         self._speak = speak
         self.bus = bus
+        self.speech = speech                # SpeechQueue (live app) or None (tests/CLI)
+        self.on_quit = on_quit
+        self.on_wake_word = on_wake_word
+        self.on_connected = on_connected
+        self.talk_key = talk_key
         self.worker = UIAWorker(bus=bus)
         self.worker.start()
         self.engine = PermissionEngine()
         self.conn = connect(db_path)
         self.journal = ActionJournal(self.conn)
         self.store = MemoryStore(self.conn)
+        self.notes = NotesStore(self.conn)
+        self.reminders = ReminderScheduler(self.conn, on_due=self._on_reminder)
         self.task_id = new_task_id()
         self.ctx = TaskContext(self.task_id)
         self._last_pref: tuple[str, str] | None = None
         self._pending: PendingConfirmation | None = None
+        self._offer: Callable[[], object] | None = None
+        self._capture: Callable[[str], object] | None = None
         self._nav_index = -1
+        self._nlu_busy = False
+        self.dictation = False
+        self.last_activity = ""
+        self.connected = None               # ConnectedVoice when Connected mode is on
+        self._offline_tts = speech.tts if speech is not None else None
+        if apps is None:
+            from relay.system.apps import AppCatalog
+            apps = AppCatalog(entries=[])
+        self.apps = apps
+        self.ocr = OCR()
         self.executor = Executor(self.engine, self.worker, self.journal, self.task_id,
                                  emergency=self.emergency, confirm=lambda d: False)
         self.verifier = Verifier(self.worker, self.journal)
@@ -75,22 +117,111 @@ class Session:
             self.executor, self.worker, self.verifier, self.ctx, speak=speak,
             emergency=self.emergency, bus=bus, engine=self.engine,
             on_confirm_needed=self._on_confirm_needed, mode=self.narration_mode)
+        self.reader = Reader(speak_part=self._speak_part, say=lambda t: self.say(t, _REQ),
+                             interrupt=self._interrupt_speech, on_event=self._emit)
+        self.skills = Skills(self)
+        self.speech_rate = 1.0
+        try:
+            self.set_speech_rate(float(self.store.get_pref("speech_rate", default="1.0")),
+                                 persist=False)
+        except ValueError:
+            pass
 
     # ---- narration ----
     def say(self, text: str, priority: int = pol.Priority.TASK) -> None:
         self.runner.say(text, priority)
 
+    def _emit(self, kind: str, data: dict) -> None:
+        if self.bus is not None:
+            self.bus.emit(kind, **data)
+
+    def _speak_part(self, text: str, on_done) -> None:
+        """One part of a document being read (bypasses narration filtering — the user
+        asked for it)."""
+        if self.bus is not None:
+            self.bus.emit("narration.say", text=text)
+        if self.speech is not None:
+            self.speech.say(text, on_done=on_done)
+            return
+        if self._speak is not None:
+            try:
+                self._speak(text)
+            except Exception:
+                pass
+        if on_done is not None:
+            on_done(True)
+
+    def _interrupt_speech(self) -> None:
+        if self.speech is not None:
+            self.speech.interrupt()
+
+    def start_reading(self, text: str, title: str = "", intro: bool = True) -> None:
+        self.reader.load(text, title=title)
+        self.last_activity = "reading"
+        self.reader.read_all(intro=intro)
+
+    def set_speech_rate(self, rate: float, persist: bool = True) -> None:
+        self.speech_rate = max(0.6, min(2.2, rate))
+        for eng in (self.speech.tts if self.speech is not None else None, self._offline_tts):
+            if eng is not None and hasattr(eng, "set_rate"):
+                eng.set_rate(self.speech_rate)
+        if persist:
+            self.store.set_pref("speech_rate", f"{self.speech_rate:.2f}")
+
     def onboard(self) -> None:
         wake = self.store.get_pref("wake_word", default="relay")
-        for line in onboarding_script(wake_word=wake, first_run=is_first_run()):
+        from relay.audio.hotkeys import spoken_combo
+        for line in onboarding_script(wake_word=wake, first_run=is_first_run(),
+                                      talk_key=spoken_combo(self.talk_key)):
             self.say(line, _REQ)
         mark_onboarded()
+
+    # ---- turn-taking helpers used by skills ----
+    def offer(self, action: Callable[[], object]) -> None:
+        """A yes/no follow-up: 'yes' runs ``action``; 'no' drops it."""
+        self._offer = action
+
+    def capture_next(self, consumer: Callable[[str], object]) -> None:
+        """The next utterance is free text for a question RELAY just asked."""
+        self._capture = consumer
+
+    def ask_phrase(self, phrase: str, summary: str, retry: Callable[[], object]) -> None:
+        self.say(summary, _CONF)
+        self._pending = PendingConfirmation(phrase=phrase, summary=summary, retry=retry)
+        self.say(f"To confirm, say: {phrase}. Or say cancel.", _CONF)
+
+    def set_dictation(self, on: bool) -> None:
+        self.dictation = on
+        if self.connected is not None:
+            self.connected.native_dictation = on
 
     # ---- dispatch ----
     def handle(self, utterance: str):
         if self._pending is not None:
             return self._resolve_pending(utterance)
+        low = normalize(utterance)
+        raw_low = utterance.lower().strip().strip(".!?")
+        if self._offer is not None:
+            action, self._offer = self._offer, None
+            if _YES.match(raw_low):
+                return action() or []
+            if _NO.match(raw_low):
+                self.say("Okay.", _REQ)
+                return []
+        if self._capture is not None:
+            consumer, self._capture = self._capture, None
+            if is_cancel(low) and len(low.split()) <= 3:
+                self.say("Okay, cancelled.", _REQ)
+                return []
+            return consumer(utterance.strip()) or []
         intent = parse(utterance)
+        if self.dictation and intent.kind not in (Kind.CONTROL, Kind.DICTATION, Kind.QUIT,
+                                                  Kind.SHORTCUT, Kind.PRESS_KEY, Kind.HOTKEY):
+            return self.skills.dictate(utterance)
+        if intent.kind == Kind.UNKNOWN and self.connected is not None and not self._nlu_busy:
+            understood = self._understand(utterance)
+            if understood:
+                intent = parse(understood)
         if intent.kind == Kind.CONTROL:
             return self._handle_control(intent.slots.get("command"))
         if intent.kind in _MEMORY_KINDS:
@@ -98,11 +229,33 @@ class Session:
         if intent.kind in _ACCESS_KINDS:
             return self._handle_access(intent)
         self.cancel.clear()
+        handled = self.skills.handle(intent)
+        if handled is not None:
+            if intent.kind not in (Kind.READ_ALL, Kind.READ_NOTES, Kind.LIST_LINKS,
+                                   Kind.LIST_HEADINGS, Kind.HELP, Kind.READ_NEXT,
+                                   Kind.READ_PREV, Kind.OCR_READ, Kind.READ_CLIPBOARD):
+                self.last_activity = intent.kind
+            return handled
         steps, clarification = plan(intent)
         if clarification:
-            self.say(clarification, _REQ)
+            self.say(f"Sorry, I didn't understand \"{utterance.strip()}\". "
+                     "Say help to hear what I can do.", _REQ)
             return []
+        self.last_activity = intent.kind
         return self.runner.run(steps, cancel=self.cancel)
+
+    def _understand(self, utterance: str) -> str | None:
+        from relay.connected import nlu
+        self._nlu_busy = True
+        try:
+            self.say("Let me think about that.", pol.Priority.FOCUS)
+            cmd = nlu.interpret(self.connected.client, utterance,
+                                model=self.connected.chat_model)
+        finally:
+            self._nlu_busy = False
+        if cmd:
+            self.say(f"I understood that as: {cmd}.", _REQ)
+        return cmd
 
     # ---- confirmation flow ----
     def _on_confirm_needed(self, decision, target_label, retry) -> None:
@@ -119,7 +272,8 @@ class Session:
     def _resolve_pending(self, utterance: str):
         p = self._pending
         low = utterance.lower().strip()
-        if p.phrase in low or low == p.phrase:
+        norm = normalize(utterance)
+        if p.phrase in low or low == p.phrase or norm == p.phrase:
             self._pending = None
             self.say("Confirmed.", _CONF)
             return [p.retry()]
@@ -127,6 +281,9 @@ class Session:
             self._pending = None
             self.say("Cancelled — I won't do it.", _CONF)
             return []
+        if "emergency" in low:
+            self._pending = None
+            return self._handle_control(Command.EMERGENCY_STOP)
         p.reprompts += 1
         if p.reprompts > 2:
             self._pending = None
@@ -134,6 +291,89 @@ class Session:
             return []
         self.say(f"To confirm, say {p.phrase}, or say cancel.", _CONF)
         return []
+
+    # ---- Connected mode ----
+    def set_connected(self, on: bool) -> None:
+        from relay.connected import api_key
+        if not on:
+            if self.connected is None:
+                self.say("Connected mode is already off. Everything stays on this computer.")
+                return
+            self._disable_connected()
+            self.say("Connected mode is off. Everything stays on this computer again.",
+                     _CONF)
+            return
+        if self.connected is not None:
+            self.say("Connected mode is already on.")
+            return
+        if not api_key():
+            self.say("Connected mode needs a Sarvam A I key. Ask a sighted helper to save it "
+                     "in a file called sarvam key dot t x t in the Relay data folder, or to "
+                     "set the SARVAM API KEY setting. Then say turn on connected mode again.",
+                     _REQ)
+            return
+        self.ask_phrase(
+            "confirm connect",
+            "Connected mode sends your voice, and the text I read aloud, to Sarvam A I's "
+            "servers in India, so we can talk in Hindi, Telugu, Tamil and more. Passwords "
+            "and protected fields are never sent. You can turn it off at any time.",
+            lambda: self._enable_connected(announce=True))
+
+    def _enable_connected(self, announce: bool = False):
+        from relay.connected import ConnectedVoice, SarvamClient, api_key
+        try:
+            client = SarvamClient(api_key())
+        except ValueError:
+            self.say("I couldn't find the Sarvam key.", pol.Priority.CRITICAL)
+            return []
+        cv = ConnectedVoice(client, offline_stt=None, offline_tts=self._offline_tts,
+                            on_offline=lambda msg: self.say(msg, pol.Priority.CRITICAL))
+        cv.output_language = self.store.get_pref("output_language", default="auto")
+        cv.set_rate(self.speech_rate)
+        self.connected = cv
+        if self.speech is not None:
+            self.speech.set_tts(cv)
+        self.store.set_pref("connected", "1")
+        if self.on_connected is not None:
+            self.on_connected(cv)
+        if announce:
+            self.say("Connected mode is on. You can speak to me in your language now. Say "
+                     "speak in Hindi, or any language, to choose how I answer.", _CONF)
+        return []
+
+    def _disable_connected(self) -> None:
+        self.connected = None
+        if self.speech is not None and self._offline_tts is not None:
+            self.speech.set_tts(self._offline_tts)
+        self.store.set_pref("connected", "0")
+        if self.on_connected is not None:
+            self.on_connected(None)
+
+    def restore_connected(self) -> bool:
+        """Re-enable Connected mode at startup if the user turned it on before (their
+        consent is remembered) and the key is still present."""
+        from relay.connected import api_key
+        if self.store.get_pref("connected", default="0") == "1" and api_key():
+            self._enable_connected(announce=False)
+            return True
+        return False
+
+    # ---- reminders ----
+    def _on_reminder(self, text: str, late_seconds: float) -> None:
+        was_reading = self.reader.stop()
+        if self.bus is not None:
+            self.bus.emit("reminder.due", text=text)
+        if self.speech is not None:
+            from relay.audio.earcons import earcon
+            audio, sr = earcon("alert")
+            self.speech.play(audio, sr)
+        when = ""
+        if late_seconds > 120:
+            due = time.localtime(time.time() - late_seconds)
+            when = f" This was due at {time.strftime('%I:%M %p', due).lstrip('0')}."
+        self.say(f"Reminder: {text.rstrip('.')}.{when}", pol.Priority.CRITICAL)
+        if was_reading:
+            self.say("Say continue to keep reading.", _REQ)
 
     # ---- accessibility read / navigate / spell / mode ----
     def _handle_access(self, intent):
@@ -156,8 +396,12 @@ class Session:
             else:
                 self.say("There's no dialog open.", _REQ)
         elif k in (Kind.NEXT_ELEMENT, Kind.PREV_ELEMENT):
+            if self.last_activity == "reading" and self.reader.has_content:
+                self.reader.step(+1 if k == Kind.NEXT_ELEMENT else -1)
+                return []
             snap = self.worker.observe(3.0)
-            els = [e for e in (snap.elements if snap else []) if e.name]
+            from relay.memory.task_context import reading_order
+            els = reading_order([e for e in (snap.elements if snap else []) if e.name])
             if not els:
                 self.say("There's nothing to move through here.", _REQ)
                 return []
@@ -193,11 +437,17 @@ class Session:
             else:
                 fact = s.get("fact", "")
                 ok = self.store.set_pref(f"note:{fact[:40]}", fact)
+                if ok:
+                    self.notes.add(fact)
                 self._last_pref = ("", f"note:{fact[:40]}") if ok else None
                 self.say("I've noted that." if ok else
                          "I won't store that — it looks sensitive, so I'm keeping it out.")
         elif k == Kind.WHAT_REMEMBER:
-            self.say(self.store.remember_summary())
+            summary = self.store.remember_summary()
+            n = self.notes.count()
+            if n:
+                summary += f" You also have {n} note{'s' if n != 1 else ''}; say read my notes."
+            self.say(summary)
         elif k == Kind.WHY_REMEMBER:
             if self._last_pref:
                 why = self.store.why(self._last_pref[1], self._last_pref[0])
@@ -230,26 +480,58 @@ class Session:
         a = app.lower().strip()
         return _APP_EXE.get(a, a if a.endswith(".exe") else (f"{a}.exe" if a else ""))
 
+    # ---- control words ----
+    def stop_speaking(self) -> None:
+        """Silence RELAY and pause any reading (talk-key / stop-key / 'stop')."""
+        self.reader.stop()
+        self._interrupt_speech()
+
+    def emergency_stop(self) -> None:
+        self._handle_control(Command.EMERGENCY_STOP)
+
     def _handle_control(self, command: str | None):
         if command == Command.EMERGENCY_STOP:
             self.emergency.engage("user")
-            self.say("Emergency stop. I've stopped everything.", _CONF)
+            self.cancel.set()
+            self._pending = None
+            self.reader.stop()
+            self.set_dictation(False)
+            self.say("Emergency stop. I've stopped everything. Say continue when you want me "
+                     "to work again.", pol.Priority.CRITICAL)
         elif command == Command.CANCEL_TASK:
             self.cancel.set()
             self._pending = None
+            self._offer = None
+            self._capture = None
+            self.reader.stop()
             self.say("Cancelling.", _CONF)
         elif command == Command.STOP_TALKING:
-            pass  # a real speech queue interrupts here (P3 barge-in)
+            self.stop_speaking()
         elif command == Command.PAUSE:
             self.cancel.set()
-            self.say("Paused. Say continue when you're ready.", _CONF)
+            was = self.reader.stop()
+            self.say("Paused. Say continue when you're ready." if not was else
+                     "Paused. Say continue to keep reading.", _CONF)
         elif command == Command.CONTINUE:
-            self.say("Okay.", _CONF)
+            if self.emergency.is_engaged:
+                self.emergency.reset()
+                self.cancel.clear()
+                self.say("Emergency stop cleared. I'm ready.", _CONF)
+            elif self.reader.has_content and not self.reader.reading \
+                    and self.last_activity == "reading":
+                self.reader.resume()
+            else:
+                self.cancel.clear()
+                self.say("Okay.", _CONF)
         elif command == Command.REPEAT:
-            self.say(self.runner.last_said or "I haven't said anything yet.", _REQ)
+            if self.last_activity == "reading" and self.reader.has_content:
+                self.reader.repeat()
+            else:
+                self.say(self.runner.last_said or "I haven't said anything yet.", _REQ)
         return []
 
     def close(self) -> None:
+        self.reminders.stop()
         self.worker.stop()
         try:
             self.conn.close()

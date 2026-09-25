@@ -25,7 +25,10 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     supported there).
     """
     target = ":memory:" if path == ":memory:" else str(path or default_db_path())
-    conn = sqlite3.connect(target, isolation_level=None)  # autocommit; we manage txns
+    # Commands run on the dispatcher thread and reminders fire on their own thread,
+    # so the connection is shared across threads. SQLite is built serialized
+    # (threadsafety 3) and we run in autocommit, so each statement is atomic.
+    conn = sqlite3.connect(target, isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON;")
     if target != ":memory:":
@@ -156,5 +159,22 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE VIRTUAL TABLE IF NOT EXISTS episodic_fts USING fts5(id UNINDEXED, summary);
         CREATE VIRTUAL TABLE IF NOT EXISTS labels_fts
             USING fts5(app_key UNINDEXED, description, control_name);
+
+        -- the user's spoken notes ("take a note ...") — explicit, user-owned content
+        CREATE TABLE IF NOT EXISTS notes (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            text     TEXT NOT NULL,
+            created  REAL NOT NULL
+        );
+
+        -- spoken reminders / timers; kept across restarts so none is silently lost
+        CREATE TABLE IF NOT EXISTS reminders (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            text     TEXT NOT NULL,
+            due      REAL NOT NULL,
+            created  REAL NOT NULL,
+            done     INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS ix_rem_due ON reminders(done, due);
         """
     )

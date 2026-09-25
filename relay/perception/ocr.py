@@ -26,15 +26,23 @@ class OCR:
             self._engine = RapidOCR()
         return self._engine
 
-    def read_screen(self, min_conf: float = 0.5) -> list[UIElement]:
-        """OCR the primary screen; return text regions as low-trust UIElements.
-        Returns [] if OCR is unavailable or finds nothing."""
+    def read_screen(self, min_conf: float = 0.5,
+                    region: tuple[int, int, int, int] | None = None) -> list[UIElement]:
+        """OCR the primary screen (or a (left, top, right, bottom) region, e.g. the
+        foreground window); return text regions as low-trust UIElements. Returns []
+        if OCR is unavailable or finds nothing. The capture is never stored."""
         try:
             import mss
             import numpy as np
             from PIL import Image
             with mss.mss() as sct:
-                raw = sct.grab(sct.monitors[1])
+                if region is not None:
+                    left, top, right, bottom = region
+                    mon = {"left": left, "top": top, "width": max(1, right - left),
+                           "height": max(1, bottom - top)}
+                else:
+                    mon = sct.monitors[1]
+                raw = sct.grab(mon)
             img = np.array(Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX"))
         except Exception as e:
             log.warning("screen capture for OCR failed: %s", e)
@@ -68,3 +76,18 @@ class OCR:
 
     def unload(self) -> None:
         self._engine = None
+
+
+def to_text(regions: list[UIElement]) -> str:
+    """OCR regions -> reading-order text: rows top-to-bottom, words left-to-right."""
+    if not regions:
+        return ""
+    rows: list[list[UIElement]] = []
+    for r in sorted(regions, key=lambda e: (e.bbox[1], e.bbox[0])):
+        h = max(1, r.bbox[3] - r.bbox[1])
+        if rows and abs(rows[-1][0].bbox[1] - r.bbox[1]) < h * 0.6:
+            rows[-1].append(r)
+        else:
+            rows.append([r])
+    return "\n".join(" ".join(e.name for e in sorted(row, key=lambda e: e.bbox[0]))
+                     for row in rows)

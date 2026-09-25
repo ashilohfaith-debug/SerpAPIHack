@@ -150,20 +150,22 @@ class Executor:
             return True, f"typed {len(text)} chars"
         return self._run(action, "type", do)
 
-    def press(self, key: str) -> ActionOutcome:
+    def press(self, key: str, count: int = 1) -> ActionOutcome:
         action = Action(kind="key", text=key)
 
         def do():
-            self.input.press(key)
-            return True, f"pressed {key}"
+            for _ in range(max(1, count)):
+                self.input.press(key)
+            return True, f"pressed {key}" + (f" x{count}" if count > 1 else "")
         return self._run(action, f"press {key}", do)
 
-    def hotkey(self, *keys: str) -> ActionOutcome:
+    def hotkey(self, *keys: str, count: int = 1) -> ActionOutcome:
         combo = "+".join(keys)
         action = Action(kind="key", text=combo)
 
         def do():
-            self.input.hotkey(*keys)
+            for _ in range(max(1, count)):
+                self.input.hotkey(*keys)
             return True, f"hotkey {combo}"
         return self._run(action, f"hotkey {combo}", do)
 
@@ -175,3 +177,51 @@ class Executor:
             self.input.click(x, y)
             return True, f"clicked ({x},{y})"
         return self._run(action, f"click ({x},{y})", do)
+
+    # --- everyday system actions (same gate + journal as everything else) ------
+    def launch_entry(self, entry, launcher=None) -> ActionOutcome:
+        """Launch an installed app from the Start-menu catalog (classic or Store)."""
+        action = Action(kind="launch_app", target_app=entry.name)
+
+        def do():
+            (launcher or _catalog_launch)(entry)
+            return True, f"launched {entry.name}"
+        return self._run(action, f"launch_app {entry.name}", do)
+
+    def open_uri(self, uri: str, label: str = "", opener=None) -> ActionOutcome:
+        """Open a website, folder or file with its default handler."""
+        kind = "open_url" if uri.startswith(("http://", "https://")) else "open_path"
+        action = Action(kind=kind, target_app=label)
+
+        def do():
+            (opener or os.startfile)(uri)  # type: ignore[attr-defined]
+            return True, f"opened {label or uri}"
+        return self._run(action, f"{kind} {label or uri}", do)
+
+    def window_op(self, hwnd: int, op: str, label: str = "", ops=None) -> ActionOutcome:
+        """activate / minimize / maximize / restore / close (close = the window's own
+        X button, so unsaved work triggers the app's save prompt; never a kill)."""
+        action = Action(kind=f"window_{op}", target_app=label)
+
+        def do():
+            from relay.system import windows as w
+            table = ops or {"activate": w.activate, "minimize": w.minimize,
+                            "maximize": w.maximize, "restore": w.restore,
+                            "close": w.request_close}
+            ok = table[op](hwnd)
+            return True, f"{op} {'accepted' if ok else 'sent'}"
+        return self._run(action, f"window_{op} {label}", do)
+
+    def system(self, what: str, fn, label: str = "") -> ActionOutcome:
+        """A system setting change such as volume; ``fn()`` returns True on success."""
+        action = Action(kind=f"system_{what}", target_app=label or what)
+
+        def do():
+            ok = bool(fn())
+            return ok, f"{what} {'changed' if ok else 'unchanged'}"
+        return self._run(action, f"system_{what}", do)
+
+
+def _catalog_launch(entry) -> None:
+    from relay.system.apps import AppCatalog
+    AppCatalog.launch(entry)

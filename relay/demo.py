@@ -308,6 +308,86 @@ def explorer_demo() -> int:
     return 0
 
 
+def daily_demo() -> int:
+    """Safe, offline tour of everyday skills through the real Session: status, maths,
+    notes, reminders, windows list, help. Nothing on the desktop is changed."""
+    from relay.session import Session
+    setup_logging("WARNING")
+    s = Session(speak=_speak_print, db_path=":memory:")
+    cmds = ["what time is it", "what's the date", "how much battery do I have",
+            "am I connected to the internet", "what is 25 times 4",
+            "what's 15 percent of 2 lakh", "take a note buy milk and bread",
+            "note that the meeting moved to Friday", "read my notes",
+            "remind me in 10 minutes to call mom", "set a timer for 5 minutes",
+            "what are my reminders", "cancel my reminders", "what's the volume",
+            "what windows are open", "help with notes", "flibber the wibble"]
+    try:
+        for cmd in cmds:
+            print(f"\nUSER: {cmd}")
+            s.handle(cmd)
+    finally:
+        s.close()
+    print("\nDaily-skills demo complete — offline, nothing on the desktop was changed.")
+    return 0
+
+
+def sarvam_selftest() -> int:
+    """Live check of Connected mode with the user's Sarvam key: translate, Indian-
+    language TTS, speech-to-English STT and command understanding. Prints timings."""
+    import numpy as np
+
+    from relay.connected import SarvamClient, SarvamError, api_key
+    from relay.connected.nlu import interpret
+    setup_logging("WARNING")
+    key = api_key()
+    if not key:
+        print("No Sarvam key found. Set SARVAM_API_KEY, or put the key in "
+              "%LOCALAPPDATA%\\RELAY\\sarvam_key.txt, then run this again.")
+        return 2
+    c = SarvamClient(key)
+    ok = True
+
+    def step(name, fn):
+        nonlocal ok
+        t0 = time.perf_counter()
+        try:
+            out = fn()
+            print(f"  [OK ] {name} ({time.perf_counter() - t0:.2f}s): {out}")
+        except SarvamError as e:
+            ok = False
+            print(f"  [ERR] {name}: {e}")
+
+    print("Sarvam Connected-mode self-test")
+    hindi = {}
+
+    def tr():
+        hindi["t"] = c.translate("Hello, I am Relay. How can I help you?", target="hi-IN",
+                                 source="en-IN")
+        return hindi["t"]
+    step("translate en->hi (mayura)", tr)
+
+    def tts():
+        audio, sr = c.tts(hindi.get("t") or "नमस्ते", "hi-IN")
+        return f"{len(audio) / sr:.1f}s of Hindi audio at {sr} Hz"
+    step("text-to-speech hi-IN (bulbul)", tts)
+
+    def stt():
+        from relay.audio import make_tts
+        from relay.connected.sarvam import float_to_wav
+        a, sr = make_tts(prefer_piper=True).synth_to_array("please open whatsapp")
+        if sr != 16000:
+            n = int(len(a) * 16000 / sr)
+            a = np.interp(np.linspace(0, len(a), n, endpoint=False), np.arange(len(a)),
+                          a).astype(np.float32)
+        text, lang = c.stt(float_to_wav(a), mode="translate")
+        return f"{text!r} (language {lang})"
+    step("speech-to-text translate (saaras)", stt)
+    step("command understanding (chat)",
+         lambda: interpret(c, "could you get whatsapp up on the screen for me") or "UNKNOWN")
+    print("Sarvam self-test " + ("PASSED." if ok else "had errors (see above)."))
+    return 0 if ok else 1
+
+
 def panel_run() -> int:
     """Start the optional accessible panel (authenticated loopback HTTP+SSE) and keep
     the core running. Closing the panel does not stop RELAY."""
