@@ -121,7 +121,7 @@ def check_everyday_language():
         "search for bus stop near me": Kind.WEB_SEARCH, "read the page": Kind.READ_ALL,
         "remind me in 10 minutes to call mom": Kind.SET_REMINDER,
         "what is 15 percent of 2 lakh": Kind.CALCULATE, "stop": Kind.CONTROL,
-        "send the message": Kind.SEND, "turn on connected mode": Kind.CONNECTED,
+        "send the message": Kind.SEND, "start dictation": Kind.DICTATION,
     }
     wrong = [u for u, k in cases.items() if parse(u).kind != k]
     return not wrong, (f"{len(cases)} natural phrasings routed correctly" if not wrong
@@ -172,7 +172,7 @@ def main() -> int:
     print(f"{passed}/{len(CHECKS)} offline acceptance checks passed.")
     print("Live checks: scripts/e2e_voice.py, scripts/live_app_check.py, "
           "scripts/live_window_check.py. Still required (need hardware/people/keys): "
-          "live Sarvam calls (relay --sarvam-selftest), NVDA coexistence, clean-VM "
+          "NVDA coexistence, clean-VM "
           "offline install, supervised blind-user testing, 4 GB-hardware latency.")
     return 0 if passed == len(CHECKS) else 1
 

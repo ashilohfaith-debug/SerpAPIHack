@@ -8,21 +8,12 @@ references) and the honest limits.
 - **Local by default.** No screenshots, audio, documents or activity are transmitted
   anywhere. Essential mode has no network dependency at all. (Status questions like
   "am I online" ask Windows locally — no packets are sent.)
-- **Connected mode is opt-in, with spoken consent** (`relay/session.py::set_connected`,
-  `relay/connected/`). Turning it on explains exactly what is sent (voice addressed to
-  RELAY, and text RELAY reads aloud, to Sarvam AI) and requires the phrase "confirm
-  connect" — a bare "yes" is refused. It can be turned off by voice at any time.
-- **Ambient speech never leaves the device.** In Connected mode the wake word is
-  checked by the local recogniser first (`relay/loop.py::on_utterance`); only speech
-  addressed to RELAY (wake word verified on-device, or the talk key pressed) is sent.
-- **Secrets are never sent to the cloud.** Text that looks like a password/OTP/code is
-  spoken with the offline voice instead (`relay/connected/mode.py::synth_to_array`);
-  protected fields are never read in the first place. The API key is read from the
-  environment or a local file and never logged, spoken or included in `repr`.
-- **Cloud output is untrusted.** A command suggested by Sarvam's chat model must parse
-  to a known, non-destructive intent, can never be a confirmation phrase, is announced
-  ("I understood that as …") and still passes the permission gate
-  (`relay/connected/nlu.py::validate`).
+- **No keys, no accounts, no cloud.** RELAY contains no API client and needs no key or
+  sign-in. Speech recognition (faster-whisper), the voice (Piper) and screen reading
+  (UI Automation) all run locally. Once the models are on disk the speech model is loaded
+  with `local_files_only` so start-up makes no network request (`relay/audio/stt.py`);
+  `relay --check` verifies that no network lookup happens, and a test runs the everyday
+  commands with networking blocked (`tests/test_daily.py`).
 - **No screenshot retention.** Screen state (L1) lives in RAM and is replaced, not
   stored (`relay/perception/worker.py`). OCR captures are used and discarded.
 - **Secret redaction in logs.** The logger drops password/OTP/token-shaped values
@@ -81,6 +72,12 @@ references) and the honest limits.
 - Runs at the user's integrity level: it **cannot** drive elevated/admin apps or the UAC
   secure desktop, and does not try to. It says so rather than failing silently.
 - No administrator privileges are requested by default.
+
+## Input injection
+Keys and clicks go through Win32 `SendInput` directly (`relay/executor/input_backend.py`),
+behind the same permission gate as everything else — no third-party input library. If a
+window running as administrator is in front, Windows refuses injected input and RELAY
+says so instead of pretending the key was pressed.
 
 ## Global hotkeys
 Registered with Win32 `RegisterHotKey` (`relay/audio/hotkeys.py`) — no keyboard hooks,

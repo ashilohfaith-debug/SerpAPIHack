@@ -2,6 +2,7 @@
 through the permission gate, preferring native UIA over keyboard over coordinates."""
 
 from .executor import ActionOutcome, Executor
-from .input_backend import PyAutoGuiBackend, RecordingBackend
+from .input_backend import PyAutoGuiBackend, RecordingBackend, WindowsInputBackend
 
-__all__ = ["ActionOutcome", "Executor", "PyAutoGuiBackend", "RecordingBackend"]
+__all__ = ["ActionOutcome", "Executor", "PyAutoGuiBackend", "RecordingBackend",
+           "WindowsInputBackend"]

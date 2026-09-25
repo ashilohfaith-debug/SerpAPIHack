@@ -105,6 +105,9 @@ class TransparentRunner:
         self._on_confirm_needed = on_confirm_needed
         self.mode = mode
         self.last_said = ""
+        # when NVDA/JAWS/Narrator is running it already announces focus moves; saying
+        # them again would talk over it (RELAY still reports everything else)
+        self.screen_reader = False
 
     def say(self, text: str, priority: int = pol.Priority.TASK) -> None:
         if not text or not pol.should_speak(priority, self.mode):
@@ -164,6 +167,8 @@ class TransparentRunner:
         # system settings (volume, media keys) don't change the screen: anything that
         # moved meanwhile is unrelated background, not a result of this action
         deltas = [] if step.payload.get("no_delta") else delta_mod.diff(prev, new)
+        if self.screen_reader:
+            deltas = [d for d in deltas if not d.startswith("Focus is now on")]
         self.ctx.last_narrated = new
         result = self._narrate_outcome(step, outcome, detail, deltas)
         # surface an UNEXPECTED dialog and offer to help (a save step expects one)
@@ -288,7 +293,11 @@ class TransparentRunner:
         if op == "close":
             gone = _wait(lambda: not w.exists(hwnd), 3.0, 0.25)
             if gone:
-                return self.vf.verify(o, True, f"{p.get('label', 'The window')} is closed.")
+                done = f"{p.get('label', 'The window')} is closed."
+                if w.foreground_blocks_input():
+                    done += (" Windows has put one of its own invisible windows in front; "
+                             "press Alt+Tab to get back to your other windows.")
+                return self.vf.verify(o, True, done)
             # still there: most likely the app is asking to save — narrate, don't force
             snap = self.worker.observe(3.0)
             if snap is not None and snap.dialogs:
@@ -301,6 +310,10 @@ class TransparentRunner:
                   "restore": lambda: not w.user32.IsIconic(hwnd),
                   "activate": lambda: w.user32.GetForegroundWindow() == hwnd}
         ok = _wait(checks[op], 2.0, 0.2)
+        if not ok and op == "activate" and w.foreground_blocks_input():
+            # an invisible Windows/system window holds focus: only a real key press frees it
+            return self.vf.verify(o, False, "Windows is keeping one of its own windows in "
+                                  "front. Press Alt+Tab once, then ask me again")
         return self.vf.verify(o, ok, p.get("ok_text", "") if ok else "")
 
     def _act_hotkey(self, p):

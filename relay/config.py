@@ -62,7 +62,7 @@ class Config:
     # narration
     narration_mode: str = "quick"  # quick | detailed | guided | quiet
     # runtime
-    mode: str = "essential"  # essential | enhanced | advanced | connected
+    mode: str = "essential"  # essential | enhanced | advanced (all local, no keys)
     log_level: str = "INFO"
     custom_vocabulary: list[str] = field(default_factory=list)
 

@@ -42,9 +42,11 @@ class SpeechSegmenter:
         self._speech_run = 0
         self._silence_run = 0
         self._in_speech = False
+        self.last_speech = False      # VAD verdict for the most recent frame
 
     def push(self, frame_bytes: bytes) -> str | None:
         speech = self.vad.is_speech(frame_bytes)
+        self.last_speech = speech
         if not self._in_speech:
             self._speech_run = self._speech_run + 1 if speech else 0
             if self._speech_run >= self.start_frames:

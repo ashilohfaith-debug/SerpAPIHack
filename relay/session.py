@@ -2,7 +2,7 @@
 
 Parses the utterance, handles control words (stop/pause/continue/cancel/emergency),
 memory and accessibility commands directly, routes everyday skills (status, apps,
-windows, web, files, reading, notes, reminders, dictation, languages) to
+windows, web, files, reading, notes, reminders, dictation) to
 ``relay.skills``, and runs anything that changes the screen through the
 TransparentRunner. RELAY acts only in response to a command and narrates every step;
 it never loops on its own.
@@ -13,9 +13,7 @@ Turn-taking the user can rely on:
     anything else is treated as a new command;
   * a follow-up question ("What should the note say?") takes the next utterance;
   * in dictation, speech is typed, except control words and "stop dictation".
-In Connected mode, a request the offline grammar can't parse is mapped by Sarvam's
-chat model onto one of RELAY's fixed commands; RELAY says how it understood the
-request, then runs it through the same safety gate.
+Everything runs on the laptop: no cloud service, account or API key is used.
 """
 
 from __future__ import annotations
@@ -35,6 +33,7 @@ from relay.accessibility import (
 )
 from relay.audio.wake import Command
 from relay.core import EmergencyStop, new_task_id
+from relay.diagnostics import get_logger
 from relay.executor import Executor
 from relay.intent import Kind, parse
 from relay.intent.normalize import normalize
@@ -62,6 +61,7 @@ _ACCESS_KINDS = {
     Kind.SET_MODE, Kind.READ_DIALOG, Kind.NEXT_ELEMENT, Kind.PREV_ELEMENT, Kind.SPELL,
     Kind.CAPABILITIES,
 }
+log = get_logger("session")
 _REQ = pol.Priority.REQUESTED
 _CONF = pol.Priority.CONFIRMATION
 _YES = re.compile(r"^(?:yes|yeah|yep|yup|sure|ok|okay|please do|do it|go ahead|haan|ha|"
@@ -73,7 +73,6 @@ class Session:
     def __init__(self, speak=None, bus=None, db_path: str = ":memory:", speech=None,
                  apps=None, on_quit: Callable[[], None] | None = None,
                  on_wake_word: Callable[[bool], None] | None = None,
-                 on_connected: Callable[[object], None] | None = None,
                  talk_key: str = "ctrl+alt+space") -> None:
         self.emergency = EmergencyStop()
         self.cancel = threading.Event()
@@ -82,7 +81,6 @@ class Session:
         self.speech = speech                # SpeechQueue (live app) or None (tests/CLI)
         self.on_quit = on_quit
         self.on_wake_word = on_wake_word
-        self.on_connected = on_connected
         self.talk_key = talk_key
         self.worker = UIAWorker(bus=bus)
         self.worker.start()
@@ -99,11 +97,8 @@ class Session:
         self._offer: Callable[[], object] | None = None
         self._capture: Callable[[str], object] | None = None
         self._nav_index = -1
-        self._nlu_busy = False
         self.dictation = False
         self.last_activity = ""
-        self.connected = None               # ConnectedVoice when Connected mode is on
-        self._offline_tts = speech.tts if speech is not None else None
         if apps is None:
             from relay.system.apps import AppCatalog
             apps = AppCatalog(entries=[])
@@ -119,6 +114,8 @@ class Session:
             on_confirm_needed=self._on_confirm_needed, mode=self.narration_mode)
         self.reader = Reader(speak_part=self._speak_part, say=lambda t: self.say(t, _REQ),
                              interrupt=self._interrupt_speech, on_event=self._emit)
+        from relay.accessibility.coexist import ScreenReaderWatch
+        self.screen_reader = ScreenReaderWatch()
         self.skills = Skills(self)
         self.speech_rate = 1.0
         try:
@@ -162,9 +159,9 @@ class Session:
 
     def set_speech_rate(self, rate: float, persist: bool = True) -> None:
         self.speech_rate = max(0.6, min(2.2, rate))
-        for eng in (self.speech.tts if self.speech is not None else None, self._offline_tts):
-            if eng is not None and hasattr(eng, "set_rate"):
-                eng.set_rate(self.speech_rate)
+        eng = self.speech.tts if self.speech is not None else None
+        if eng is not None and hasattr(eng, "set_rate"):
+            eng.set_rate(self.speech_rate)
         if persist:
             self.store.set_pref("speech_rate", f"{self.speech_rate:.2f}")
 
@@ -192,8 +189,6 @@ class Session:
 
     def set_dictation(self, on: bool) -> None:
         self.dictation = on
-        if self.connected is not None:
-            self.connected.native_dictation = on
 
     # ---- dispatch ----
     def handle(self, utterance: str):
@@ -215,13 +210,13 @@ class Session:
                 return []
             return consumer(utterance.strip()) or []
         intent = parse(utterance)
+        # the command TYPE only — never the words, which may be private (dictation, notes)
+        log.info("command: %s (%d words)%s", intent.kind, len(utterance.split()),
+                 " [dictation]" if self.dictation else "")
+        self.runner.screen_reader = self.screen_reader.current()[0]
         if self.dictation and intent.kind not in (Kind.CONTROL, Kind.DICTATION, Kind.QUIT,
                                                   Kind.SHORTCUT, Kind.PRESS_KEY, Kind.HOTKEY):
             return self.skills.dictate(utterance)
-        if intent.kind == Kind.UNKNOWN and self.connected is not None and not self._nlu_busy:
-            understood = self._understand(utterance)
-            if understood:
-                intent = parse(understood)
         if intent.kind == Kind.CONTROL:
             return self._handle_control(intent.slots.get("command"))
         if intent.kind in _MEMORY_KINDS:
@@ -238,24 +233,21 @@ class Session:
             return handled
         steps, clarification = plan(intent)
         if clarification:
+            from relay.intent.fuzzy import closest
+            near = closest(utterance)
+            if near is not None:
+                phrase, safe, _score = near
+                if safe:                       # read-only: do it, and say how we heard it
+                    self.say(f"I think you meant: {phrase}.", _REQ)
+                    return self.handle(phrase)
+                self.say(f"Did you mean: {phrase}? Say yes or no.", _REQ)
+                self.offer(lambda: self.handle(phrase))
+                return []
             self.say(f"Sorry, I didn't understand \"{utterance.strip()}\". "
                      "Say help to hear what I can do.", _REQ)
             return []
         self.last_activity = intent.kind
         return self.runner.run(steps, cancel=self.cancel)
-
-    def _understand(self, utterance: str) -> str | None:
-        from relay.connected import nlu
-        self._nlu_busy = True
-        try:
-            self.say("Let me think about that.", pol.Priority.FOCUS)
-            cmd = nlu.interpret(self.connected.client, utterance,
-                                model=self.connected.chat_model)
-        finally:
-            self._nlu_busy = False
-        if cmd:
-            self.say(f"I understood that as: {cmd}.", _REQ)
-        return cmd
 
     # ---- confirmation flow ----
     def _on_confirm_needed(self, decision, target_label, retry) -> None:
@@ -271,9 +263,9 @@ class Session:
 
     @staticmethod
     def _says_phrase(utterance: str, phrase: str) -> bool:
-        """Every word of the phrase must be spoken (word stems allowed, so 'I confirm
-        sending' matches 'confirm send' — needed when the phrase was translated for a
-        Hindi/Telugu speaker). A casual 'yeah', or 'send' alone, never matches."""
+        """Every word of the phrase must be spoken (word stems allowed, so the way
+        people actually answer — 'I confirm sending' — matches 'confirm send'). A casual
+        'yeah', or 'send' alone, never matches."""
         tokens = re.findall(r"[a-z]+", normalize(utterance))
         return all(any(t.startswith(w) for t in tokens) for w in phrase.split())
 
@@ -299,72 +291,6 @@ class Session:
             return []
         self.say(f"To confirm, say {p.phrase}, or say cancel.", _CONF)
         return []
-
-    # ---- Connected mode ----
-    def set_connected(self, on: bool) -> None:
-        from relay.connected import api_key
-        if not on:
-            if self.connected is None:
-                self.say("Connected mode is already off. Everything stays on this computer.")
-                return
-            self._disable_connected()
-            self.say("Connected mode is off. Everything stays on this computer again.",
-                     _CONF)
-            return
-        if self.connected is not None:
-            self.say("Connected mode is already on.")
-            return
-        if not api_key():
-            self.say("Connected mode needs a Sarvam A I key. Ask a sighted helper to save it "
-                     "in a file called sarvam key dot t x t in the Relay data folder, or to "
-                     "set the SARVAM API KEY setting. Then say turn on connected mode again.",
-                     _REQ)
-            return
-        self.ask_phrase(
-            "confirm connect",
-            "Connected mode sends your voice, and the text I read aloud, to Sarvam A I's "
-            "servers in India, so we can talk in Hindi, Telugu, Tamil and more. Passwords "
-            "and protected fields are never sent. You can turn it off at any time.",
-            lambda: self._enable_connected(announce=True))
-
-    def _enable_connected(self, announce: bool = False):
-        from relay.connected import ConnectedVoice, SarvamClient, api_key
-        try:
-            client = SarvamClient(api_key())
-        except ValueError:
-            self.say("I couldn't find the Sarvam key.", pol.Priority.CRITICAL)
-            return []
-        cv = ConnectedVoice(client, offline_stt=None, offline_tts=self._offline_tts,
-                            on_offline=lambda msg: self.say(msg, pol.Priority.CRITICAL))
-        cv.output_language = self.store.get_pref("output_language", default="auto")
-        cv.set_rate(self.speech_rate)
-        self.connected = cv
-        if self.speech is not None:
-            self.speech.set_tts(cv)
-        self.store.set_pref("connected", "1")
-        if self.on_connected is not None:
-            self.on_connected(cv)
-        if announce:
-            self.say("Connected mode is on. You can speak to me in your language now. Say "
-                     "speak in Hindi, or any language, to choose how I answer.", _CONF)
-        return []
-
-    def _disable_connected(self) -> None:
-        self.connected = None
-        if self.speech is not None and self._offline_tts is not None:
-            self.speech.set_tts(self._offline_tts)
-        self.store.set_pref("connected", "0")
-        if self.on_connected is not None:
-            self.on_connected(None)
-
-    def restore_connected(self) -> bool:
-        """Re-enable Connected mode at startup if the user turned it on before (their
-        consent is remembered) and the key is still present."""
-        from relay.connected import api_key
-        if self.store.get_pref("connected", default="0") == "1" and api_key():
-            self._enable_connected(announce=False)
-            return True
-        return False
 
     # ---- reminders ----
     def _on_reminder(self, text: str, late_seconds: float) -> None:

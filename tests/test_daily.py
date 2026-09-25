@@ -40,6 +40,9 @@ def test_spoken_punctuation():
     ("Um, can you open Chrome for me, please?", Kind.OPEN_APP, {"app": "chrome"}),
     ("What's the time?", Kind.TIME, {}),
     ("what is today's date", Kind.DATE, {}),
+    ("What's the day today?", Kind.DATE, {}),
+    ("what's the date today", Kind.DATE, {}),
+    ("what day is it today", Kind.DATE, {}),
     ("How much battery do I have?", Kind.BATTERY, {}),
     ("Am I connected to the internet?", Kind.INTERNET, {}),
     ("what is 25 times 4", Kind.CALCULATE, {}),
@@ -59,7 +62,6 @@ def test_spoken_punctuation():
     ("remind me in 10 minutes to call mom", Kind.SET_REMINDER, {}),
     ("cancel my reminders", Kind.CANCEL_REMINDERS, {}),
     ("stop dictation", Kind.DICTATION, {"on": False}),
-    ("turn on connected mode", Kind.CONNECTED, {"on": True}),
     ("speak in Telugu", Kind.LANGUAGE, {"language": "telugu"}),
     ("find my resume", Kind.FIND_FILE, {"name": "resume"}),
     ("read the pdf electricity bill", Kind.OPEN_FILE, {"name": "electricity bill"}),
@@ -457,6 +459,9 @@ def test_real_hotkey_registration_and_delivery():
     import ctypes
 
     from relay.audio.hotkeys import HotkeyManager
+    from relay.system.windows import foreground_blocks_input
+    if foreground_blocks_input():
+        pytest.skip("an elevated/system window is in front; Windows drops injected keys")
     fired = threading.Event()
     hk = HotkeyManager()
     hk.add("ctrl+alt+shift+f11", fired.set)
@@ -584,41 +589,6 @@ def test_session_quit_and_reminder_speech(session):
     assert any(t.startswith("Reminder: take medicine") for t in session.spoken)
 
 
-def test_session_connected_mode_requires_key_then_phrase(session, monkeypatch):
-    session.handle("turn on connected mode")
-    assert session.connected is None and any("Sarvam" in t for t in session.spoken)
-    monkeypatch.setenv("SARVAM_API_KEY", "test-key")
-    session.handle("turn on connected mode")
-    assert session._pending is not None and session._pending.phrase == "confirm connect"
-    session.handle("yes")                               # a bare yes is not consent
-    assert session.connected is None
-    session.handle("confirm connect")
-    assert session.connected is not None
-    session.handle("turn off connected mode")
-    assert session.connected is None
-
-
-def test_session_nlu_fallback_is_validated(session, monkeypatch):
-    monkeypatch.setenv("SARVAM_API_KEY", "test-key")
-    session._enable_connected()
-
-    class FakeClient:
-        def __init__(self, answer):
-            self.answer = answer
-
-        def chat(self, *a, **k):
-            return self.answer
-
-    session.connected.client = FakeClient("what time is it")
-    session.handle("could you tell me what hour it is right now")
-    assert any("I understood that as: what time is it" in t for t in session.spoken)
-    assert any(t.startswith("It's ") for t in session.spoken)
-    session.spoken.clear()
-    session.connected.client = FakeClient("confirm delete")      # never accepted
-    session.handle("blorp the flarn")
-    assert not any("understood" in t for t in session.spoken)
-
-
 def test_session_speech_rate_persists(session):
     session.handle("speak faster")
     assert session.speech_rate > 1.0
@@ -646,34 +616,6 @@ def test_delete_key_in_file_explorer_needs_phrase(session, monkeypatch):
     assert session._pending is None
 
 
-def test_connected_wake_gate_keeps_ambient_speech_on_device():
-    from relay.loop import VoiceLoop
-
-    class Local:
-        def __init__(self, text):
-            self.text = text
-
-        def transcribe(self, audio):
-            return self.text
-
-    class Cloud:
-        def __init__(self):
-            self.calls = 0
-
-        def transcribe(self, audio):
-            self.calls += 1
-            return "Relay, what time is it?"
-
-    cloud, dispatched = Cloud(), []
-    loop = VoiceLoop(dispatched.append, stt=cloud, wake_required=True, threaded=False)
-    loop.wake_stt = Local("so I told him about the meeting")
-    loop.on_utterance(b"\x01\x00" * 800)
-    assert cloud.calls == 0 and dispatched == []        # never left the device
-    loop.wake_stt = Local("Relay, abhi kitne baje hain")
-    loop.on_utterance(b"\x01\x00" * 800)
-    assert cloud.calls == 1 and dispatched == ["what time is it?"]
-
-
 def test_repeated_silent_talk_key_explains_microphone():
     from relay.loop import VoiceLoop
     clock = {"t": 0.0}
@@ -688,7 +630,7 @@ def test_repeated_silent_talk_key_explains_microphone():
     assert any("microphone" in s for s in said)
 
 
-def test_confirmation_phrase_accepts_translated_word_forms_only():
+def test_confirmation_phrase_accepts_natural_word_forms_only():
     from relay.session import Session
     ok = Session._says_phrase
     assert ok("I confirm sending it", "confirm send")
@@ -697,3 +639,162 @@ def test_confirmation_phrase_accepts_translated_word_forms_only():
     assert not ok("send", "confirm send")
     assert not ok("confirm", "confirm send")
     assert not ok("yes please", "confirm delete")
+
+
+def test_other_languages_get_an_honest_english_only_answer(session):
+    session.handle("speak in Hindi")
+    assert any("only speak English" in t for t in session.spoken)
+
+
+def test_everyday_commands_work_with_networking_blocked(session, monkeypatch):
+    """No keys, no cloud: with every DNS lookup and socket connection failing, the
+    everyday commands still answer."""
+    import socket
+
+    def no_network(*a, **k):
+        raise OSError("network disabled for this test")
+    monkeypatch.setattr(socket, "getaddrinfo", no_network)
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    for cmd, expect in [("what time is it", "It's"), ("what is 12 times 12", "144"),
+                        ("take a note water the plants", "Noted"),
+                        ("remind me in 5 minutes to stretch", "remind you"),
+                        ("how much battery do I have", "attery"),
+                        ("help with notes", "Notes and reminders")]:
+        session.spoken.clear()
+        session.handle(cmd)
+        assert any(expect in t for t in session.spoken), (cmd, session.spoken)
+
+
+def test_no_cloud_module_ships():
+    import importlib.util
+    assert importlib.util.find_spec("relay.connected") is None
+
+
+def test_noise_blips_never_reach_the_speech_model():
+    """Waiting for the wake word, a short or quiet sound is screened out before STT."""
+    from relay.loop import VoiceLoop
+
+    class CountingSTT:
+        calls = 0
+
+        def transcribe(self, audio):
+            CountingSTT.calls += 1
+            return ""
+
+    loop = VoiceLoop(lambda t: None, stt=CountingSTT(), wake_required=True, threaded=False,
+                     segmenter_factory=lambda: ScriptSeg([True, True, False]))
+    loop.on_frame(_frame())
+    loop.on_frame(_frame())
+    loop.on_frame(_frame())          # 2 voiced frames = 0.06 s: a blip
+    assert CountingSTT.calls == 0 and loop.screened_out == 1
+
+
+def test_sendinput_structures_and_key_map():
+    import ctypes
+
+    from relay.executor.input_backend import INPUT, vk_for
+    assert ctypes.sizeof(INPUT) == (40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28)
+    assert vk_for("a") == 0x41 and vk_for("F5") == 0x74 and vk_for("enter") == 0x0D
+    assert vk_for("ctrl") == 0x11 and vk_for("=") == 0xBB and vk_for("playpause") == 0xB3
+    with pytest.raises(ValueError):
+        vk_for("hyper")
+
+
+def test_sendinput_really_reaches_windows():
+    """Press a registered global hotkey with the real backend and see it arrive."""
+    from relay.audio.hotkeys import HotkeyManager
+    from relay.executor.input_backend import WindowsInputBackend
+    from relay.system.windows import foreground_blocks_input
+    if foreground_blocks_input():
+        pytest.skip("an elevated/system window is in front; Windows drops injected keys")
+    fired = threading.Event()
+    hk = HotkeyManager()
+    hk.add("ctrl+alt+shift+f10", fired.set)
+    if not hk.start().get("ctrl+alt+shift+f10"):
+        hk.stop()
+        pytest.skip("combination in use on this machine")
+    try:
+        WindowsInputBackend().hotkey("ctrl", "alt", "shift", "f10")
+        assert fired.wait(2.0)
+    finally:
+        hk.stop()
+
+
+def test_with_a_screen_reader_running_focus_moves_are_not_repeated():
+    from relay.memory.journal import ExecState
+    from relay.memory.task_context import TaskContext
+    from relay.perception.semantic import ScreenSnapshot, UIElement
+    from relay.planner.planner import Step
+    from relay.planner.runner import TransparentRunner
+
+    class Out:
+        def __init__(self, state):
+            self.state, self.detail = state, ""
+
+    class Ex:
+        def press(self, key, count=1):
+            return Out(ExecState.EXECUTED)
+
+    before = ScreenSnapshot(1, foreground_title="Form", focus=UIElement(0, "Name", "Edit",
+                                                                         (0, 0, 1, 1)))
+    after = ScreenSnapshot(2, foreground_title="Form", focus=UIElement(0, "Email", "Edit",
+                                                                        (0, 0, 1, 1)))
+
+    class W:
+        def observe(self, timeout=2):
+            return after
+
+    for reader_on, expect_focus_line in ((False, True), (True, False)):
+        spoken, ctx = [], TaskContext("t")
+        ctx.last_narrated = before
+        r = TransparentRunner(Ex(), W(), None, ctx, speak=spoken.append)
+        r.screen_reader = reader_on
+        r.run([Step("press", "press tab", {"key": "tab", "announce": "Pressing Tab.",
+                                           "done_text": ""})])
+        assert any("Focus is now on" in s for s in spoken) == expect_focus_line
+
+
+def test_screen_reader_watch_caches():
+    from relay.accessibility.coexist import ScreenReaderWatch
+    calls = []
+    w = ScreenReaderWatch(ttl=60, probe=lambda: calls.append(1) or (True, "NVDA"))
+    assert w.current() == (True, "NVDA") and w.current() == (True, "NVDA")
+    assert len(calls) == 1
+
+
+def test_injected_input_is_refused_honestly_when_windows_would_drop_it(monkeypatch):
+    from relay.executor import Executor
+    from relay.executor.input_backend import WindowsInputBackend
+    from relay.memory.db import connect
+    from relay.memory.journal import ActionJournal, ExecState
+    from relay.safety import PermissionEngine
+    sent = []
+
+    class Spy(WindowsInputBackend):
+        def press(self, key):
+            sent.append(key)
+
+    monkeypatch.setattr("relay.system.windows.foreground_blocks_input", lambda: True)
+    ex = Executor(PermissionEngine(), worker=None, journal=ActionJournal(connect(":memory:")),
+                  task_id="t", input_backend=Spy())
+    out = ex.press("enter")
+    assert out.state == ExecState.FAILED and "administrator" in out.detail and sent == []
+
+
+def test_recognition_slips_are_understood_safely(session):
+    from relay.intent.fuzzy import closest
+    assert closest("Read by notes.")[0] == "read my notes"
+    assert parse(closest("what's the tie")[0]).kind == Kind.TIME
+    assert closest("the relay race was great yesterday") is None
+    assert closest("banana") is None
+    session.notes.add("buy milk")
+    session.spoken.clear()
+    session.handle("Read by notes.")                     # read-only: runs, says so
+    assert any("I think you meant: read my notes" in t for t in session.spoken)
+    assert any("buy milk" in t for t in session.spoken)
+    session.spoken.clear()
+    session.handle("clothes tab")                         # changes things: only offered
+    assert any("Did you mean: close tab" in t for t in session.spoken)
+    assert ("hotkey", ("ctrl", "w")) not in session.executor.input.calls
+    session.handle("no")
+    assert ("hotkey", ("ctrl", "w")) not in session.executor.input.calls

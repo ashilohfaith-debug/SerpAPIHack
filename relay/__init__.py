@@ -17,4 +17,25 @@ Subsystems (built phase by phase; see ../docs/04-phase-plan.md):
   ipc/           authenticated local channel for optional UI   [P10]
 """
 
-__version__ = "0.2.0"
+import os as _os
+
+# Basic laptops: the speech model's OpenMP threads (Intel runtime, loaded by
+# ctranslate2) busy-wait between work by default, burning CPU and battery for nothing.
+# Make them sleep instead. Set before any model library is imported; a user's own
+# environment setting still wins.
+_os.environ.setdefault("KMP_BLOCKTIME", "0")
+_os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+
+__version__ = "0.2.1"
+
+
+def inference_threads() -> int:
+    """Threads for model inference: the CPUs this process may actually use, at most 4
+    and never more than the physical cores (more threads than cores only contend)."""
+    try:
+        import psutil
+        usable = len(psutil.Process().cpu_affinity())
+        physical = psutil.cpu_count(logical=False) or usable
+    except Exception:
+        usable = physical = _os.cpu_count() or 2
+    return max(1, min(4, usable, physical))

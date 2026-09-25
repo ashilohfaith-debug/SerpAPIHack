@@ -14,7 +14,6 @@ from pathlib import Path
 
 import numpy as np
 
-from relay.config import models_dir
 from relay.diagnostics import get_logger
 
 log = get_logger("audio.tts")
@@ -32,9 +31,30 @@ class PiperTTS:
 
     def _ensure(self):
         if self._voice is None:
-            from piper import PiperVoice
-            self._voice = PiperVoice.load(str(self.onnx_path))
+            self._voice = self._load()
         return self._voice
+
+    def _load(self):
+        """Like PiperVoice.load, but with an inference session sized for the machine:
+        onnxruntime otherwise starts a spinning thread per physical core, which on a
+        2-core laptop steals the CPU the voice itself needs."""
+        import json
+
+        import onnxruntime
+        from piper import PiperVoice
+        from piper.config import PiperConfig
+
+        from relay import inference_threads
+        with open(f"{self.onnx_path}.json", encoding="utf-8") as f:
+            cfg = json.load(f)
+        opts = onnxruntime.SessionOptions()
+        opts.intra_op_num_threads = inference_threads()
+        opts.inter_op_num_threads = 1
+        opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
+        session = onnxruntime.InferenceSession(str(self.onnx_path), sess_options=opts,
+                                               providers=["CPUExecutionProvider"])
+        return PiperVoice(session=session, config=PiperConfig.from_dict(cfg),
+                          download_dir=self.onnx_path.parent)
 
     def set_rate(self, rate: float) -> None:
         """Speech speed multiplier (1.0 normal; 1.5 = 50% faster)."""
@@ -132,12 +152,15 @@ class SapiTTS:
 
 
 def default_piper_voice() -> Path | None:
-    """Return a Piper voice .onnx under models/piper if one is present."""
-    d = models_dir() / "piper"
-    if not d.exists():
-        return None
-    voices = sorted(d.glob("*.onnx"))
-    return voices[0] if voices else None
+    """The installed Piper voice RELAY should use: the configured voice, else the
+    release (public-domain) voice, else any complete installed voice."""
+    from relay.config import Config
+    from relay.models_manager import voice_path
+    try:
+        preferred = Config.load().voice
+    except Exception:
+        preferred = None
+    return voice_path(preferred)
 
 
 def make_tts(prefer_piper: bool = True):

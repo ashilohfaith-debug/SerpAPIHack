@@ -41,6 +41,22 @@ def detect_wake(text: str) -> tuple[bool, str]:
     return True, rest
 
 
+_NEAR_MISS_RE = re.compile(r"^(?:really|rally|relays|realy|reli|rilly)(?=$|[\s,.!?:;])"
+                           r"[\s,.!?:;]*", re.IGNORECASE)
+
+
+def detect_wake_near_miss(text: str) -> tuple[bool, str]:
+    """Common mis-hearings of "Relay" ("Really, what time is it?"). Callers must only
+    accept these when the rest is a recognised command, so "Really? That's great" said
+    to someone else is still ignored."""
+    t = (text or "").strip().replace("’", "'")
+    t = _LEAD.sub("", re.sub(r"^[\"'“”.,!?\s-]+", "", t))
+    m = _NEAR_MISS_RE.match(t)
+    if not m:
+        return False, ""
+    return True, re.sub(r"^[,.!?:;\s]+", "", t[m.end():]).strip()
+
+
 # Control commands -> canonical action. Order matters (emergency first).
 class Command:
     EMERGENCY_STOP = "emergency_stop"

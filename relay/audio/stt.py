@@ -43,9 +43,11 @@ class WhisperSTT:
             local = any(whisper_dir.rglob("model.bin"))
             log.info("loading STT model %s (%s, %s)", self.model_name, self.compute_type,
                      "local files only" if local else "may download")
+            from relay import inference_threads
             self._model = WhisperModel(
                 self.model_name, device="cpu", compute_type=self.compute_type,
                 download_root=str(whisper_dir), local_files_only=local,
+                cpu_threads=inference_threads(),
             )
         return self._model
 

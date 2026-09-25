@@ -1,5 +1,54 @@
 # RELAY — release notes
 
+## 0.2.1 — No keys, basic laptops, works when opened
+
+### No keys, no accounts, no cloud
+The optional Sarvam "Connected mode" added in 0.2.0 needed an API key, which is against
+what RELAY is for. It is **removed** — code, commands and docs. Every feature runs on
+the laptop. `relay --check` proves no network lookups happen, and a test runs the
+everyday commands with networking blocked.
+
+### Built for basic laptops (measured with emulated low-end CPUs, 1 GB cap enforced)
+- End of a spoken command → first word of the answer: **2.4 s** on a budget dual-core,
+  **3.3 s** on a Celeron-class chip (were 10.6 s / 10.7 s). The voice now generates
+  4x faster than it plays (it stuttered before).
+- The model runtimes no longer start a spinning thread per core or busy-wait; threads
+  match the cores really available.
+- Waiting for the wake word costs ~2% of one core (was 19–47%): room noise is screened
+  before it reaches the speech model. Talk-key-only mode: 0.1%.
+- Start-up says "Starting Relay. One moment." instantly, so a 6–10 s start is never silent.
+- The speech model no longer contacts the model hub at every start.
+- Correction: the old "survived a 1 GB cap" figure came from a helper with a handle bug
+  that may never have applied the cap. Fixed and verified; re-measured peak is 402 MB.
+
+### Works when opened
+- `relay --check`: models, voice, speech recognition, microphone, speakers, the three
+  global keys, screen reading, app list, volume, database, single instance, and "no
+  network used" — printed and spoken.
+- The packaged app passes a clean-profile check (`scripts/clean_machine_check.py`): no
+  Python on PATH, empty data folder, dead proxies; all 129 DLLs it imports are bundled or
+  part of Windows (incl. the Visual C++ runtime); `--check` passes; the windowless
+  `relay.exe` starts, stays up, logs no errors and opens no internet connections.
+- Microphone muted or blocked → after two silent talk-key presses RELAY says so.
+
+### Licences and SBOM
+- `docs/SBOM.md` + `packaging/requirements.lock` generated from package metadata.
+- **piper-tts is GPL-3.0** (embeds espeak-ng; the old docs said MIT). A packaged build
+  with Piper must be distributed under GPL-3.0 terms — decision pending (see THIRD_PARTY).
+- pyautogui (which pulled in two GPL-3.0 packages) replaced by direct Win32 SendInput.
+- The voice RELAY used (Lessac) is licensed for research only. The release voice is now
+  `en_US-ljspeech-medium` (public domain, trained from scratch); the build warns if it
+  has to fall back to the research-only voice.
+
+### Screen readers
+With NVDA, JAWS or Narrator running, RELAY no longer repeats focus changes they already
+announce (it still reports everything else). Tested in code; not yet with a real screen
+reader running.
+
+### Also
+Code-signing script (`packaging/sign.ps1`, needs a certificate), blind-user testing
+protocol (`docs/USER_TESTING.md`), command-type-only logging (never the spoken words).
+
 ## 0.2.0 — Daily life, end to end
 
 Built from an end-to-end audit from a blind user's point of view: "could someone who
@@ -49,20 +98,15 @@ Enter in chat apps reads the message back and needs "confirm send"; Delete in Fi
 Explorer needs "confirm delete"; window-frame buttons and background windows are no
 longer read out as if they mattered.
 
-### Connected mode — Indian languages via Sarvam AI (opt-in)
-Saaras speech-to-text (commands translated to English for the same offline grammar and
-safety gate; dictation kept in the user's own script), Mayura translation, Bulbul
-voices, and the Sarvam chat model as a validated fallback for free-form requests.
-Spoken consent phrase to enable; ambient speech never leaves the device (wake word is
-checked locally first); secrets never sent; automatic offline fallback.
-**Tested against a fake service only — run `relay --sarvam-selftest` with a key.**
+### Connected mode (removed in 0.2.1)
+An opt-in Sarvam AI mode for Indian languages; it required an API key and was removed.
 
 ### Verification (all run on the development laptop)
 196 unit/behaviour tests; end-to-end voice test 8/8 (synthesized speech → VAD → STT →
 wake word → action → narration, incl. half-duplex); live desktop test 7/7 on a test
 window; live app lifecycle 11/11 with real global hotkeys and microphone; live app
 launch + close via the Start-menu catalogue. Not yet: clean-VM install, NVDA, blind-user
-sessions, live Sarvam calls, signing (see `docs/ACCEPTANCE.md`).
+sessions, signing (see `docs/ACCEPTANCE.md`).
 
 ## 0.1.0 — Essential mode (first end-to-end build)
 

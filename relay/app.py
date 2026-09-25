@@ -1,6 +1,6 @@
 """RelayApp — the assembled application a blind user actually runs.
 
-Wires the Session (real Piper voice, or Sarvam voices in Connected mode), the live
+Wires the Session (offline Piper voice), the live
 voice loop (talk key + wake word, half-duplex), system-wide hotkeys, earcons, the
 reminder scheduler, the emergency stop (which flushes speech), and the optional
 accessible panel. One instance at a time; a second launch says "Relay is already
@@ -74,7 +74,7 @@ class RelayApp:
         self.session = Session(speak=self.speech.say, bus=self.bus,
                                db_path=str(default_db_path()), speech=self.speech,
                                apps=self.apps, on_quit=self.request_quit,
-                               on_wake_word=self._set_wake, on_connected=self._on_connected,
+                               on_wake_word=self._set_wake,
                                talk_key=self.cfg.push_to_talk_hotkey)
         # emergency stop flushes queued speech immediately
         self.session.emergency.register_flush(self.speech.interrupt)
@@ -87,7 +87,6 @@ class RelayApp:
                               wake_required=wake, bus=self.bus, play_earcon=self.earcon,
                               say=lambda t: self.session.say(t, pol.Priority.REQUESTED),
                               open_mic=lambda: self.session.dictation)
-        self.loop.wake_stt = self.stt      # wake word is always checked on-device
         self.hotkeys = HotkeyManager()
         self.hotkeys.add(self.cfg.push_to_talk_hotkey, self.loop.push_to_talk)
         self.hotkeys.add(self.cfg.stop_hotkey, self.session.stop_speaking)
@@ -107,13 +106,6 @@ class RelayApp:
 
     def _set_wake(self, on: bool) -> None:
         self.loop.wake_enabled = on
-
-    def _on_connected(self, cv) -> None:
-        if cv is None:
-            self.loop.stt = self.stt
-        else:
-            cv.offline_stt = self.stt
-            self.loop.stt = cv
 
     # ---- lifecycle ----
     def _startup_checks(self) -> list[str]:
@@ -149,12 +141,8 @@ class RelayApp:
         try:
             threading.Thread(target=self._warm_up, name="stt-warmup", daemon=True).start()
             self.apps.start()
-            if self.session.restore_connected():
-                log.info("connected mode restored")
             problems = self._startup_checks()
             self.session.onboard()
-            if self.session.connected is not None:
-                self.session.say("Connected mode is on.", pol.Priority.REQUESTED)
             for p in problems:
                 self.session.say(p, pol.Priority.CRITICAL)
             self.session.reminders.check_now()     # announce any missed while closed

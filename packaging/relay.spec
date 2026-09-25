@@ -32,7 +32,7 @@ for pkg in ("ctranslate2", "onnxruntime", "piper", "piper_phonemize",
 datas += [("../frontend/panel.html", "frontend")]
 
 hiddenimports += ["win32com", "win32com.client", "comtypes", "comtypes.client",
-                  "uiautomation", "pywintypes", "pythoncom", "pyperclip", "pyautogui",
+                  "uiautomation", "pywintypes", "pythoncom", "pyperclip",
                   "mss", "psutil"]
 
 a = Analysis(

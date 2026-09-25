@@ -1,6 +1,6 @@
 [project]
 name = "relay"
-version = "0.2.0"
+version = "0.2.1"
 description = "RELAY — Windows-first, offline-first, voice-first accessibility assistant for blind and visually impaired people."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -36,7 +36,6 @@ percept = [
 daily = [
     "pycaw>=20240316",         # exact master volume / mute via Core Audio (MIT)
     "pypdf>=4",                # read PDFs aloud (BSD-3)
-    "pyautogui>=0.9",          # keys / hotkeys (BSD-3)
     "pyperclip>=1.8",          # reliable text entry + "read the clipboard" (BSD-3)
 ]
 

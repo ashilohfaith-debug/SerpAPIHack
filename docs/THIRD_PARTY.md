@@ -1,8 +1,20 @@
 # Third-party dependencies & license review
 
-RELAY is MIT-licensed. Every runtime dependency below is a **permissive** license
-(MIT / BSD / Apache-2.0 / PSF / HPND) — none are copyleft — so they are compatible
-with RELAY's MIT distribution. No GPL or unlicensed code is linked or bundled.
+RELAY's own source code is MIT-licensed. The complete, generated list of runtime
+packages with pinned versions and the licence each declares is **`docs/SBOM.md`**
+(`scripts/sbom.py`). Findings from that scan (0.2.1):
+
+- **piper-tts 1.8 is GPL-3.0-or-later** (it embeds the espeak-ng phonemizer). Earlier
+  versions of this file wrongly listed it as MIT. MIT code may be combined with GPL code,
+  but **a packaged build that includes Piper must be distributed under GPL-3.0 terms**
+  (offer the complete corresponding source — RELAY's own source is already open). The
+  alternative is to drop Piper and use Windows' built-in voices (no copyleft, but a
+  noticeably less natural voice). This is a decision for the team.
+- pyautogui pulled in two GPL-3.0 packages (mouseinfo, pymsgbox). RELAY no longer uses
+  it — input goes through Win32 SendInput directly — so they are not shipped.
+- certifi and tqdm are MPL-2.0 (file-level copyleft; shipped unmodified — fine).
+- pycaw declares no licence in its metadata; its upstream LICENSE is MIT.
+- uiautomation is Apache-2.0 (was "verify at release").
 
 ## Runtime dependencies (Essential mode)
 | Package | Purpose | License |
@@ -10,18 +22,17 @@ with RELAY's MIT distribution. No GPL or unlicensed code is linked or bundled.
 | faster-whisper | STT (tiny.en int8) | MIT |
 | ctranslate2 | STT inference engine | MIT |
 | onnxruntime | Piper / RapidOCR backend | MIT |
-| piper-tts | offline TTS | MIT |
+| piper-tts | offline TTS | **GPL-3.0-or-later** (see above) |
 | webrtcvad-wheels | voice activity detection | BSD-3 (WebRTC) |
 | sounddevice | mic/speaker I/O | MIT |
 | soundfile | audio file I/O | BSD-3 |
 | numpy | audio buffers | BSD-3 |
 | pywin32 | SAPI TTS fallback + Win32 | PSF-2.0 |
-| uiautomation | Windows UI Automation | Apache-2.0 *(verify at release)* |
+| uiautomation | Windows UI Automation | Apache-2.0 |
 | comtypes | COM bridge for UIA | MIT |
 | rapidocr-onnxruntime | on-demand OCR | Apache-2.0 |
 | pillow | image handling for OCR | HPND (MIT-style) |
 | mss | screen capture for OCR | MIT |
-| pyautogui | keyboard/mouse fallback input | BSD-3 |
 | pyperclip | clipboard for reliable text entry | BSD-3 |
 | psutil | process/app + perf measurement | BSD-3 |
 | tokenizers / huggingface_hub | pulled by faster-whisper | Apache-2.0 |
@@ -35,13 +46,13 @@ Dev/packaging only: pytest, ruff, pyinstaller (all permissive).
 |---|---|---|
 | Whisper tiny.en (via faster-whisper) | MIT | OpenAI Whisper weights, MIT |
 | RapidOCR ONNX det/rec | Apache-2.0 | ships in the package |
-| Piper voice `en_US-lessac-medium` | **verify at release** | Piper code is MIT; individual voice datasets vary — confirm the chosen voice's license before redistribution |
+| Piper voice `en_US-ljspeech-medium` (release voice) | **public domain** (LJ Speech), trained from scratch | safe to redistribute |
+| Piper voice `en_US-lessac-medium` (earlier default) | Blizzard 2013 Lessac data: **research use only, no commercial use** | fine for testing; do not ship publicly |
 
-## External service (Connected mode only, opt-in)
-**Sarvam AI** (https://www.sarvam.ai) — Saaras speech-to-text, Mayura/Sarvam-Translate,
-Bulbul text-to-speech and the Sarvam chat model, called over HTTPS with the user's own
-API key (stdlib `urllib`; no Sarvam SDK is bundled). Use is governed by Sarvam's terms;
-nothing is sent unless the user turns Connected mode on with the spoken consent phrase.
+## External services
+None. RELAY calls no web API and needs no key or account. (The one-time model download
+with `--setup-models` fetches the Piper voice and Whisper model files from Hugging Face;
+a packaged build ships them, so an end user never downloads anything.)
 
 ## Reference projects (audited, see NOTICE)
 - **screen-use** (MIT), **clacky** (MIT) — small components/patterns adapted, with attribution in `NOTICE`.
@@ -49,6 +60,8 @@ nothing is sent unless the user turns Connected mode on with the spoken consent 
 - **VisionAssistantPro** (GPL-2.0) — engineering/accessibility lessons only; **no code reused or linked**, so no copyleft obligation attaches to RELAY.
 
 ## Action items before public release
-1. Confirm the Piper voice's redistribution license (or ship a voice with a clear permissive/CC license).
-2. Verify `uiautomation`'s exact license string in its distribution metadata.
-3. Generate a full pinned SBOM (`uv pip freeze`) and attach it to the release.
+1. ~~Confirm the voice licence~~ — done: ship `en_US-ljspeech-medium` (public domain);
+   `packaging/build.ps1` warns if it would have to bundle the research-only voice.
+2. ~~Verify uiautomation's licence~~ — Apache-2.0.
+3. ~~Pinned SBOM~~ — `docs/SBOM.md` + `packaging/requirements.lock`, regenerated by the build.
+4. **Decide GPL-3.0 distribution vs. Windows voices** (piper-tts, above).

@@ -2,8 +2,8 @@
 
 Status (time, date, battery, internet), volume and media, arithmetic, apps and
 windows, websites and search, files and folders, reading pages and documents with a
-cursor, links and headings, notes and reminders, dictation, speech speed, language
-and Connected mode.
+cursor, links and headings, notes and reminders, dictation and speech speed — all on
+the laptop, with no account, cloud service or API key.
 
 Every skill that changes the machine is expressed as a runner Step, so it inherits
 the transparency contract: announced before it happens, done through the gated
@@ -41,8 +41,8 @@ LIST_TTL = 300.0          # "the second one" refers to a list read in the last 5
 
 HELP = {
     "": ("Here's what you can ask me. Say help with, and a topic, for more. "
-         "Topics are: reading, web, typing, apps and windows, files, system, notes and "
-         "reminders, and languages. "
+         "Topics are: reading, web, typing, apps and windows, files, system, and notes "
+         "and reminders. "
          "A few examples: what time is it. Open WhatsApp. Search for today's weather. "
          "Read the page. Take a note. Remind me in ten minutes to call mom. "
          "What's on my screen. Stop, to interrupt me. Cancel, to stop a task. "
@@ -75,14 +75,10 @@ HELP = {
               "Remind me in ten minutes to call mom, or remind me at 6 p m to take my "
               "medicine. Set a timer for five minutes. What are my reminders. Cancel my "
               "reminders."),
-    "languages": ("Languages. With Connected mode you can talk to me and hear me in Hindi, "
-                  "Telugu, Tamil and other Indian languages, through Sarvam A I. Say: turn "
-                  "on connected mode. Then: speak in Hindi, or read this page in Telugu. "
-                  "Say turn off connected mode to keep everything on this computer."),
 }
 _HELP_ALIASES = {"the web": "web", "internet": "web", "browsing": "web", "writing": "typing",
                  "keys": "typing", "keyboard": "typing", "windows": "apps",
-                 "reminders": "notes", "language": "languages", "music": "system",
+                 "reminders": "notes", "music": "system",
                  "media": "system"}
 
 
@@ -232,28 +228,12 @@ class Skills:
                   "normal": "Okay, back to normal speed."}[change])
 
     def k_language(self, i):
-        from relay.connected import LANG_NAMES, LANGS
-        lang = i.slots.get("language", "")
-        if lang == "auto":
-            code = "auto"
-        else:
-            code = LANGS.get(lang, "")
-        if not code:
-            self.say("I don't know that language yet.")
-            return
-        cv = self.s.connected
-        if code in ("en-IN",) and cv is None:
+        lang = (i.slots.get("language") or "").strip()
+        if lang in ("english", "auto", ""):
             self.say("I'm speaking English.")
             return
-        if cv is None:
-            name = LANG_NAMES.get(code, lang.capitalize())
-            self.say(f"To speak {name}, I need Connected mode, which uses Sarvam A I. "
-                     "Say: turn on connected mode.")
-            return
-        cv.output_language = code
-        self.s.store.set_pref("output_language", code)
-        name = "the language you speak to me in" if code == "auto" else LANG_NAMES[code]
-        self.say(f"Okay, I'll speak {name} from now on.")
+        self.say(f"I can only speak English on this computer for now, so I can't switch to "
+                 f"{lang.capitalize()}. Everything I do stays offline on this laptop.")
 
     def k_wake_word(self, i):
         on = bool(i.slots.get("on"))
@@ -264,9 +244,6 @@ class Skills:
         key = spoken_combo(self.s.talk_key)
         self.say("Wake word on. Say Relay, then your command." if on else
                  f"Wake word off. I'll only listen when you press {key}.")
-
-    def k_connected(self, i):
-        self.s.set_connected(bool(i.slots.get("on")))
 
     def k_quit(self, i):
         self.say("Closing Relay. Goodbye.", _CONF)
@@ -689,12 +666,8 @@ class Skills:
     def k_read_all(self, i):
         lang = i.slots.get("language", "")
         if lang and lang != "english":
-            from relay.connected import LANGS
-            if self.s.connected is None:
-                self.say(f"Reading in {lang.capitalize()} needs Connected mode. Say turn on "
-                         "connected mode. For now, I'll read it in English.")
-            else:
-                self.s.connected.output_language = LANGS.get(lang, "auto")
+            self.say(f"I can only read in English on this computer, so here it is in "
+                     f"English rather than {lang.capitalize()}.")
         self.say("Getting the text.", pol.Priority.FOCUS)
         title, body = self._document()
         if not body:

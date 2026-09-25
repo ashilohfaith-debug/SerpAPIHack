@@ -22,6 +22,6 @@ frontend/dist/
 # unrelated audit-receipt dirs written into cwd by other tooling (not RELAY)
 receipts/
 review-receipts/
-# API keys must never be committed (Connected mode reads them from %LOCALAPPDATA%\RELAY)
-sarvam_key.txt
+# never commit key material of any kind
 *.key
+*.pfx

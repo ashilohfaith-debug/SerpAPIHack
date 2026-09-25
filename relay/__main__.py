@@ -120,11 +120,27 @@ def _observe() -> int:
     return 0
 
 
+def _starting_cue() -> None:
+    """Loading the voice and speech models takes 5-10 s on a basic laptop. A blind user
+    who just pressed Ctrl+Alt+R must not sit in silence wondering if anything happened:
+    say so at once with Windows' built-in voice (asynchronous, returns immediately)."""
+    try:
+        import pythoncom
+        import win32com.client
+        pythoncom.CoInitialize()
+        voice = win32com.client.Dispatch("SAPI.SpVoice")
+        voice.Speak("Starting Relay. One moment.", 1)       # 1 = SVSFlagsAsync
+        _starting_cue.voice = voice                            # keep it alive while speaking
+    except Exception:
+        pass
+
+
 def _start(panel: bool = False) -> int:
     """Run the app. Launched from the Ctrl+Alt+R shortcut there is no console, so a
     start-up failure must be SPOKEN, or a blind user just hears silence."""
     from relay.diagnostics import get_logger, setup_logging
     setup_logging("INFO")
+    _starting_cue()
     try:
         from relay.app import RelayApp
         return RelayApp(panel=panel).run()
@@ -182,9 +198,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--uninstall", action="store_true", help="remove Relay's shortcuts")
     p.add_argument("--autostart", choices=["on", "off"],
                    help="start Relay automatically when you sign in to Windows")
-    p.add_argument("--sarvam-selftest", action="store_true",
-                   help="check Connected mode (Sarvam STT/translate/TTS/chat) with your key")
     p.add_argument("--say", metavar="TEXT", help="speak TEXT with Relay's voice and exit")
+    p.add_argument("--check", action="store_true",
+                   help="check everything works on this computer (spoken result)")
+    p.add_argument("--quiet", action="store_true", help="with --check: don't speak the result")
     p.add_argument("--demo-daily", action="store_true",
                    help="safe offline demo of everyday skills (time, battery, maths, notes...)")
     args = p.parse_args(argv)
@@ -256,13 +273,15 @@ def main(argv: list[str] | None = None) -> int:
         print(("Relay will start when you sign in: " if args.autostart == "on"
                else "Relay will no longer start automatically: ") + str(pth))
         return 0
-    if args.sarvam_selftest:
-        from relay.demo import sarvam_selftest
-        return sarvam_selftest()
     if args.say:
         from relay.app import speak_once
         speak_once(args.say)
         return 0
+    if args.check:
+        from relay.diagnostics import setup_logging
+        from relay.health import main as check_main
+        setup_logging("WARNING")
+        return check_main(speak=not args.quiet)
     if args.demo_daily:
         from relay.demo import daily_demo
         return daily_demo()

@@ -7,10 +7,10 @@ changed. It is a **transparent operator, not an autonomous agent**: it acts only
 you ask, announces every action before doing it, and never claims success it didn't
 observe.
 
-Essential mode is **fully offline** (English). Optional **Connected mode** adds Indian
-languages — Hindi, Telugu, Tamil, Kannada, Malayalam, Marathi, Gujarati, Bengali,
-Punjabi, Odia — through [Sarvam AI](https://www.sarvam.ai), only after a spoken
-consent phrase.
+**No keys, no accounts, no cloud.** Everything — speech recognition, the voice, screen
+reading — runs on the laptop, offline, and is built for basic hardware: ~35 MB idle,
+~400 MB peak, and about 2.5 s from the end of a spoken command to the first word of the
+answer on an emulated budget dual-core laptop (measured; see `docs/PERFORMANCE.md`).
 
 ## What a user can do (examples)
 | Need | Say |
@@ -24,15 +24,14 @@ consent phrase.
 | Everyday | "what is 15 percent of 2 lakh" · "take a note buy milk" · "read my notes" · "remind me in 10 minutes to call mom" |
 | Control | "volume up" · "set volume to 40 percent" · "pause music" · "next track" · "speak slower" |
 | Safety | "stop" · "cancel" · "emergency stop" · risky actions need a spoken phrase ("confirm send", "confirm delete") |
-| Languages | "turn on connected mode" · "speak in Hindi" · "read this page in Telugu" |
 
-Full list: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**.
+Full list: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**. English only for now.
 
 ## Talking to RELAY
+- **Ctrl+Alt+R** — start RELAY (after `RELAY.cmd --install`). It says "Starting Relay" at once.
 - **Ctrl+Alt+Space** — talk key, from any app (chirp, then speak). Also interrupts RELAY.
-- Or say **"Relay"** first (hands-free wake word; can be turned off).
+- Or say **"Relay"** first (hands-free wake word; "turn off the wake word" for talk-key only).
 - **Ctrl+Alt+Period** — stop talking / pause reading. **Ctrl+Alt+Backspace** — emergency stop.
-- **Ctrl+Alt+R** — start RELAY (after `RELAY.cmd --install`).
 
 RELAY never hears itself: the microphone is ignored while it speaks.
 
@@ -42,25 +41,28 @@ uv venv --python 3.12 .venv
 uv pip install -e ".[dev,voice,percept,daily]"
 uv run python -m relay --setup-models
 RELAY.cmd --install
+RELAY.cmd --check
 ```
+`--setup-models` downloads the voice and speech model once (~140 MB); after that RELAY
+never needs the internet. `--check` tests every part on this computer and says the result.
 Then press **Ctrl+Alt+R** from anywhere. `RELAY.cmd --autostart on` starts it at sign-in.
-Connected mode: put a Sarvam API key in `%LOCALAPPDATA%\RELAY\sarvam_key.txt` (or the
-`SARVAM_API_KEY` environment variable), then say "turn on connected mode".
+A packaged build (no Python needed) is described in `docs/PACKAGING.md`.
 
 ## Checks you can run
 ```bash
-uv run pytest -m "not integration"          # 196 unit/behaviour tests
+uv run python -m relay --check               # this computer: models, voice, mic, keys, screen, offline
+uv run pytest -m "not integration"          # unit/behaviour tests
 uv run python scripts/e2e_voice.py           # speech in -> action -> speech out, no mic
+uv run python scripts/bench_basic_laptop.py  # emulated low-end laptops (CPU + 1 GB caps)
 uv run python scripts/acceptance.py          # offline acceptance suite
 uv run python -m relay --demo-daily          # everyday skills, nothing on screen changes
-uv run python -m relay --sarvam-selftest     # Connected mode, needs your key
 ```
 
 ## Design
-PERCEIVE (UIA, OCR fallback) → UNDERSTAND (offline grammar; Sarvam chat only as a
-validated fallback) → PLAN → ACT (single permission gate) → VERIFY (re-observe) →
-NARRATE (announce before, changes after) → RECOVER. Details: `docs/SECURITY.md`,
-`docs/ACCEPTANCE.md`, `docs/PERFORMANCE.md`, `docs/PACKAGING.md`.
+PERCEIVE (UIA, OCR fallback) → UNDERSTAND (offline grammar) → PLAN → ACT (single
+permission gate) → VERIFY (re-observe) → NARRATE (announce before, changes after) →
+RECOVER. Details: `docs/SECURITY.md`, `docs/ACCEPTANCE.md`, `docs/PERFORMANCE.md`,
+`docs/PACKAGING.md`.
 
 ## Reused code (attribution)
 See `NOTICE`. Small components adapted from MIT-licensed screen-use and clacky.

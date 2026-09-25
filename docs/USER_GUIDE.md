@@ -103,28 +103,23 @@ Sums: "what is 25 times 4" · "what's 15 percent of 2 lakh" · "1200 divided by 
 "speak faster" · "speak slower" · "normal speed" (remembered) ·
 "quiet mode" / "quick mode" / "detailed mode" / "guided mode" (how much RELAY says).
 
-## 13. Indian languages (Connected mode)
-Connected mode uses Sarvam AI's servers in India so you can speak and listen in Hindi,
-Telugu, Tamil, Kannada, Malayalam, Marathi, Gujarati, Bengali, Punjabi or Odia.
-- A helper saves the Sarvam API key once in `%LOCALAPPDATA%\RELAY\sarvam_key.txt`.
-- Say "turn on connected mode". RELAY explains what is sent, then waits for
-  **"confirm connect"**.
-- Speak in your language — RELAY answers in the language you speak, or choose: "speak in
-  Hindi", "speak in English", "reply in the language I speak".
-- "read this page in Telugu" reads an English page aloud in Telugu.
-- In dictation, your words are typed in your own script.
-- Requests RELAY's offline commands don't cover are understood with Sarvam's model;
-  RELAY says "I understood that as: …" before doing anything, and safety rules still apply.
-- Passwords and anything that looks like a code are never sent. If the internet drops,
-  RELAY says so and continues in offline English.
-- "turn off connected mode" keeps everything on the computer again.
+## 13. Privacy and working offline
+Everything RELAY does happens on this computer: no account, no API key, no cloud
+service. Speech recognition and the voice run locally, nothing you say is recorded or
+sent anywhere, and passwords or codes are never read aloud, stored or written to the log.
+RELAY only uses the internet when *you* ask for something on the web — and then it is
+your own browser that goes online. It speaks English for now; if you ask it to speak
+another language it tells you so plainly.
 
 ## 14. Getting help
 "help" · "help with reading" · "help with the web" · "help with typing" · "help with
-apps" · "help with files" · "help with system" · "help with notes" · "help with
-languages" · "what apps do you support".
+apps" · "help with files" · "help with system" · "help with notes" · "what apps do
+you support".
 
 ## 15. If something goes wrong (for a helper)
+- **First, run `RELAY.cmd --check`.** It tests the models, voice, speech recognition,
+  microphone, speakers, the three global keys, screen reading, the app list, volume and
+  the database, confirms nothing used the network, and says the result aloud.
 - **Silence at start:** RELAY speaks start-up problems (for example, no microphone, or
   another program using Control Alt Space). The log is `%LOCALAPPDATA%\RELAY\relay.log`.
 - **Talk key taken:** change `push_to_talk_hotkey` in `%LOCALAPPDATA%\RELAY\config.toml`.

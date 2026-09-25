@@ -130,3 +130,12 @@ def test_on_utterance_transcribes_and_dispatches_when_prompted():
     loop = _loop(s, False, stt=FixedSTT())
     loop.on_utterance(b"\x00\x01" * 100, prompted=True)
     assert s.handled == ["open notepad"]
+
+
+def test_near_miss_wake_word_only_with_a_real_command():
+    s = _FakeSession()
+    loop = VoiceLoop(s.handle, stt=object(), wake_required=True, say=s.say, threaded=False)
+    loop.on_transcript("Really? How much battery do I have?")
+    assert s.handled == ["How much battery do I have?"]
+    loop.on_transcript("Really, that's great, thanks for telling me")
+    assert s.handled == ["How much battery do I have?"]     # conversation: ignored

@@ -73,7 +73,7 @@ class SpeechQueue:
         return self._tts
 
     def set_tts(self, tts) -> None:
-        """Swap the voice (e.g. offline Piper <-> connected Indian-language voice)."""
+        """Swap the voice engine (e.g. Piper <-> the Windows SAPI fallback)."""
         self._tts = tts
 
     @property

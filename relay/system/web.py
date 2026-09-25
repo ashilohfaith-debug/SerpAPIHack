@@ -23,7 +23,7 @@ SITES = {
     "news": "https://news.google.com", "irctc": "https://www.irctc.co.in",
     "swiggy": "https://www.swiggy.com", "zomato": "https://www.zomato.com",
     "spotify web": "https://open.spotify.com", "github": "https://github.com",
-    "sarvam": "https://www.sarvam.ai", "outlook web": "https://outlook.live.com",
+    "outlook web": "https://outlook.live.com",
     "google drive": "https://drive.google.com", "drive": "https://drive.google.com",
     "google docs": "https://docs.google.com", "hotstar": "https://www.hotstar.com",
     "jiohotstar": "https://www.hotstar.com", "paytm": "https://paytm.com",

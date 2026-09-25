@@ -33,6 +33,25 @@ def screen_reader_running() -> tuple[bool, str]:
     return False, ""
 
 
+class ScreenReaderWatch:
+    """Cheap, cached answer to "is a screen reader running?" (the user may start or
+    quit NVDA while RELAY runs; checking every command would scan all processes)."""
+
+    def __init__(self, ttl: float = 10.0, probe=screen_reader_running) -> None:
+        self.ttl = ttl
+        self._probe = probe
+        self._at = -1e9
+        self._value = (False, "")
+
+    def current(self) -> tuple[bool, str]:
+        import time
+        now = time.monotonic()
+        if now - self._at > self.ttl:
+            self._value = self._probe()
+            self._at = now
+        return self._value
+
+
 def coexistence_advice(reader_name: str) -> str:
     if not reader_name:
         return ""

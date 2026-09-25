@@ -13,7 +13,12 @@ Safety and reliability rules built in here:
     syllable (often the wake word itself) isn't clipped;
   * utterances are capped (15 s) so noise can't grow the buffer forever;
   * in open-mic dictation, common recogniser "hallucinations" on noise ("Thank you.")
-    are dropped rather than typed into the user's document.
+    are dropped rather than typed into the user's document;
+  * low-power listening: the speech model costs the same ~0.4 s of CPU for any clip
+    (it pads to a fixed window), so waiting for the wake word must not run it on every
+    noise blip. Unprompted sounds are screened first — aggressive VAD, at least 0.45 s
+    of actual voice, and louder than the room's measured noise floor. Measured in a
+    normal room: this is the difference between ~47% and a few percent of a core.
 
 Commands go through the Dispatcher: one worker runs them in order, but stop / cancel
 / pause / emergency stop are handled immediately — they never wait behind a running
@@ -30,7 +35,7 @@ import time
 from typing import Callable
 
 from relay.audio.vad import FRAME_BYTES, SpeechSegmenter
-from relay.audio.wake import Command, detect_wake, match_command
+from relay.audio.wake import Command, detect_wake, detect_wake_near_miss, match_command
 from relay.diagnostics import get_logger
 from relay.intent.normalize import normalize
 
@@ -41,6 +46,9 @@ PREROLL_FRAMES = 10            # 300 ms kept before speech onset
 MAX_UTTERANCE_S = 15.0
 PTT_WAIT_S = 6.0               # after the chirp, how long to wait for speech to start
 SPEAKING_TAIL_S = 0.35         # ignore the mic this long after RELAY stops talking
+MIN_VOICED_S = 0.45            # "Relay, …" has at least this much actual voice
+MIN_RMS = 0.004                # absolute floor (~ -48 dBFS)
+NOISE_MARGIN = 2.5             # speech must be this much louder than the room noise
 
 _HALLUCINATIONS = {
     "", "you", "thank you", "thanks", "thank you very much", "thanks for watching",
@@ -136,9 +144,6 @@ class VoiceLoop:
             stt = WhisperSTT()
         self.dispatch = dispatch
         self.stt = stt
-        # Local recogniser used to check the wake word BEFORE any cloud recogniser is
-        # used, so ambient conversation never leaves the device in Connected mode.
-        self.wake_stt = None
         self.speech = speech
         self.wake_enabled = wake_required
         self.bus = bus
@@ -149,18 +154,37 @@ class VoiceLoop:
         self._clock = clock
         self._threaded = threaded
         self._lock = threading.Lock()
+        self._custom_seg = segmenter_factory is not None
         self._mic = None
         self._armed = False           # listening for a command without a wake word
         self._armed_until = 0.0
         self._silent_tries = 0        # talk key pressed but nothing heard, in a row
+        self._noise_rms = 0.0         # running estimate of the room's background level
+        self.screened_out = 0         # unprompted sounds dropped before the speech model
         self._reset()
 
     # ---- state ----
     def _reset(self) -> None:
-        self.seg = self._seg_factory()
+        if self._custom_seg:
+            self.seg = self._seg_factory()
+        else:   # prompted: sensitive; waiting for the wake word: aggressive (noise-proof)
+            self.seg = SpeechSegmenter(aggressiveness=2 if self._armed else 3)
         self._preroll: collections.deque[bytes] = collections.deque(maxlen=PREROLL_FRAMES)
         self._buf = bytearray()
         self._in_utt = False
+        self._voiced = 0
+
+    @staticmethod
+    def _rms(frame: bytes) -> float:
+        import numpy as np
+        x = np.frombuffer(frame, dtype=np.int16).astype(np.float32)
+        return float(np.sqrt(np.mean(x * x))) / 32768.0 if len(x) else 0.0
+
+    def _worth_transcribing(self, pcm: bytes) -> bool:
+        """Screen an UNPROMPTED sound before paying for the speech model."""
+        if self._voiced * FRAME_S < MIN_VOICED_S:
+            return False
+        return self._rms(pcm) >= max(MIN_RMS, NOISE_MARGIN * self._noise_rms)
 
     def _state(self, state: str) -> None:
         if self.bus is not None:
@@ -179,8 +203,8 @@ class VoiceLoop:
         if self.speech is not None:
             self.speech.interrupt()
         with self._lock:
-            self._reset()
             self._armed = True
+            self._reset()
             self._armed_until = self._clock() + PTT_WAIT_S + 0.4
         self._earcon("listen")
         self._state("listening")
@@ -207,18 +231,28 @@ class VoiceLoop:
             else:
                 timed_out = False
                 ev = self.seg.push(frame)
+                voiced = getattr(self.seg, "last_speech", True)
                 pcm = None
                 if not self._in_utt:
                     self._preroll.append(frame)
+                    if not voiced and not self._custom_seg:   # learn the room's noise
+                        self._noise_rms = 0.95 * self._noise_rms + 0.05 * self._rms(frame)
                     if ev == "start":
                         self._in_utt = True
+                        # the consecutive voiced frames that triggered the start
+                        self._voiced = getattr(self.seg, "start_frames", 1)
                         self._buf = bytearray(b"".join(self._preroll))
                         self._preroll.clear()
                 else:
                     self._buf.extend(frame)
+                    self._voiced += 1 if voiced else 0
                     if ev == "end" or len(self._buf) >= MAX_UTTERANCE_S / FRAME_S * FRAME_BYTES:
                         pcm = bytes(self._buf)
                         was_armed = self._armed
+                        if not was_armed and not self._open_mic() \
+                                and not self._worth_transcribing(pcm):
+                            self.screened_out += 1
+                            pcm = None        # a noise blip: never reaches the model
                         self._armed = False
                         self._reset()
         if timed_out:
@@ -248,19 +282,6 @@ class VoiceLoop:
             return
         audio = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         try:
-            local = self.wake_stt
-            if (not prompted and local is not None and local is not self.stt
-                    and not self._open_mic()):
-                # Connected mode, unprompted: gate on the wake word locally first
-                woke, rest = detect_wake(local.transcribe(audio))
-                if not woke or not self.wake_enabled:
-                    self._state("idle")
-                    return                       # not for RELAY: nothing is sent anywhere
-                if not rest:
-                    self._state("idle")
-                    self._rearm()
-                    return
-                prompted = True                  # addressed to RELAY: now use the cloud
             text = self.stt.transcribe(audio)
         except Exception as e:  # a bad decode must not kill the loop
             log.warning("STT failed: %s", e)
@@ -291,8 +312,14 @@ class VoiceLoop:
         if self._open_mic():
             self.dispatch(rest if woke and rest else text)
             return
+        if not woke and self.wake_enabled:
+            near, near_rest = detect_wake_near_miss(text)     # "Really, what time is it?"
+            if near and near_rest:
+                from relay.intent import Kind, parse
+                if parse(near_rest).kind != Kind.UNKNOWN:
+                    woke, rest = True, near_rest
         if not self.wake_enabled or not woke:
-            log.debug("ignored (not addressed to RELAY): %r", text)
+            log.debug("ignored (not addressed to RELAY)")
             return
         if rest:
             self.dispatch(rest)
@@ -301,8 +328,8 @@ class VoiceLoop:
 
     def _rearm(self) -> None:
         with self._lock:
-            self._reset()
             self._armed = True
+            self._reset()
             self._armed_until = self._clock() + PTT_WAIT_S + 1.5
         self._earcon("listen")
         self._state("listening")

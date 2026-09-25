@@ -100,7 +100,6 @@ class Kind:
     SPEECH_RATE = "speech_rate"
     DICTATION = "dictation"
     LANGUAGE = "language"
-    CONNECTED = "connected"
     WAKE_WORD = "wake_word"
     QUIT = "quit"
     PICK = "pick"           # "open the second one" — from the last list RELAY read out
@@ -276,14 +275,6 @@ def parse(utterance: str) -> Intent:
     if re.search(r"\b(?:stop|end|finish|exit|turn off|disable|cancel)\s+(?:the\s+)?"
                  r"(?:dictation|dictating|typing mode)\b", low):
         return I(Kind.DICTATION, on=False)
-    if re.search(r"\b(?:turn off|disable|stop|exit|leave|switch off)\s+(?:the\s+)?"
-                 r"(?:connected|online|sarvam|cloud|indian language)\s*mode\b|"
-                 r"\bgo offline\b|\b(?:disconnect|disable|turn off)\s+sarvam\b", low):
-        return I(Kind.CONNECTED, on=False)
-    if re.search(r"\b(?:turn on|enable|start|switch to|use|switch on)\s+(?:the\s+)?"
-                 r"(?:connected|online|sarvam|cloud|indian language)\s*mode\b|"
-                 r"\bgo online\b|\b(?:enable|turn on|connect(?: to)?|use)\s+sarvam\b", low):
-        return I(Kind.CONNECTED, on=True)
     m = re.search(r"\b(?:turn|switch)\s+(on|off)\s+(?:the\s+)?wake\s*word\b|"
                   r"\b(enable|disable)\s+(?:the\s+)?wake\s*word\b|"
                   r"\bwake\s*word\s+(on|off)\b", low)
@@ -314,8 +305,10 @@ def parse(utterance: str) -> Intent:
     if re.search(r"\bwhat(?:'s| is)?\s+the\s+time\b|\bwhat time is it\b|^time$|"
                  r"\btell me the time\b|\bcurrent time\b|^what time$|^time now$", low):
         return I(Kind.TIME)
-    if re.search(r"\bwhat(?:'s| is)\s+(?:the\s+|today's\s+)?date\b|\bwhat day is (?:it|today)\b|"
-                 r"\btoday's date\b|^date$|\bwhich day is (?:it|today)\b|^what is today$", low):
+    if re.search(r"\bwhat(?:'s| is)\s+(?:the\s+|today's\s+)?(?:date|day)(?: today)?$|"
+                 r"\bwhat day is (?:it|today)\b|\btoday's (?:date|day)\b|^(?:date|day)$|"
+                 r"\bwhich day is (?:it|today)\b|^what is today$|\bwhat(?:'s| is) today\b|"
+                 r"\bwhat(?:'s| is) the date\b", low):
         return I(Kind.DATE)
     if re.search(r"\bbattery\b|\bam i (?:plugged in|charging)\b|\bis (?:it|the laptop) charging\b"
                  r"|\bcharging status\b|\bhow much charge\b", low):

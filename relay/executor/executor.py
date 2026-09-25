@@ -7,8 +7,8 @@ immediately before acting (revalidation), so a stale element or a focus change f
 cleanly instead of clicking the wrong place. Nothing here reports success — it only
 reports that an action was executed; the Verifier decides whether it worked.
 
-Input injection (typing, keys, clicks) uses pyautogui; arbitrary text goes through
-the clipboard (backup/restore) which is more reliable than per-key typing.
+Input injection (typing, keys, clicks) uses Win32 SendInput; arbitrary text goes
+through the clipboard (backup/restore), which is more reliable than per-key typing.
 """
 
 from __future__ import annotations
@@ -19,12 +19,15 @@ from dataclasses import dataclass
 
 from relay.diagnostics import get_logger
 from relay.executor import uia_actions
-from relay.executor.input_backend import InputBackend, PyAutoGuiBackend
+from relay.executor.input_backend import InputBackend, WindowsInputBackend
 from relay.memory.journal import ActionJournal, ActionRecord, ExecState
 from relay.perception.semantic import UIElement
 from relay.safety import Action, PermissionEngine
 
 log = get_logger("executor")
+INPUT_BLOCKED = ("the window in front belongs to Windows itself or runs as administrator, "
+                 "and Windows doesn't let me type or click in it. Press Alt+Tab to get "
+                 "back to your own window, then ask me again")
 
 
 @dataclass
@@ -49,7 +52,7 @@ class Executor:
         self.emergency = emergency
         self._confirm = confirm  # callable(Decision) -> bool
         self._granted = False    # one-shot confirmation grant (see grant_next_confirmation)
-        self.input: InputBackend = input_backend or PyAutoGuiBackend()
+        self.input: InputBackend = input_backend or WindowsInputBackend()
         self._n = 0
 
     # --- gate + journal -----------------------------------------------------
@@ -142,10 +145,21 @@ class Executor:
             return True, "set via keyboard fallback"
         return self._run(action, f"set_value {el.name!r}", do)
 
+    def _input_blocked(self) -> bool:
+        """Windows silently drops injected input to an elevated window (UIPI) and
+        SendInput doesn't report it, so check first rather than claim a key was pressed."""
+        from relay.executor.input_backend import WindowsInputBackend
+        if not isinstance(self.input, WindowsInputBackend):
+            return False                     # test / recording backends
+        from relay.system.windows import foreground_blocks_input
+        return foreground_blocks_input()
+
     def type_text(self, text: str) -> ActionOutcome:
         action = Action(kind="type", text=text)
 
         def do():
+            if self._input_blocked():
+                return False, INPUT_BLOCKED
             self.input.type_text(text)
             return True, f"typed {len(text)} chars"
         return self._run(action, "type", do)
@@ -154,6 +168,8 @@ class Executor:
         action = Action(kind="key", text=key)
 
         def do():
+            if self._input_blocked():
+                return False, INPUT_BLOCKED
             for _ in range(max(1, count)):
                 self.input.press(key)
             return True, f"pressed {key}" + (f" x{count}" if count > 1 else "")
@@ -164,6 +180,8 @@ class Executor:
         action = Action(kind="key", text=combo)
 
         def do():
+            if self._input_blocked():
+                return False, INPUT_BLOCKED
             for _ in range(max(1, count)):
                 self.input.hotkey(*keys)
             return True, f"hotkey {combo}"
@@ -174,6 +192,8 @@ class Executor:
         action = Action(kind="click", target_label=label)
 
         def do():
+            if self._input_blocked():
+                return False, INPUT_BLOCKED
             self.input.click(x, y)
             return True, f"clicked ({x},{y})"
         return self._run(action, f"click ({x},{y})", do)

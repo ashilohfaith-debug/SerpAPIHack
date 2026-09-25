@@ -41,6 +41,22 @@ def process_tree_rss_mb() -> float:
     return total / _MB
 
 
+def _kernel32():
+    """kernel32 with explicit handle types. Without them ctypes passes the process
+    pseudo-handle (-1) as a 32-bit int that isn't sign-extended on 64-bit Windows, and
+    AssignProcessToJobObject fails with ERROR_INVALID_HANDLE."""
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.GetCurrentProcess.restype = wintypes.HANDLE
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+    k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
+                                            wintypes.DWORD]
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    return k32
+
+
 class Measure:
     """Context manager timing a block and recording its RSS delta."""
 
@@ -101,7 +117,7 @@ def set_process_memory_limit_mb(limit_mb: int) -> bool:
                     ("PeakProcessMemoryUsed", ctypes.c_size_t),
                     ("PeakJobMemoryUsed", ctypes.c_size_t)]
 
-    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32 = _kernel32()
     job = k32.CreateJobObjectW(None, None)
     if not job:
         return False
@@ -111,5 +127,43 @@ def set_process_memory_limit_mb(limit_mb: int) -> bool:
     ok = k32.SetInformationJobObject(job, JobObjectExtendedLimitInformation,
                                      ctypes.byref(info), ctypes.sizeof(info))
     if not ok:
+        return False
+    return bool(k32.AssignProcessToJobObject(job, k32.GetCurrentProcess()))
+
+
+def emulate_slow_cpu(cores: int, speed: float) -> bool:
+    """Make THIS process behave like a low-end laptop CPU: pin it to ``cores``
+    distinct physical cores (no SMT siblings) and hard-cap its CPU use to ``speed``
+    (0..1) of those cores via a Job Object CPU-rate limit. E.g. (2, 0.4) ~ a budget
+    dual-core; (2, 0.25) ~ a Celeron-class chip. Irreversible for the process — run it
+    in a child process. Returns True if both limits applied."""
+    if os.name != "nt":
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    import psutil
+    logical = psutil.cpu_count(logical=True) or 1
+    physical = psutil.cpu_count(logical=False) or logical
+    step = max(1, logical // physical)                 # skip SMT siblings
+    cpus = [i * step for i in range(min(cores, physical))]
+    try:
+        psutil.Process().cpu_affinity(cpus)
+    except Exception:
+        return False
+
+    class CPU_RATE(ctypes.Structure):
+        _fields_ = [("ControlFlags", wintypes.DWORD), ("CpuRate", wintypes.DWORD)]
+
+    JobObjectCpuRateControlInformation = 15
+    ENABLE, HARD_CAP = 0x1, 0x4
+    k32 = _kernel32()
+    job = k32.CreateJobObjectW(None, None)
+    if not job:
+        return False
+    rate = CPU_RATE(ENABLE | HARD_CAP,
+                    max(1, int(10000 * speed * len(cpus) / logical)))  # cycles per 10,000
+    if not k32.SetInformationJobObject(job, JobObjectCpuRateControlInformation,
+                                       ctypes.byref(rate), ctypes.sizeof(rate)):
         return False
     return bool(k32.AssignProcessToJobObject(job, k32.GetCurrentProcess()))
