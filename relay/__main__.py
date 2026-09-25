@@ -148,6 +148,15 @@ def main(argv: list[str] | None = None) -> int:
                    help="read-only: open File Explorer and describe it (nothing changed)")
     p.add_argument("--panel", action="store_true",
                    help="start the optional accessible web panel (authenticated, loopback)")
+    p.add_argument("--start", action="store_true",
+                   help="run RELAY: spoken onboarding + live voice loop (say 'Relay' + a command)")
+    p.add_argument("--with-panel", action="store_true",
+                   help="with --start, also serve the accessible panel")
+    p.add_argument("--models-status", action="store_true", help="report managed model files")
+    p.add_argument("--setup-models", action="store_true",
+                   help="download/verify Essential models for offline use")
+    p.add_argument("--acceptance", action="store_true",
+                   help="run the offline acceptance suite (safe, no desktop changes)")
     args = p.parse_args(argv)
     if args.selftest:
         return _selftest()
@@ -185,6 +194,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.panel:
         from relay.demo import panel_run
         return panel_run()
+    if args.models_status:
+        from relay.models_manager import status_text
+        print(status_text())
+        return 0
+    if args.setup_models:
+        from relay.models_manager import ensure
+        ok = ensure(download=True)
+        print("Essential models are ready." if ok else "Some models are still missing.")
+        return 0 if ok else 1
+    if args.acceptance:
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        import acceptance
+        return acceptance.main()
+    if args.start:
+        from relay.app import RelayApp
+        return RelayApp(panel=args.with_panel).run()
     p.print_help()
     return 0
 
