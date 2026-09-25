@@ -152,6 +152,7 @@ class VoiceLoop:
         self._mic = None
         self._armed = False           # listening for a command without a wake word
         self._armed_until = 0.0
+        self._silent_tries = 0        # talk key pressed but nothing heard, in a row
         self._reset()
 
     # ---- state ----
@@ -223,8 +224,15 @@ class VoiceLoop:
         if timed_out:
             self._earcon("nothing")
             self._state("idle")
+            self._silent_tries += 1
+            if self._silent_tries >= 2:          # likely a muted / blocked microphone
+                self._silent_tries = 0
+                self._say("I'm not hearing anything from the microphone. Check that it "
+                          "isn't muted or turned off in Windows privacy settings, then "
+                          "speak right after the chirp.")
             return
         if pcm is not None:
+            self._silent_tries = 0
             if was_armed:
                 self._earcon("heard")
             self._state("transcribing")

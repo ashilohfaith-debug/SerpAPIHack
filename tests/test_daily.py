@@ -672,3 +672,28 @@ def test_connected_wake_gate_keeps_ambient_speech_on_device():
     loop.wake_stt = Local("Relay, abhi kitne baje hain")
     loop.on_utterance(b"\x01\x00" * 800)
     assert cloud.calls == 1 and dispatched == ["what time is it?"]
+
+
+def test_repeated_silent_talk_key_explains_microphone():
+    from relay.loop import VoiceLoop
+    clock = {"t": 0.0}
+    said = []
+    loop = VoiceLoop(lambda t: None, stt=object(), speech=FakeSpeechQ(), wake_required=False,
+                     segmenter_factory=lambda: ScriptSeg([False] * 50),
+                     say=said.append, clock=lambda: clock["t"], threaded=False)
+    for _ in range(2):
+        loop.push_to_talk()
+        clock["t"] += 60.0
+        loop.on_frame(_frame())
+    assert any("microphone" in s for s in said)
+
+
+def test_confirmation_phrase_accepts_translated_word_forms_only():
+    from relay.session import Session
+    ok = Session._says_phrase
+    assert ok("I confirm sending it", "confirm send")
+    assert ok("Confirm send.", "confirm send")
+    assert not ok("yeah send it", "confirm send")
+    assert not ok("send", "confirm send")
+    assert not ok("confirm", "confirm send")
+    assert not ok("yes please", "confirm delete")

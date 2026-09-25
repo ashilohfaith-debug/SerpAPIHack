@@ -269,11 +269,19 @@ class Session:
                                             retry=retry)
         self.say(f"To confirm, say: {phrase}. Or say cancel.", _CONF)
 
+    @staticmethod
+    def _says_phrase(utterance: str, phrase: str) -> bool:
+        """Every word of the phrase must be spoken (word stems allowed, so 'I confirm
+        sending' matches 'confirm send' — needed when the phrase was translated for a
+        Hindi/Telugu speaker). A casual 'yeah', or 'send' alone, never matches."""
+        tokens = re.findall(r"[a-z]+", normalize(utterance))
+        return all(any(t.startswith(w) for t in tokens) for w in phrase.split())
+
     def _resolve_pending(self, utterance: str):
         p = self._pending
         low = utterance.lower().strip()
         norm = normalize(utterance)
-        if p.phrase in low or low == p.phrase or norm == p.phrase:
+        if p.phrase in low or norm == p.phrase or self._says_phrase(utterance, p.phrase):
             self._pending = None
             self.say("Confirmed.", _CONF)
             return [p.retry()]

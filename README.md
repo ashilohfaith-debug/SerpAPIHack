@@ -49,7 +49,7 @@ Connected mode: put a Sarvam API key in `%LOCALAPPDATA%\RELAY\sarvam_key.txt` (o
 
 ## Checks you can run
 ```bash
-uv run pytest -m "not integration"          # 193 unit/behaviour tests
+uv run pytest -m "not integration"          # 196 unit/behaviour tests
 uv run python scripts/e2e_voice.py           # speech in -> action -> speech out, no mic
 uv run python scripts/acceptance.py          # offline acceptance suite
 uv run python -m relay --demo-daily          # everyday skills, nothing on screen changes

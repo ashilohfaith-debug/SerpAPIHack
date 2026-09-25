@@ -10,12 +10,18 @@
 # Models are NOT bundled by this spec; build.ps1 copies models/ beside the exe (where
 # relay.config.models_dir() looks in a frozen build), or run `relay-cli --setup-models`.
 
+import os
+
 from PyInstaller.utils.hooks import collect_all
+
+# PyInstaller resolves relative spec paths against the spec's own folder
+SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))  # noqa: F821 (SPEC injected)
+os.chdir(SPEC_DIR)
 
 datas, binaries, hiddenimports = [], [], []
 for pkg in ("ctranslate2", "onnxruntime", "piper", "piper_phonemize",
             "faster_whisper", "rapidocr_onnxruntime", "sounddevice", "soundfile",
-            "webrtcvad", "pycaw", "pypdf"):
+            "pycaw", "pypdf"):
     try:
         d, b, h = collect_all(pkg)
         datas += d; binaries += b; hiddenimports += h
@@ -35,6 +41,7 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
+    hookspath=["hooks"],          # local overrides (webrtcvad-wheels metadata)
     excludes=["tkinter", "matplotlib", "pytest"],
     noarchive=False,
 )

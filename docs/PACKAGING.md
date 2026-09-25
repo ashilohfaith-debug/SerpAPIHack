@@ -30,9 +30,16 @@ In a frozen build `relay.config.models_dir()` resolves to `models/` **beside the
 points the shortcut at the windowless `relay.exe`.
 
 `packaging/relay.spec` uses `collect_all` for the native packages (ctranslate2,
-onnxruntime, piper, faster-whisper, rapidocr, sounddevice, soundfile, webrtcvad, pycaw,
-pypdf) and declares the Win32/UIA hidden imports. It is a **starting configuration** —
-the first real build on a clean machine may surface a hidden import to add.
+onnxruntime, piper, faster-whisper, rapidocr, sounddevice, soundfile, pycaw, pypdf),
+declares the Win32/UIA hidden imports, and overrides the contributed webrtcvad hook
+(`packaging/hooks/`) because RELAY uses the `webrtcvad-wheels` fork.
+
+**Built and run on the development laptop (0.2.0):** PyInstaller 6 produced
+`dist/relay/` (463 MB, 598 MB with models). The frozen `relay-cli.exe` passed
+`--version`, `--models-status`, `--selftest`, `--voice-selftest` (Piper → faster-whisper
+inside the bundle), `--demo-daily` (status, maths, notes, reminders), a live volume read
+and a UI Automation screen description. Not yet run from the bundle: the windowless
+`relay.exe --start` with speech (it speaks aloud) and anything on a clean machine.
 
 ## Runtime layout (per user, no admin)
 - App: this folder, or `dist/relay/`.

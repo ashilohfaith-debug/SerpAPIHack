@@ -7,7 +7,7 @@ exists or is specified but needs something this machine/session doesn't have.
 
 ## Run the checks
 ```
-uv run pytest -m "not integration"            # 194 unit/behaviour tests
+uv run pytest -m "not integration"            # 196 unit/behaviour tests
 uv run python scripts/acceptance.py            # offline acceptance suite (6 checks)
 uv run python scripts/e2e_voice.py             # speech in -> action -> speech out
 uv run python scripts/live_app_check.py        # the real app: hotkeys, mic, quit
@@ -43,7 +43,7 @@ uv run python -m relay --sarvam-selftest       # Connected mode (needs a Sarvam 
 | 21 | Connected mode (Sarvam): Indian-language speech in/out, translate-and-read, free-form requests | request/response shapes, fallbacks, consent phrase, NLU validation — mocked (18 tests) | **Mocked only — live API not run (no key here).** Run `relay --sarvam-selftest` with a key |
 | 22 | Connected-mode privacy: consent phrase; ambient speech stays on device; secrets never sent; offline fallback | privacy-gate test (cloud never called for ambient speech); secret test; fallback test | **Verified** (mocked service) |
 | 23 | Memory/CPU fits a 4 GB laptop | measured in 0.1: idle ~35 MB, Essential peak ~330-406 MB, ran under a hard 1 GB cap | **Measured** here; 4 GB hardware latency not certified |
-| 24 | Packaged one-folder build runs offline on a clean machine | spec + build script (two launchers, models beside exe) | **Not run** — needs a clean VM |
+| 24 | Packaged one-folder build runs offline on a clean machine | built with PyInstaller here (598 MB incl. models); frozen `relay-cli.exe` passed selftest, voice round-trip, daily demo, UIA read | **Verified on the dev laptop**; clean VM **not run** |
 | 25 | Coexists with NVDA / JAWS | detection code only | **Not run** — no screen reader installed |
 | 26 | Usable by blind people in daily life | the checks above are proxies | **Not run** — needs supervised sessions with blind users |
 | 27 | Signed installer | — | **Not done** — needs a certificate |

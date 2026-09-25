@@ -38,10 +38,14 @@ class WhisperSTT:
             from faster_whisper import WhisperModel
             whisper_dir = models_dir() / "whisper"
             whisper_dir.mkdir(parents=True, exist_ok=True)
-            log.info("loading STT model %s (%s)", self.model_name, self.compute_type)
+            # Once the model is on disk, never contact the model hub again: offline
+            # mode must not make a network request (or wait on one) at every start.
+            local = any(whisper_dir.rglob("model.bin"))
+            log.info("loading STT model %s (%s, %s)", self.model_name, self.compute_type,
+                     "local files only" if local else "may download")
             self._model = WhisperModel(
                 self.model_name, device="cpu", compute_type=self.compute_type,
-                download_root=str(whisper_dir),
+                download_root=str(whisper_dir), local_files_only=local,
             )
         return self._model
 

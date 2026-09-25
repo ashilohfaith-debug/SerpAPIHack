@@ -141,17 +141,18 @@ class SarvamClient:
         return " ".join(x for x in out if x)
 
     def tts(self, text: str, language_code: str, speaker: str = "", pace: float = 1.0,
-            model: str = "bulbul:v3", sample_rate: int = 22050) -> tuple[np.ndarray, int]:
+            model: str = "bulbul:v3") -> tuple[np.ndarray, int]:
+        # sample rate is left at the API default (22050 Hz); the real rate is read back
+        # from the returned WAV header
         payload = {"text": text[:2400], "language_code": language_code, "model": model,
-                   "pace": max(0.5, min(2.0, float(pace))),
-                   "speech_sample_rate": sample_rate}
+                   "pace": max(0.5, min(2.0, float(pace)))}
         if speaker:
             payload["speaker"] = speaker
         data = self._post_json("/text-to-speech", payload)
         audios = data.get("audios") or []
         if not audios:
             raise SarvamError(-1, "no audio returned")
-        parts, sr = [], sample_rate
+        parts, sr = [], 22050
         for b64 in audios:
             a, sr = wav_to_float(base64.b64decode(b64))
             parts.append(a)

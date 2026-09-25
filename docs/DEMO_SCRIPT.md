@@ -68,7 +68,7 @@ Point out: *everything from here is voice; eyes closed if you like.*
 - Not an autonomous agent: user-directed, one step at a time, verified, interruptible.
 - Honest by design: "I couldn't confirm that" instead of fake success; a casual "yeah"
   never sends a message or deletes a file.
-- Tested: 193 automated tests; end-to-end voice test (speech in → action → speech out);
+- Tested: 196 automated tests; end-to-end voice test (speech in → action → speech out);
   live desktop checks; live app lifecycle with real global hotkeys.
 
 ## If something goes wrong on stage

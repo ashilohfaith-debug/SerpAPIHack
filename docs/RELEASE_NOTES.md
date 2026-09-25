@@ -58,7 +58,7 @@ checked locally first); secrets never sent; automatic offline fallback.
 **Tested against a fake service only — run `relay --sarvam-selftest` with a key.**
 
 ### Verification (all run on the development laptop)
-194 unit/behaviour tests; end-to-end voice test 8/8 (synthesized speech → VAD → STT →
+196 unit/behaviour tests; end-to-end voice test 8/8 (synthesized speech → VAD → STT →
 wake word → action → narration, incl. half-duplex); live desktop test 7/7 on a test
 window; live app lifecycle 11/11 with real global hotkeys and microphone; live app
 launch + close via the Start-menu catalogue. Not yet: clean-VM install, NVDA, blind-user
