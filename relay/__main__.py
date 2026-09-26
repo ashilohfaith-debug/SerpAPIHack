@@ -135,11 +135,19 @@ def _starting_cue() -> None:
         pass
 
 
-def _start(panel: bool = False) -> int:
+def _start(panel: bool = False, toggle: bool = False) -> int:
     """Run the app. Launched from the Ctrl+Alt+R shortcut there is no console, so a
-    start-up failure must be SPOKEN, or a blind user just hears silence."""
+    start-up failure must be SPOKEN, or a blind user just hears silence. With
+    ``toggle`` (the shortcut), pressing the key while RELAY runs closes it instead."""
     from relay.diagnostics import get_logger, setup_logging
     setup_logging("INFO")
+    if toggle:
+        from relay.core.single_instance import QuitSignal, SingleInstance
+        probe = SingleInstance()
+        if probe.acquire():
+            probe.release()                   # not running: start it
+        elif QuitSignal.request():
+            return 0                          # running: it says goodbye and closes
     _starting_cue()
     try:
         from relay.app import RelayApp
@@ -194,6 +202,8 @@ def _main(argv: list[str] | None = None) -> int:
                    help="run RELAY: spoken onboarding + live voice loop (say 'Relay' + a command)")
     p.add_argument("--with-panel", action="store_true",
                    help="with --start, also serve the accessible panel")
+    p.add_argument("--toggle", action="store_true",
+                   help="start RELAY, or close it if it's already running (Ctrl+Alt+R)")
     p.add_argument("--models-status", action="store_true", help="report managed model files")
     p.add_argument("--setup-models", action="store_true",
                    help="download/verify Essential models for offline use")
@@ -296,6 +306,8 @@ def _main(argv: list[str] | None = None) -> int:
     if args.demo_daily:
         from relay.demo import daily_demo
         return daily_demo()
+    if args.toggle:
+        return _start(panel=args.with_panel, toggle=True)
     if args.start:
         return _start(panel=args.with_panel)
     p.print_help()

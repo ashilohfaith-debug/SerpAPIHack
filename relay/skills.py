@@ -46,7 +46,8 @@ HELP = {
          "A few examples: what time is it. Open WhatsApp. Search for today's weather. "
          "Read the page. Take a note. Remind me in ten minutes to call mom. "
          "What's on my screen. Stop, to interrupt me. Cancel, to stop a task. "
-         "Emergency stop, to halt everything."),
+         "Emergency stop, to halt everything. To close me, say quit Relay, or press "
+         "Control Alt R again."),
     "reading": ("Reading. Say: read the page, or read the document, to hear everything "
                 "from the top. Stop pauses; continue picks up where you left off. "
                 "Next paragraph and previous paragraph move around. Repeat reads the part "
@@ -70,7 +71,10 @@ HELP = {
     "system": ("System. Ask: what time is it, what's the date, how's my battery, am I "
                "connected to the internet, or just say status. Volume up, volume down, "
                "set volume to 40 percent, and mute. Play music, pause music and next "
-               "track control your music. Ask me sums like: what is 25 times 4."),
+               "track control your music. Ask me sums like: what is 25 times 4. "
+               "Headphones: I switch to them by myself, and while you wear them you can "
+               "interrupt me just by talking. Say where is the sound going, or headphone "
+               "mode on, or off."),
     "notes": ("Notes and reminders. Say: take a note, and what to write. Read my notes. "
               "Remind me in ten minutes to call mom, or remind me at 6 p m to take my "
               "medicine. Set a timer for five minutes. What are my reminders. Cancel my "
@@ -79,7 +83,8 @@ HELP = {
 _HELP_ALIASES = {"the web": "web", "internet": "web", "browsing": "web", "writing": "typing",
                  "keys": "typing", "keyboard": "typing", "windows": "apps",
                  "reminders": "notes", "music": "system",
-                 "media": "system"}
+                 "media": "system", "headphones": "system", "sound": "system",
+                 "audio": "system"}
 
 
 def _preview(text: str, words: int = 12) -> str:
@@ -244,6 +249,16 @@ class Skills:
         key = spoken_combo(self.s.talk_key)
         self.say("Wake word on. Say Relay, then your command." if on else
                  f"Wake word off. I'll only listen when you press {key}.")
+
+    def k_headphones(self, i):
+        if self.s.audio is None:
+            self.say("I can't change headphone mode here.")
+            return
+        self.say(self.s.audio.set_headphone_mode(i.slots.get("mode", "auto")))
+
+    def k_audio_status(self, i):
+        self.say(self.s.audio.describe_audio() if self.s.audio is not None else
+                 "I can't check the sound devices here.")
 
     def k_quit(self, i):
         self.say("Closing Relay. Goodbye.", _CONF)

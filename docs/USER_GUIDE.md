@@ -7,9 +7,11 @@ copy it into Documents and say "read the file user guide".
 
 ## 1. Starting and stopping
 - **Start:** press **Control Alt R**. You'll hear "Relay is ready." (The very first time,
-  a short introduction.) If RELAY is already running, it tells you so.
+  a short introduction.)
+- **Close:** press **Control Alt R again**, or say "quit Relay", "close Relay" or
+  "goodbye Relay". RELAY says "Closing Relay. Goodbye." The same key turns it on and
+  off, like Narrator's Control Windows Enter.
 - **Start automatically:** a helper runs `RELAY.cmd --autostart on` once.
-- **Quit:** say "quit Relay", or "goodbye Relay".
 
 ## 2. Talking to RELAY
 - Press **Control Alt Space** from any program. You hear a rising chirp — speak your
@@ -18,7 +20,23 @@ copy it into Documents and say "read the file user guide".
   also say just "Relay", wait for the chirp, then speak.
 - Pressing the talk key while RELAY is speaking interrupts it and listens.
 - Turn the wake word off (talk key only) with "turn off the wake word".
-- RELAY ignores the microphone while it is talking, so it never obeys its own voice.
+- On the speakers, RELAY ignores the microphone while it is talking, so it never obeys
+  its own voice.
+
+### With headphones or earphones
+- Plug them in (wired, USB or Bluetooth) at any time: RELAY moves its voice to them by
+  itself and says so, for example "boAt Rockerz 450 headphones connected".
+- **Interrupt just by talking.** With headphones RELAY can't hear itself, so it keeps
+  listening while it talks: say "stop" to silence it, or "Relay" and a new request.
+  Other conversation around you is still ignored.
+- **Take them off mid-reading and RELAY pauses**, so nothing private is read out loud
+  to the room: "Headphones disconnected, so I've paused. Say continue to carry on."
+- A Bluetooth headset's own microphone would turn its sound into phone-call quality,
+  so RELAY keeps using the laptop's microphone and your headphones stay clear.
+- "where is the sound going" — which speaker and microphone RELAY is using.
+- "headphone mode on" / "headphone mode off" / "headphone mode automatic" — if your
+  earphones are in the laptop's own jack, Windows may report them as speakers; say
+  "I'm using headphones" to turn voice-interrupt on.
 
 ## 3. Stopping, cancelling, and safety
 | Say or press | What happens |

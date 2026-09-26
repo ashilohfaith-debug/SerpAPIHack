@@ -55,17 +55,30 @@ def parse(text: str) -> dict[str, str]:
 
 def load_env(files: list[Path] | None = None) -> list[Path]:
     """Apply every existing .env file (first file wins per key; the real environment
-    wins over files). Returns the files that were loaded."""
-    loaded = []
+    wins over files). A file may say ``RELAY_ENV_FILE=<path>`` to also read another one
+    — e.g. an installed copy reading the project's .env, so keys are pasted once.
+    Returns the files that were loaded."""
+    loaded: list[Path] = []
     if offline_forced():
         return loaded
-    for f in files if files is not None else candidate_files():
+    todo = list(files if files is not None else candidate_files())
+    seen: set[str] = set()
+    while todo:
+        f = todo.pop(0)
+        key = os.path.normcase(str(Path(f).resolve()))
+        if key in seen:
+            continue                              # no loops, no double loading
+        seen.add(key)
         try:
-            values = parse(f.read_text(encoding="utf-8-sig"))
+            values = parse(Path(f).read_text(encoding="utf-8-sig"))
         except OSError:
             continue
         for k, v in values.items():
             if v and not os.environ.get(k):
                 os.environ[k] = v
         loaded.append(f)
+        ref = values.get("RELAY_ENV_FILE", "").strip()
+        if ref:
+            target = Path(ref) if Path(ref).is_absolute() else Path(f).parent / ref
+            todo.insert(0, target)                # read it next, before other files
     return loaded

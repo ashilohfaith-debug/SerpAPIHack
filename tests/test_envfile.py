@@ -54,11 +54,30 @@ def test_relay_offline_ignores_every_key(tmp_path, monkeypatch):
 
 
 def test_example_file_is_complete_and_has_no_keys():
-    values = parse((ROOT / ".env.example").read_text(encoding="utf-8"))
-    for k in ("SARVAM_API_KEY", "SARVAM_TTS_MODEL", "SARVAM_SPEAKER", "SARVAM_LANGUAGE",
-              "SARVAM_STT", "RELAY_LLM_URL", "RELAY_LLM_KEY"):
-        assert k in values, k
-    assert values["SARVAM_API_KEY"] == "" and values["RELAY_LLM_KEY"] == ""
+    text = (ROOT / ".env.example").read_text(encoding="utf-8")
+    values = parse(text)
+    assert values == {"RELAY_LLM_URL": "", "RELAY_LLM_KEY": "", "SARVAM_API_KEY": ""}
+    # the optional settings are there, commented out, each alone on its line
+    for k in ("SARVAM_SPEAKER", "SARVAM_TTS_MODEL", "SARVAM_LANGUAGE", "SARVAM_STT",
+              "SARVAM_BASE_URL"):
+        line = next(ln for ln in text.splitlines() if ln.startswith(f"# {k}="))
+        assert " " not in line[len(f"# {k}="):], line      # uncommenting gives a clean value
+    assert text.index("RELAY_LLM_URL=") < text.index("SARVAM_API_KEY=")   # FreeLLMAPI first
+
+
+def test_freellmapi_alone_runs_without_sarvam(monkeypatch, tmp_path):
+    """Only the router is configured: AI answers on, Sarvam fully off (offline voice)."""
+    from relay.config import Config
+    from relay.health import _online_checks
+    from relay.llm import routes_from_config
+    from relay.sarvam import settings
+    monkeypatch.delenv("RELAY_OFFLINE")
+    monkeypatch.setenv("RELAY_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("RELAY_LLM_URL", "http://127.0.0.1:9/v1")
+    monkeypatch.setenv("RELAY_LLM_KEY", "freellmapi-test")
+    assert settings()["key"] == "" and len(routes_from_config(Config())) == 2
+    names = [c.name for c in _online_checks({})]
+    assert names == ["AI assistant router (online)"]      # no Sarvam check, no Sarvam call
 
 
 def test_real_env_file_is_git_ignored():

@@ -47,6 +47,8 @@ def onboarding_script(wake_word: str = "relay", first_run: bool = True,
         "do anything, and tell you what changed.",
         "Say stop to interrupt me, cancel to stop a task, or emergency stop to halt "
         "everything at once. Say help at any time to hear more.",
+        "To close me, say quit Relay, or press Control Alt R again. If you wear "
+        "headphones, I'll use them, and you can interrupt me just by talking.",
     ]
     if running:
         lines.append(coexistence_advice(name))

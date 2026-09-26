@@ -73,7 +73,7 @@ class Session:
     def __init__(self, speak=None, bus=None, db_path: str = ":memory:", speech=None,
                  apps=None, on_quit: Callable[[], None] | None = None,
                  on_wake_word: Callable[[bool], None] | None = None,
-                 talk_key: str = "ctrl+alt+space", assistant=None) -> None:
+                 talk_key: str = "ctrl+alt+space", assistant=None, audio=None) -> None:
         self.emergency = EmergencyStop()
         self.cancel = threading.Event()
         self._speak = speak
@@ -82,6 +82,7 @@ class Session:
         self.on_quit = on_quit
         self.on_wake_word = on_wake_word
         self.assistant = assistant          # optional conversational AI (relay.llm)
+        self.audio = audio                  # headphone mode / audio devices (the live app)
         self._answer_cancel = threading.Event()
         self._from_assistant = False
         self.talk_key = talk_key

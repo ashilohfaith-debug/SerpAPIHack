@@ -101,6 +101,8 @@ class Kind:
     DICTATION = "dictation"
     LANGUAGE = "language"
     WAKE_WORD = "wake_word"
+    HEADPHONES = "headphones"      # "headphone mode on/off/automatic", "I'm using headphones"
+    AUDIO_STATUS = "audio_status"  # "where is the sound going", "am I using headphones"
     QUIT = "quit"
     PICK = "pick"           # "open the second one" — from the last list RELAY read out
     SEND = "send"           # send the message being written (always read back + confirmed)
@@ -277,6 +279,30 @@ def parse(utterance: str) -> Intent:
     if re.search(r"\b(?:stop|end|finish|exit|turn off|disable|cancel)\s+(?:the\s+)?"
                  r"(?:dictation|dictating|typing mode)\b", low):
         return I(Kind.DICTATION, on=False)
+    hp = r"(?:head\s*phones?|head\s*sets?|ear\s*phones?|ear\s*buds?|air\s*pods|ear\s*pods)"
+    m = re.search(rf"\b(?:turn|switch)\s+(on|off)\s+(?:the\s+)?{hp}\s+mode\b|"
+                  rf"\b(enable|disable)\s+(?:the\s+)?{hp}\s+mode\b|"
+                  rf"\b{hp}\s+mode\s+(on|off|auto|automatic)\b|"
+                  rf"\b{hp}\s+mode\s+to\s+(on|off|auto|automatic)\b", low)
+    if m:
+        v = next(g for g in m.groups() if g)
+        return I(Kind.HEADPHONES, mode={"enable": "on", "disable": "off",
+                                        "automatic": "auto"}.get(v, v))
+    if re.fullmatch(rf"(?:i'm|i am|im)\s+(?:using|wearing|on|listening (?:on|with|through))\s+"
+                    rf"(?:my\s+|the\s+)?{hp}|{hp}\s+(?:are\s+)?on", low):
+        return I(Kind.HEADPHONES, mode="on")
+    if re.fullmatch(rf"(?:i'm|i am|im)\s+(?:not\s+(?:using|wearing)\s+(?:my\s+|the\s+|any\s+)?"
+                    rf"{hp}|using\s+(?:the\s+)?speakers?)|(?:i\s+)?took\s+off\s+(?:my\s+)?{hp}"
+                    rf"|{hp}\s+(?:are\s+)?off|speaker\s+mode", low):
+        return I(Kind.HEADPHONES, mode="off")
+    if re.search(rf"\b(?:detect|find)\s+(?:the\s+)?{hp}\s+automatically\b", low):
+        return I(Kind.HEADPHONES, mode="auto")
+    if re.search(rf"\bwhere(?:'s| is)\s+(?:the\s+)?(?:sound|audio|voice)\s+(?:going|playing|"
+                 rf"coming\s+from)\b|\bwhich\s+(?:speaker|audio device|sound device|"
+                 rf"microphone|mic)\b|\bam i (?:using|on|wearing)\s+(?:my\s+)?{hp}\b|"
+                 rf"\b(?:are|is)\s+(?:my\s+)?{hp}\s+(?:connected|working|on)\b|"
+                 rf"\b(?:audio|sound)\s+(?:device|output)\b", low):
+        return I(Kind.AUDIO_STATUS)
     m = re.search(r"\b(?:turn|switch)\s+(on|off)\s+(?:the\s+)?wake\s*word\b|"
                   r"\b(enable|disable)\s+(?:the\s+)?wake\s*word\b|"
                   r"\bwake\s*word\s+(on|off)\b", low)

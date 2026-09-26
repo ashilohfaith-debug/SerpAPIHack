@@ -138,7 +138,8 @@ class VoiceLoop:
                  say: Callable[[str], None] | None = None,
                  open_mic: Callable[[], bool] | None = None,
                  clock: Callable[[], float] = time.monotonic,
-                 threaded: bool = True) -> None:
+                 threaded: bool = True,
+                 interrupt: Callable[[], None] | None = None) -> None:
         if stt is None:
             from relay.audio import WhisperSTT
             stt = WhisperSTT()
@@ -154,6 +155,13 @@ class VoiceLoop:
         self._earcon = play_earcon or (lambda name: None)
         self._say = say or (lambda text: None)
         self._open_mic = open_mic or (lambda: False)
+        # silence RELAY: the session's stop also cancels a streaming answer and pauses
+        # reading; on its own the speech queue would only drop the current sentence
+        self._interrupt = interrupt or (lambda: self.speech.interrupt()
+                                        if self.speech is not None else None)
+        # HEADPHONE MODE: RELAY can't hear itself, so keep listening while it talks and
+        # let the user interrupt by voice ("stop", "Relay, ...")
+        self.headphones = False
         self._clock = clock
         self._threaded = threaded
         self._lock = threading.Lock()
@@ -205,8 +213,7 @@ class VoiceLoop:
     # ---- push-to-talk ----
     def push_to_talk(self) -> None:
         """Talk key pressed: stop RELAY talking, chirp, and listen for one command."""
-        if self.speech is not None:
-            self.speech.interrupt()
+        self._interrupt()
         with self._lock:
             self._armed = True
             self._reset()
@@ -220,7 +227,7 @@ class VoiceLoop:
             return
         now = self._clock()
         with self._lock:
-            if self._relay_is_talking():
+            if self._relay_is_talking() and not self.headphones:
                 if self._in_utt or self._preroll:
                     self._reset()          # never capture RELAY's own voice
                 if self._armed:
@@ -292,6 +299,11 @@ class VoiceLoop:
             if (not prompted and local is not None and local is not self.stt
                     and not self._open_mic()):
                 local_text = local.transcribe(audio)
+                if (self.headphones and self._relay_is_talking()
+                        and immediate_control(local_text)):
+                    self._state("idle")            # "stop" over RELAY: handled on this PC
+                    self.on_transcript(local_text, False)
+                    return
                 woke, rest = detect_wake(local_text)
                 if not woke and self.wake_enabled:
                     # "Really, what time is it?" counts only when the rest is a real
@@ -343,6 +355,10 @@ class VoiceLoop:
         if self._open_mic():
             self.dispatch(rest if woke and rest else text)
             return
+        talking = self.headphones and self._relay_is_talking()
+        if talking and not woke and self.wake_enabled and immediate_control(text):
+            self.dispatch(text)            # headphones: a plain "stop" interrupts RELAY
+            return
         if not woke and self.wake_enabled:
             near, near_rest = detect_wake_near_miss(text)     # "Really, what time is it?"
             if near and near_rest:
@@ -352,6 +368,8 @@ class VoiceLoop:
         if not self.wake_enabled or not woke:
             log.debug("ignored (not addressed to RELAY)")
             return
+        if talking and not (rest and immediate_control(rest)):
+            self._interrupt()              # "Relay, ..." over RELAY's own voice: stop first
         if rest:
             self.dispatch(rest)
         else:
@@ -366,13 +384,22 @@ class VoiceLoop:
         self._state("listening")
 
     # ---- microphone ----
-    def run(self):
-        """Start listening on the default microphone. Returns the MicCapture (call
-        .stop() to end). Non-blocking."""
+    def run(self, device: int | None = None):
+        """Start listening on the default microphone (or ``device``). Returns the
+        MicCapture (call .stop() to end). Non-blocking."""
         from relay.audio import MicCapture
-        self._mic = MicCapture(self.on_frame)
+        self._mic = MicCapture(self.on_frame, device=device)
         self._mic.start()
         return self._mic
+
+    def restart_mic(self, device: int | None = None) -> None:
+        """Reopen the microphone — e.g. a headset became the default input."""
+        if self._mic is None:
+            return
+        self._mic.stop()
+        with self._lock:
+            self._reset()                  # don't join audio from two devices
+        self.run(device)
 
     def stop(self) -> None:
         if self._mic is not None:

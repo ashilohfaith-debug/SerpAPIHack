@@ -89,7 +89,14 @@ def _microphone():
 
 def _speakers():
     import sounddevice as sd
+
+    from relay.audio.devices import default_endpoints, mapper_device
     dev = sd.query_devices(kind="output")
+    out, _inp = default_endpoints()        # what Windows is using now (RELAY follows it)
+    if out is not None and out.name:
+        extra = " (headphones: you can interrupt me by voice)" if out.is_headphones else ""
+        follow = "" if mapper_device("output") is not None else " — fixed device"
+        return bool(dev), out.name + extra + follow
     return bool(dev), dev.get("name", "?") if isinstance(dev, dict) else str(dev)
 
 

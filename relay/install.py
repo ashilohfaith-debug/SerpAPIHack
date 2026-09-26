@@ -27,10 +27,10 @@ def launcher() -> tuple[str, str, str]:
         exe = Path(sys.executable)
         windowless = exe.with_name("relay.exe")         # not relay-cli.exe's console
         exe = windowless if windowless.exists() else exe
-        return str(exe), "--start", str(exe.parent)
+        return str(exe), "--toggle", str(exe.parent)     # the key starts AND closes RELAY
     py = Path(sys.executable)
     pyw = py.with_name("pythonw.exe")
-    return str(pyw if pyw.exists() else py), "-m relay --start", str(app_dir())
+    return str(pyw if pyw.exists() else py), "-m relay --toggle", str(app_dir())
 
 
 def _programs_dir() -> Path:

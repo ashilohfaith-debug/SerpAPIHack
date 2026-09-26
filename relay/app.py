@@ -14,11 +14,20 @@ import threading
 import time
 
 from relay.audio import SpeechQueue, WhisperSTT, make_tts
+from relay.audio.devices import (
+    DeviceWatch,
+    default_endpoints,
+    laptop_mic,
+    mic_device_for,
+    same,
+    spoken_name,
+    use_windows_defaults,
+)
 from relay.audio.earcons import earcon
 from relay.audio.hotkeys import HotkeyManager, spoken_combo
 from relay.config import Config
 from relay.core import EventBus
-from relay.core.single_instance import SingleInstance
+from relay.core.single_instance import QuitSignal, SingleInstance
 from relay.diagnostics import get_logger, setup_logging
 from relay.loop import Dispatcher, VoiceLoop
 from relay.memory.db import default_db_path
@@ -67,6 +76,12 @@ class RelayApp:
         self.instance = SingleInstance()
         self.bus = EventBus()
         self._quit = threading.Event()
+        use_windows_defaults()          # follow the default device: headphones just work
+        self.devices = DeviceWatch(self._on_audio_change)
+        self.quit_signal = QuitSignal()
+        self._announce_timer: threading.Timer | None = None
+        self._paused_for_privacy = ""
+        self._announced_out = None
         self.tts = make_tts(prefer_piper=True)            # offline voice, always present
         self.speech = SpeechQueue(self.tts)
         self.apps = AppCatalog()
@@ -94,7 +109,7 @@ class RelayApp:
                                apps=self.apps, on_quit=self.request_quit,
                                on_wake_word=self._set_wake,
                                talk_key=self.cfg.push_to_talk_hotkey,
-                               assistant=self.assistant)
+                               assistant=self.assistant, audio=self)
         # emergency stop flushes queued speech immediately
         self.session.emergency.register_flush(self.speech.interrupt)
         self.dispatcher = Dispatcher(self.session)
@@ -106,7 +121,8 @@ class RelayApp:
                               speech=self.speech,
                               wake_required=wake, bus=self.bus, play_earcon=self.earcon,
                               say=lambda t: self.session.say(t, pol.Priority.REQUESTED),
-                              open_mic=lambda: self.session.dictation)
+                              open_mic=lambda: self.session.dictation,
+                              interrupt=self.session.stop_speaking)
         if self.sarvam_stt is not None:
             self.loop.wake_stt = self.stt   # wake word checked on this PC before any upload
         self.hotkeys = HotkeyManager()
@@ -135,6 +151,98 @@ class RelayApp:
     def _set_wake(self, on: bool) -> None:
         self.loop.wake_enabled = on
 
+    def _quit_requested(self) -> None:
+        """The launch key (Ctrl+Alt+R) pressed while RELAY runs: close, like 'quit Relay'."""
+        self.session.stop_speaking()
+        self.session.say("Closing Relay. Goodbye.", pol.Priority.CRITICAL)
+        self.request_quit()
+
+    # ---- headphones and audio devices ----
+    def _headphone_pref(self) -> str:
+        return self.session.store.get_pref("headphone_mode", default="auto")
+
+    def _apply_headphone_mode(self) -> None:
+        out, mode = self.devices.output, self._headphone_pref()
+        self.loop.headphones = mode == "on" or (mode == "auto" and bool(out and out.is_headphones))
+
+    def set_headphone_mode(self, mode: str) -> str:
+        """'on' | 'off' | 'auto' — from "headphone mode on" etc. Returns what to say."""
+        mode = mode if mode in ("on", "off", "auto") else "auto"
+        self.session.store.set_pref("headphone_mode", mode)
+        self._apply_headphone_mode()
+        if mode == "on":
+            return ("Headphone mode on. I'll keep listening while I talk, so you can "
+                    "interrupt me just by speaking.")
+        if mode == "off":
+            return ("Headphone mode off. While I'm talking I won't listen; press "
+                    f"{spoken_combo(self.cfg.push_to_talk_hotkey)} to interrupt me.")
+        return ("Headphone mode is automatic: it's on whenever headphones are connected. "
+                + ("It's on now." if self.loop.headphones else "It's off now."))
+
+    def describe_audio(self) -> str:
+        """Where RELAY's voice goes and where it listens ("where is the sound going")."""
+        out, inp = self.devices.output, self.devices.input
+        if out is None and inp is None:
+            out, inp = default_endpoints()
+        said = (f"I'm speaking through {spoken_name(out.name)}" if out and out.name
+                else "I'm speaking through the default speakers")
+        if inp is not None and inp.is_hands_free and laptop_mic() is not None:
+            said += (", and listening through the laptop's own microphone, so your headset "
+                     "keeps its full sound quality")
+        elif inp is not None and inp.name:
+            said += f", and listening through {spoken_name(inp.name)}"
+        auto = self._headphone_pref() == "auto"
+        return (said + f". Headphone mode is {'on' if self.loop.headphones else 'off'}"
+                + (", and set to switch automatically." if auto else "."))
+
+    def _on_audio_change(self, old_out, new_out, old_in, new_in) -> None:
+        """Windows' default device changed: headphones plugged in or out, a headset's
+        microphone, a TV over HDMI…"""
+        if not same(old_in, new_in):
+            try:
+                self.loop.restart_mic(mic_device_for(new_in))
+            except Exception as e:
+                log.warning("could not reopen the microphone: %s", e)
+        if same(old_out, new_out):
+            return
+        self._apply_headphone_mode()
+        if old_out is not None and old_out.is_headphones and not (
+                new_out is not None and new_out.is_headphones):
+            # headphones removed: never carry on reading private text out loud
+            reading = self.session.reader.reading
+            if reading or self.speech.is_speaking:
+                self.session.stop_speaking()
+                self._paused_for_privacy = "reading" if reading else "talking"
+        # one announcement after things settle (a Bluetooth headset can switch twice)
+        if self._announce_timer is not None:
+            self._announce_timer.cancel()
+        self._announce_timer = threading.Timer(1.0, self._announce_audio)
+        self._announce_timer.daemon = True
+        self._announce_timer.start()
+
+    def _announce_audio(self) -> None:
+        out, before = self.devices.output, self._announced_out
+        paused, self._paused_for_privacy = self._paused_for_privacy, ""
+        self._announced_out = out
+        name = spoken_name(out.name) if out is not None else ""
+        if out is not None and out.is_headphones:
+            line = f"{name or 'Headphones'} connected."
+            if self.loop.headphones:
+                line += " You can interrupt me just by talking."
+            if paused == "reading":
+                line += " I paused the reading; say continue to carry on."
+        elif paused:
+            line = ("Headphones disconnected, so I've paused. Say continue to carry on."
+                    if paused == "reading" else
+                    "Headphones disconnected, so I stopped talking.")
+        elif before is not None and before.is_headphones:
+            line = f"Headphones disconnected. I'll talk through the {name or 'speakers'}."
+        elif out is not None and not same(before, out):
+            line = f"Now speaking through {name or 'a different device'}."
+        else:
+            return
+        self.session.say(line, pol.Priority.CRITICAL)
+
     # ---- lifecycle ----
     def _startup_checks(self) -> list[str]:
         problems = []
@@ -144,7 +252,7 @@ class RelayApp:
             problems.append(f"Another program is using {spoken_combo(talk)}, so the talk key "
                             "won't work. You can still say Relay to get my attention.")
         try:
-            self.loop.run()
+            self.loop.run(device=mic_device_for(self.devices.input))
         except Exception as e:
             log.error("microphone failed: %s", e)
             problems.append("I can't use the microphone. Please check that one is connected "
@@ -174,8 +282,15 @@ class RelayApp:
                 if cloud is not None:
                     threading.Thread(target=cloud.client.warm, daemon=True).start()
             self.apps.start()
+            self.devices.start()                   # which speaker / mic / headphones now
+            self._announced_out = self.devices.output
+            self._apply_headphone_mode()
+            self.quit_signal.listen(self._quit_requested)   # Ctrl+Alt+R again = close
             problems = self._startup_checks()
             self.session.onboard()
+            if self.loop.headphones:
+                self.session.say("You're on headphones, so you can interrupt me just by "
+                                 "talking.", pol.Priority.REQUESTED)
             for p in problems:
                 self.session.say(p, pol.Priority.CRITICAL)
             self.session.reminders.check_now()     # announce any missed while closed
@@ -195,8 +310,10 @@ class RelayApp:
         return 0
 
     def shutdown(self) -> None:
-        for fn in (self.loop.stop, self.hotkeys.stop, self.dispatcher.stop,
-                   self.speech.shutdown):
+        if self._announce_timer is not None:
+            self._announce_timer.cancel()
+        for fn in (self.devices.stop, self.quit_signal.stop, self.loop.stop, self.hotkeys.stop,
+                   self.dispatcher.stop, self.speech.shutdown):
             try:
                 fn()
             except Exception:

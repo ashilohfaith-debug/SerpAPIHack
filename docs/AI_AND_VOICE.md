@@ -13,17 +13,21 @@ need a key or an account:
 If a service is down, slow, out of quota or the laptop is offline, RELAY carries on with
 its offline voice, recogniser and commands, and says once, plainly, what happened.
 
+**Each extra is independent.** FreeLLMAPI alone is enough for AI answers — RELAY then
+speaks them with its own offline voice and never contacts Sarvam. Sarvam alone changes
+only the voice. (`tests/test_envfile.py::test_freellmapi_alone_runs_without_sarvam`.)
+
 ## Set up (one copy-paste)
 
 1. In the RELAY folder (next to `RELAY.cmd`, or next to `relay.exe` in a packaged
    build) copy `.env.example` to `.env`.
-2. Paste the keys and save:
+2. Paste the key and save — for AI answers this is all:
    ```ini
-   SARVAM_API_KEY=sk_...                    # dashboard.sarvam.ai -> API keys
    RELAY_LLM_URL=http://localhost:3001/v1   # FreeLLMAPI on this PC
    RELAY_LLM_KEY=freellmapi-...             # the unified key from FreeLLMAPI's dashboard
    ```
-   Optional: `SARVAM_SPEAKER=` (a Bulbul voice name), `SARVAM_STT=on`.
+   Optional, only if you want Sarvam's voice: `SARVAM_API_KEY=sk_...`, and then
+   `SARVAM_SPEAKER=` (a Bulbul voice name) or `SARVAM_STT=on`.
 3. Start FreeLLMAPI on the same PC — on Windows the simplest is its desktop app (`.exe`
    on the project's Releases page); from source it is `npm install && npm run dev`
    (API on port 3001). In its dashboard add the free provider keys you want, then copy
@@ -35,7 +39,9 @@ its offline voice, recogniser and commands, and says once, plainly, what happene
    ```
 
 `.env` is git-ignored. A value set in the real environment wins over the file, and
-`RELAY_OFFLINE=1` ignores every key (nothing leaves the PC).
+`RELAY_OFFLINE=1` ignores every key (nothing leaves the PC). An installed copy can use the
+project's file instead of its own: a `.env` beside `relay.exe` containing just
+`RELAY_ENV_FILE=D:\RELAY\app\.env` — so the key is pasted in one place.
 
 ## How the replies are made fast
 

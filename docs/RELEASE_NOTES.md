@@ -1,5 +1,40 @@
 # RELAY — release notes
 
+## 0.3.1 — Headphones, closing by keyboard, FreeLLMAPI on its own
+
+### Headphones and earphones
+- RELAY now plays and listens through Windows' **current default device** (the Sound
+  Mapper) instead of the device that was default when it started — so headphones plugged
+  in later (wired, USB, Bluetooth) get RELAY's voice straight away, and it says so.
+- **Interrupt by voice with headphones:** RELAY can't hear itself, so it keeps listening
+  while it talks — "stop", or "Relay" and a new request. Room conversation is still
+  ignored. Automatic for headphones/headsets; "headphone mode on/off/automatic" and
+  "I'm using headphones" override it (earphones in a combined laptop jack often appear
+  as speakers to Windows).
+- **Unplugged mid-reading → paused**, not read aloud to the room ("Headphones
+  disconnected, so I've paused. Say continue to carry on.").
+- A Bluetooth headset's hands-free microphone is avoided (it forces phone-call audio
+  quality); RELAY keeps the laptop microphone. "where is the sound going" reports both.
+- Cost on a basic laptop: one device-ID query every half second, about 0.25 ms of CPU
+  (device names are read only when something changes). No extra playback latency
+  (Sound Mapper 0.18 s vs 0.19 s to open and play a clip, measured).
+
+### Closing RELAY
+- **Ctrl+Alt+R again closes RELAY** (the shortcut now runs `relay --toggle`), like
+  Narrator's Ctrl+Win+Enter — a keyboard way out when speaking isn't possible. Voice
+  still works: "quit Relay", "close Relay", "goodbye Relay".
+
+### Fixes
+- The talk key and a spoken "Relay, …" now cancel a streaming AI answer too; before,
+  only the current sentence stopped and the answer carried on.
+
+### Setup
+- FreeLLMAPI alone is enough: `.env.example` lists it first; Sarvam is optional and its
+  extra settings are commented out. A test proves no Sarvam call happens without its key.
+- One `.env` for both copies: the installed app's `.env` can hold just
+  `RELAY_ENV_FILE=<path to the project's .env>`.
+- Tests: 269 pass.
+
 ## 0.3.0 — Instant AI answers and the Sarvam voice (optional, one `.env` file)
 
 Still works with no keys, fully offline. New, and only when the developer fills in

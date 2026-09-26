@@ -40,8 +40,12 @@ Full list: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**. English only for now.
 - **Ctrl+Alt+Space** — talk key, from any app (chirp, then speak). Also interrupts RELAY.
 - Or say **"Relay"** first (hands-free wake word; "turn off the wake word" for talk-key only).
 - **Ctrl+Alt+Period** — stop talking / pause reading. **Ctrl+Alt+Backspace** — emergency stop.
+- **Ctrl+Alt+R again** — close RELAY (or say "quit Relay"). Same key on and off, like Narrator.
 
-RELAY never hears itself: the microphone is ignored while it speaks.
+RELAY never hears itself: on speakers the microphone is ignored while it speaks.
+**Headphones** (wired, USB, Bluetooth) are picked up automatically — RELAY's voice moves
+to them, you can interrupt it just by talking, and if they're unplugged mid-reading it
+pauses instead of reading private text aloud to the room.
 
 ## Set up (one time, by the user or a sighted helper)
 ```bash

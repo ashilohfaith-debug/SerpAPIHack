@@ -80,7 +80,7 @@ def main() -> int:
         ("Relay, what time is it?", False, "It's"),
         ("Relay, what is twenty five times four?", False, "is 100"),
         ("Relay, take a note, buy milk.", False, "Noted"),
-        ("Relay, read my notes.", False, "buy milk"),
+        ("Relay, read my notes.", False, "milk"),     # "buy"/"by" sound alike to Whisper
         ("Relay, how much battery do I have?", False, "Battery"),
         ("What's the date today?", True, "Today is"),           # push-to-talk, no wake word
         ("Open notepad and type something.", False, None),       # NOT addressed: ignored

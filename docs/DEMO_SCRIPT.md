@@ -66,7 +66,14 @@ voice and answers anything, ChatGPT-style.
 - Point out the voice: Sarvam's natural Indian voice; passwords and codes are always
   spoken by the offline voice and never sent anywhere.
 
-**Close:** "Relay, goodbye." → *"Closing Relay. Goodbye."*
+**8. Headphones** *(optional; Bluetooth or USB earphones)*
+- Connect them → *"… headphones connected. You can interrupt me just by talking."*
+- "Relay, read the page." … just say "stop" — no key needed.
+- Take them off mid-reading → *"Headphones disconnected, so I've paused."* Nothing
+  private is read out to the room.
+
+**Close:** "Relay, goodbye." → *"Closing Relay. Goodbye."* (Or press Ctrl+Alt+R again —
+the same key starts and closes RELAY.)
 
 ## Talking points
 - **The user needs no key, no account**: speech recognition (Whisper tiny, int8), the
