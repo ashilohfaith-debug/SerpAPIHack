@@ -67,6 +67,3 @@ target-version = "py312"
 # opinionated BLE/S "blind except" rules are not part of this baseline.
 select = ["E", "F", "I"]
 
-[tool.vercel]
-entrypoint = "index.py:app"
-

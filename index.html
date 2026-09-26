@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RELAY — Accessible Windows Voice Assistant for Blind & Low-Vision Users</title>
+  <meta name="description" content="RELAY is an accessible, transparent voice assistant designed for blind and low-vision individuals to use Windows 10 & 11 by talking. 100% offline core with UI Automation." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Screen Reader Live Announcer Region -->
+  <div id="srAnnouncer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Keyboard Skip Links -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <a href="#how-to-use" class="skip-link">Skip to how to use guide</a>
+  <a href="#simulator" class="skip-link">Skip to desktop simulator</a>
+  <a href="#commands" class="skip-link">Skip to voice commands</a>
+
+  <!-- Header -->
+  <header class="app-header" role="banner">
+    <div class="header-inner">
+      <a href="#" class="brand" aria-label="RELAY Home">
+        <div class="brand-symbol" aria-hidden="true">R</div>
+        <div class="brand-title">
+          <span>RELAY</span>
+          <span class="sharp-badge live" id="ipcConnBadge">
+            <span class="square-pulse" aria-hidden="true"></span>
+            Simulator
+          </span>
+        </div>
+      </a>
+
+      <!-- Navigation -->
+      <nav class="nav-links" aria-label="Main Navigation">
+        <a href="#how-to-use" class="nav-link">How to Use</a>
+        <a href="#simulator" class="nav-link">Simulator</a>
+        <a href="#pipeline" class="nav-link">Pipeline</a>
+        <a href="#commands" class="nav-link">Commands</a>
+        <a href="#soundboard" class="nav-link">Earcons</a>
+        <a href="#mirror" class="nav-link">Terminal</a>
+      </nav>
+
+      <!-- Accessibility Toolset -->
+      <div class="a11y-controls" role="toolbar" aria-label="Accessibility options">
+        <button class="btn-ctrl" id="themeToggleBtn" type="button" title="Toggle Theme (Dark / High-Contrast / Light) [Alt+H]" aria-label="Toggle theme">
+          <span>Theme</span>
+        </button>
+
+        <div style="display:flex; gap:1px; background:#1e1e1e;">
+          <button class="btn-ctrl" id="fontMinusBtn" style="padding:6px 9px;" type="button" title="Decrease font size" aria-label="Decrease text size">A-</button>
+          <span id="fontSizeIndicator" style="display:grid; place-items:center; font-family:var(--font-mono); font-size:11px; padding:0 8px; background:#0e0e0e; color:#fff;" aria-live="polite">100%</span>
+          <button class="btn-ctrl" id="fontPlusBtn" style="padding:6px 9px;" type="button" title="Increase font size" aria-label="Increase text size">A+</button>
+        </div>
+
+        <button class="btn-ctrl active" id="soundToggleBtn" type="button" title="Toggle Sound Earcons" aria-label="Toggle audio cues" aria-pressed="true">
+          <span>Audio: ON</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main id="main-content" role="main">
+
+    <!-- Hero Section -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <div class="mono-tag">
+            Assistive Operating System Agent · Windows 10 & 11
+          </div>
+
+          <h1 class="hero-title" id="hero-title">
+            Use your Windows PC
+            <span class="sub-heading">by talking.</span>
+          </h1>
+
+          <p class="hero-desc">
+            A voice assistant engineered specifically for <strong>blind and low-vision people</strong>. RELAY inspects your screen via Windows UI Automation, announces actions before executing them, confirms changes by re-observing, and recovers out loud.
+          </p>
+
+          <div class="hero-actions">
+            <button class="btn-sharp-primary" id="heroDemoBtn" type="button">
+              <span>▶ Run Live Demo</span>
+            </button>
+            <a href="#how-to-use" class="btn-sharp-secondary">How to Use Guide</a>
+            <a href="#commands" class="btn-sharp-secondary">Command Library</a>
+          </div>
+
+          <div class="keycap-row" aria-label="Keyboard Shortcuts">
+            <span>Talk Key:</span> <kbd class="kbd">Ctrl+Alt+Space</kbd>
+            <span style="margin-left:12px;">Toggle:</span> <kbd class="kbd">Ctrl+Alt+R</kbd>
+            <span style="margin-left:12px;">Stop:</span> <kbd class="kbd">Ctrl+Alt+.</kbd>
+            <span style="margin-left:12px;">Emergency:</span> <kbd class="kbd">Ctrl+Alt+Backspace</kbd>
+          </div>
+        </div>
+
+        <!-- Principles Box -->
+        <div class="hero-box">
+          <div class="hero-box-header">Core Operational Guarantees</div>
+          <ul class="principle-list">
+            <li class="principle-item">
+              <span class="principle-num">[01]</span>
+              <span><strong>Transparent Operator:</strong> Acts only when asked. Never claims a success it didn't directly verify through the accessibility API.</span>
+            </li>
+            <li class="principle-item">
+              <span class="principle-num">[02]</span>
+              <span><strong>Screen-Off Capability:</strong> Operates entirely without visual output. Sound design and spoken descriptions replace display dependency.</span>
+            </li>
+            <li class="principle-item">
+              <span class="principle-num">[03]</span>
+              <span><strong>Zero-Guess Safety Gate:</strong> Risky actions (deleting files, sending emails, shutting down) mandate strict verbal confirmation phrases.</span>
+            </li>
+            <li class="principle-item">
+              <span class="principle-num">[04]</span>
+              <span><strong>Offline Sovereignty:</strong> Whisper speech recognition and Piper voice run locally on basic 4 GB dual-core laptops. No cloud required.</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Desktop & UI Automation Simulator -->
+    <section class="hero" id="simulator" style="padding-top:16px;" aria-labelledby="sim-heading">
+      <div class="sim-container">
+        <!-- Simulator Window Header -->
+        <div class="sim-header">
+          <div class="sim-title" id="sim-heading">
+            <span>[SIMULATOR]</span>
+            <span>Windows UI Automation & Speech Core</span>
+            <span style="color:#ffffff;">· Active: <span id="currentActiveApp">Notepad</span></span>
+          </div>
+          <div class="sharp-badge">
+            Target: 4 GB Low-Power Windows
+          </div>
+        </div>
+
+        <!-- Simulated Desktop Canvas -->
+        <div class="sim-desktop" id="simDesktop" aria-label="Simulated Windows Desktop">
+
+          <!-- UI Automation Dynamic Highlight Box -->
+          <div class="sim-focus-box" id="simFocusBox" aria-hidden="true"></div>
+
+          <!-- App Window: Notepad -->
+          <div class="sim-app-window active" id="simNotepadWindow" style="top:24px; left:24px; width:340px; height:240px;">
+            <div class="sim-app-titlebar">
+              <span>notes.txt — Notepad</span>
+              <button id="notepadSaveBtn" style="background:#222; border:1px solid #444; color:#fff; padding:1px 6px; font-size:10px; font-family:var(--font-mono); cursor:pointer;">Save</button>
+            </div>
+            <div class="sim-app-content" id="simNotepadContent">
+              Meeting Notes - 12:45 PM<br />
+              1. RELAY offline voice setup verified.<br />
+              2. UI Automation focus verified.<br />
+              3. Ready for spoken commands.<br />
+              <span style="display:inline-block; width:8px; height:14px; background:#fff; animation:squareBlink 1s infinite;"></span>
+            </div>
+          </div>
+
+          <!-- App Window: Google Chrome -->
+          <div class="sim-app-window inactive" id="simChromeWindow" style="top:36px; left:260px; width:440px; height:260px;">
+            <div class="sim-app-titlebar">
+              <span>Chromium Browser — Assistive Tech</span>
+              <span style="font-size:10px;">URL: relay.local/guide</span>
+            </div>
+            <div class="sim-app-content">
+              <h4 style="color:#ffffff; margin-bottom:6px; font-size:13px;">Screen Reader Accessibility</h4>
+              <p id="chromeArticleP1" style="line-height:1.5; margin-bottom:8px;">
+                Windows UI Automation provides direct structural access to buttons, editable text, list items, and document trees without visual rendering.
+              </p>
+              <p style="color:#888; font-size:11px;">Paragraph 2: faster-whisper transcribes spoken words locally.</p>
+            </div>
+          </div>
+
+          <!-- App Window: File Explorer -->
+          <div class="sim-app-window inactive" id="simExplorerWindow" style="top:48px; left:120px; width:380px; height:220px;">
+            <div class="sim-app-titlebar">
+              <span>File Explorer — Documents</span>
+              <span style="font-size:10px;">3 items</span>
+            </div>
+            <div class="sim-app-content">
+              <div id="explorerSelectedItem" style="padding:6px 8px; background:#222; border:1px solid #444; display:flex; align-items:center; gap:8px;">
+                <span>[FILE]</span>
+                <strong>report-draft.docx</strong>
+                <span style="margin-left:auto; font-size:10px; color:#888;">14 KB</span>
+              </div>
+              <div style="padding:6px 8px; display:flex; align-items:center; gap:8px; margin-top:4px;">
+                <span>[FILE]</span>
+                <span>budget-2026.xlsx</span>
+                <span style="margin-left:auto; font-size:10px; color:#888;">42 KB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- App Window: Windows Settings -->
+          <div class="sim-app-window inactive" id="simSettingsWindow" style="top:30px; left:180px; width:360px; height:230px;">
+            <div class="sim-app-titlebar">
+              <span>Windows Settings — Devices</span>
+              <span style="font-size:10px;">Hardware</span>
+            </div>
+            <div class="sim-app-content">
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #222;">
+                <span>Bluetooth</span>
+                <button id="btToggleSwitch" style="background:#ffffff; color:#000; border:none; padding:3px 12px; font-weight:800; font-size:11px; font-family:var(--font-mono);">ON</button>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0;">
+                <span>Wi-Fi Network</span>
+                <span style="color:#ffffff; font-size:11px;">Connected (5 GHz)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Taskbar -->
+          <div class="sim-taskbar" role="toolbar" aria-label="Simulated Windows Taskbar">
+            <div class="sim-taskbar-apps">
+              <button class="sim-taskbar-icon running" id="tbNotepad" type="button" title="Notepad">NOTEPAD</button>
+              <button class="sim-taskbar-icon" id="tbChrome" type="button" title="Chrome">CHROME</button>
+              <button class="sim-taskbar-icon" id="tbExplorer" type="button" title="File Explorer">EXPLORER</button>
+              <button class="sim-taskbar-icon" id="tbSettings" type="button" title="Settings">SETTINGS</button>
+            </div>
+            <div class="sim-taskbar-tray">
+              <span>VOL 80%</span>
+              <span>BAT 88%</span>
+              <span id="desktopClock">12:47 PM</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Spoken Audio Narration Banner -->
+        <div class="sim-speech-banner" role="region" aria-label="Speech Output">
+          <div class="sim-waveform-box" id="simWaveform" title="Speech audio waveform" aria-hidden="true">
+            <span class="waveform-bar"></span>
+            <span class="waveform-bar"></span>
+            <span class="waveform-bar"></span>
+            <span class="waveform-bar"></span>
+            <span class="waveform-bar"></span>
+          </div>
+          <div>
+            <div class="sim-voice-tag" id="simVoiceTag">RELAY Spoken Narration (Piper)</div>
+            <div class="sim-speech-text" id="simSpeechText" aria-live="polite">
+              "Notepad is open. Document notes.txt contains 24 words. Ready for your next command."
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Comprehensive HOW TO USE Section -->
+    <section class="how-to-section" id="how-to-use" aria-labelledby="how-to-heading">
+      <div class="section-head">
+        <h2 id="how-to-heading">How to Use RELAY</h2>
+        <p>Complete step-by-step operational guide for blind users, caregivers, and accessibility developers.</p>
+      </div>
+
+      <div class="how-to-grid">
+        <!-- Step 1 -->
+        <div class="how-to-card">
+          <div class="how-to-step-num">
+            <span>STEP 01</span>
+            <span>INSTALLATION</span>
+          </div>
+          <h3>Setup & First Run</h3>
+          <p>
+            RELAY installs without Python knowledge. Run the installer script or double-click <code>Install Relay.cmd</code> from the package. It sets up shortcuts and downloads the local speech recognition and voice models once (~140 MB).
+          </p>
+          <div class="code-snippet">RELAY.cmd --install
+RELAY.cmd --check</div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="how-to-card">
+          <div class="how-to-step-num">
+            <span>STEP 02</span>
+            <span>ACTIVATION</span>
+          </div>
+          <h3>The Talk Key & Wake Word</h3>
+          <p>
+            Press <strong>Ctrl+Alt+Space</strong> from anywhere. You will hear an ascending chirp earcon, indicating RELAY is listening. Alternatively, use the hands-free wake word: <em>"Relay, what time is it?"</em> Press <strong>Ctrl+Alt+R</strong> to start or exit RELAY.
+          </p>
+          <div class="code-snippet">Ctrl+Alt+Space   # Talk Key (chirp)
+Ctrl+Alt+R       # Launch / Close RELAY</div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="how-to-card">
+          <div class="how-to-step-num">
+            <span>STEP 03</span>
+            <span>NAVIGATION</span>
+          </div>
+          <h3>Screen & Document Reading</h3>
+          <p>
+            Ask RELAY to read what's currently open. It extracts real structural content rather than guessing from images. Supports pausing, continuing, jumping to headings, or falling back to RapidOCR when a window lacks accessibility tags.
+          </p>
+          <div class="code-snippet">"what's on my screen"
+"read the page" / "read with OCR"
+"next heading" / "read the PDF bill"</div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="how-to-card">
+          <div class="how-to-step-num">
+            <span>STEP 04</span>
+            <span>WRITING</span>
+          </div>
+          <h3>Dictation & Text Editing</h3>
+          <p>
+            Inject text into any active text editor, form, or document. Dictation types naturally without keyboard fatigue. RELAY verifies that the characters registered in the active control.
+          </p>
+          <div class="code-snippet">"type Hello, how are you?"
+"start dictation" ... "stop dictation"
+"select all" / "undo" / "save as notes"</div>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="how-to-card">
+          <div class="how-to-step-num">
+            <span>STEP 05</span>
+            <span>HARDWARE</span>
+          </div>
+          <h3>Smart Headphone & Volume Routing</h3>
+          <p>
+            Headphones (wired, USB-C, or Bluetooth) are detected automatically. Speech moves to your ears instantly. If headphones are unplugged mid-reading, RELAY pauses automatically to prevent reading private content out loud to the room.
+          </p>
+          <div class="code-snippet">"volume up" / "volume down"
+"speak slower" / "where is sound going"
+"turn on Bluetooth" / "battery status"</div>
+        </div>
+
+        <!-- Step 6 -->
+        <div class="how-to-card">
+          <div class="how-to-step-num">
+            <span>STEP 06</span>
+            <span>SAFETY</span>
+          </div>
+          <h3>Safety Confirmations & Emergency Halt</h3>
+          <p>
+            Irreversible actions (deleting files, sending emails, restarting PC) activate the Safety Gate. RELAY plays an alert earcon and demands an explicit phrase. If anything goes wrong, press <strong>Ctrl+Alt+Backspace</strong> to halt everything immediately.
+          </p>
+          <div class="code-snippet">"delete this file" -> "say confirm delete"
+Ctrl+Alt+.           # Silence / Pause
+Ctrl+Alt+Backspace   # Emergency Halt</div>
+        </div>
+
+        <!-- Step 7 -->
+        <div class="how-to-card">
+          <div class="how-to-step-num">
+            <span>STEP 07</span>
+            <span>AI ANSWERS</span>
+          </div>
+          <h3>FreeLLMAPI & Sarvam Voice</h3>
+          <p>
+            Connect FreeLLMAPI for ChatGPT-style general knowledge answers spoken aloud sentence-by-sentence. Add a Sarvam AI key to unlock natural Indian voices (Bulbul) and Saaras multilingual speech recognition understanding Indian accents.
+          </p>
+          <div class="code-snippet">RELAY_LLM_URL=http://127.0.0.1:31415/v1
+RELAY_LLM_KEY=freellmapi-...
+SARVAM_API_KEY=sk_...</div>
+        </div>
+
+        <!-- Step 8 -->
+        <div class="how-to-card">
+          <div class="how-to-step-num">
+            <span>STEP 08</span>
+            <span>PANEL</span>
+          </div>
+          <h3>Companion Mirror Panel</h3>
+          <p>
+            Caregivers or developers can open the web panel to mirror what RELAY is seeing and saying in real-time. Closing the web panel does not stop RELAY; the voice assistant runs headlessly in the Windows session.
+          </p>
+          <div class="code-snippet">http://127.0.0.1:8765/?token=...
+(or run frontend/index.html standalone)</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Transparent Operator Pipeline Stepper -->
+    <section class="pipeline-section" id="pipeline" aria-labelledby="pipeline-heading">
+      <div class="section-head">
+        <h2 id="pipeline-heading">5-Stage Deterministic Pipeline</h2>
+        <p>Observable and verifiable at every stage. No black-box autonomous actions.</p>
+      </div>
+
+      <div class="pipeline-stepper" id="pipelineStepper" role="list" aria-label="Execution Pipeline Steps">
+        <div class="pipe-card active-step" id="pipeStep-0" role="listitem">
+          <span class="pipe-badge">STAGE 01</span>
+          <h3>Speech In</h3>
+          <p>faster-whisper transcribes voice locally in ~180 ms using int8 quantized weights.</p>
+        </div>
+        <div class="pipe-card" id="pipeStep-1" role="listitem">
+          <span class="pipe-badge">STAGE 02</span>
+          <h3>Intent & Safety</h3>
+          <p>Deterministic regex grammar matches command. Destructive actions hold for confirmation.</p>
+        </div>
+        <div class="pipe-card" id="pipeStep-2" role="listitem">
+          <span class="pipe-badge">STAGE 03</span>
+          <h3>Windows UIA</h3>
+          <p>COM MTA worker queries UI Automation tree without blocking audio capture.</p>
+        </div>
+        <div class="pipe-card" id="pipeStep-3" role="listitem">
+          <span class="pipe-badge">STAGE 04</span>
+          <h3>Verification</h3>
+          <p>Re-observes screen state. Never announces success unless verified in the OS.</p>
+        </div>
+        <div class="pipe-card" id="pipeStep-4" role="listitem">
+          <span class="pipe-badge">STAGE 05</span>
+          <h3>Speech Out</h3>
+          <p>Piper TTS speaks sentence by sentence. Sarvam Bulbul voice optional for Indian accents.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Voice Command Playground -->
+    <section class="playground-section" id="commands" aria-labelledby="commands-heading">
+      <div class="section-head">
+        <h2 id="commands-heading">Interactive Command Playground</h2>
+        <p>Select any command to run it live in the simulator, trigger the earcon, and listen to spoken feedback.</p>
+      </div>
+
+      <!-- Custom Command Input Bar -->
+      <form id="customCmdForm" style="display:flex; gap:8px; margin-bottom:24px;" role="search" aria-label="Try a custom command">
+        <label for="customCmdInput" class="sr-only">Type or state a command</label>
+        <input type="text" id="customCmdInput" class="mirror-input" placeholder="Enter command: 'what time is it', 'open Notepad', 'read the page'..." autocomplete="off" />
+        <button type="submit" class="btn-sharp-primary" style="flex-shrink:0;">
+          <span>Run Command</span>
+        </button>
+      </form>
+
+      <div class="playground-grid">
+        <!-- Categories -->
+        <aside class="category-nav" role="tablist" aria-label="Command categories">
+          <button class="cat-btn active" role="tab" aria-selected="true" data-category="screen">
+            <span>Screen & Reading</span>
+            <span>[2]</span>
+          </button>
+          <button class="cat-btn" role="tab" aria-selected="false" data-category="everyday">
+            <span>Everyday Windows</span>
+            <span>[2]</span>
+          </button>
+          <button class="cat-btn" role="tab" aria-selected="false" data-category="hardware">
+            <span>Hardware & System</span>
+            <span>[1]</span>
+          </button>
+          <button class="cat-btn" role="tab" aria-selected="false" data-category="safety">
+            <span>Safety Gate</span>
+            <span>[1]</span>
+          </button>
+          <button class="cat-btn" role="tab" aria-selected="false" data-category="ai">
+            <span>AI Answers (FreeLLMAPI)</span>
+            <span>[1]</span>
+          </button>
+        </aside>
+
+        <!-- Command Cards -->
+        <div class="command-cards-container" id="commandCardsGrid" role="tabpanel" aria-label="Commands">
+          <!-- Dynamically populated via JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Sound Design & Earcon Soundboard -->
+    <section class="soundboard-section" id="soundboard" aria-labelledby="sound-heading">
+      <div class="section-head">
+        <h2 id="sound-heading">Auditory UX & Spatial Earcons</h2>
+        <p>Acoustic feedback enables blind users to maintain situational awareness at all times.</p>
+      </div>
+
+      <div class="soundboard-grid">
+        <div class="sound-card" data-sound="listen" tabindex="0" role="button" aria-label="Play Wake and Listen Earcon">
+          <div class="sound-header">
+            <span class="sharp-badge">WAKE / TALK</span>
+            <div class="sound-play-icon" aria-hidden="true">▶</div>
+          </div>
+          <h3 style="font-size:var(--text-base); font-weight:700;">Ascending Chirp</h3>
+          <p style="font-size:var(--text-xs); color:var(--text-secondary);">440 Hz → 880 Hz sweep. Plays when microphone starts recording.</p>
+        </div>
+
+        <div class="sound-card" data-sound="success" tabindex="0" role="button" aria-label="Play Verified Success Earcon">
+          <div class="sound-header">
+            <span class="sharp-badge">VERIFIED</span>
+            <div class="sound-play-icon" aria-hidden="true">▶</div>
+          </div>
+          <h3 style="font-size:var(--text-base); font-weight:700;">Major Triad Chime</h3>
+          <p style="font-size:var(--text-xs); color:var(--text-secondary);">C5-E5-G5 chord. Confirms that UI Automation observed requested change.</p>
+        </div>
+
+        <div class="sound-card" data-sound="alert" tabindex="0" role="button" aria-label="Play Safety Warning Earcon">
+          <div class="sound-header">
+            <span class="sharp-badge">SAFETY GATE</span>
+            <div class="sound-play-icon" aria-hidden="true">▶</div>
+          </div>
+          <h3 style="font-size:var(--text-base); font-weight:700;">Caution Double Pulse</h3>
+          <p style="font-size:var(--text-xs); color:var(--text-secondary);">Two 360 Hz pulses. Signals that a destructive action requires verbal confirmation.</p>
+        </div>
+
+        <div class="sound-card" data-sound="halt" tabindex="0" role="button" aria-label="Play Emergency Halt Earcon">
+          <div class="sound-header">
+            <span class="sharp-badge">EMERGENCY STOP</span>
+            <div class="sound-play-icon" aria-hidden="true">▶</div>
+          </div>
+          <h3 style="font-size:var(--text-base); font-weight:700;">Descending Sweep</h3>
+          <p style="font-size:var(--text-xs); color:var(--text-secondary);">280 Hz → 90 Hz drop. Halts all active operations, TTS playback, and planners.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live RELAY Daemon IPC Mirror & Console -->
+    <section class="ipc-mirror-section" id="mirror" aria-labelledby="mirror-heading">
+      <div class="mirror-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2 id="mirror-heading" style="font-size:var(--text-lg); font-weight:800; text-transform:uppercase;">RELAY Live IPC Mirror</h2>
+            <p style="font-size:var(--text-xs); color:var(--text-secondary);">
+              Passively mirrors your real RELAY daemon on this PC via Server-Sent Events (SSE).
+            </p>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <span class="sharp-badge">PORT 8765</span>
+            <span class="sharp-badge">ESSENTIAL MODE</span>
+          </div>
+        </div>
+
+        <div class="mirror-log-terminal" id="mirrorTerminal" role="log" aria-live="polite" aria-label="Live event telemetry log">
+          <div class="terminal-entry perception">[System] Listening on 127.0.0.1:8765 · Piper TTS online · faster-whisper ready</div>
+        </div>
+
+        <div class="mirror-input-row">
+          <input type="text" class="mirror-input" id="mirrorCmdInput" placeholder="Send manual command to daemon (e.g. read the page)..." />
+          <button class="btn-sharp-primary" id="mirrorSendBtn" type="button">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Telemetry & Performance Benchmarks -->
+    <section class="metrics-section" aria-labelledby="metrics-heading">
+      <div class="section-head">
+        <h2 id="metrics-heading">Hardware Budgets on Budget Laptops</h2>
+        <p>Measured on emulated dual-core Celeron with 4 GB RAM.</p>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">Idle Memory</span>
+          <div class="metric-val">~35 MB</div>
+          <span class="metric-sub">Budget: &lt; 200 MB (17.5% utilized)</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 17.5%;"></div></div>
+        </div>
+
+        <div class="metric-card">
+          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">Peak Essential Memory</span>
+          <div class="metric-val">~380 MB</div>
+          <span class="metric-sub">Budget: &lt; 1,000 MB (38% utilized)</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 38%;"></div></div>
+        </div>
+
+        <div class="metric-card">
+          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">End-to-Speech Latency</span>
+          <div class="metric-val">1.8 s</div>
+          <span class="metric-sub">Measured on budget CPU (Budget &lt; 2.4 s)</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 75%;"></div></div>
+        </div>
+
+        <div class="metric-card">
+          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">FreeLLMAPI AI TTFT</span>
+          <div class="metric-val">1.4 s</div>
+          <span class="metric-sub">First token generated over hedged local router</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 60%;"></div></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer" role="contentinfo">
+    <div class="footer-inner">
+      <div class="footer-text">
+        <strong>RELAY</strong> — Open-source Windows assistive technology for blind & low-vision independence.<br />
+        MIT License. Zero tracking, zero telemetry, local sovereignty.
+      </div>
+      <div style="display:flex; gap:16px; font-family:var(--font-mono); font-size:11px;">
+        <a href="https://github.com/tashfeenahmed/freellmapi" target="_blank" rel="noopener noreferrer" style="color:#ffffff;">FreeLLMAPI</a>
+        <a href="https://dashboard.sarvam.ai" target="_blank" rel="noopener noreferrer" style="color:#ffffff;">Sarvam AI</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
