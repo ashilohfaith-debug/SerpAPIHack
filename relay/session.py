@@ -73,7 +73,7 @@ class Session:
     def __init__(self, speak=None, bus=None, db_path: str = ":memory:", speech=None,
                  apps=None, on_quit: Callable[[], None] | None = None,
                  on_wake_word: Callable[[bool], None] | None = None,
-                 talk_key: str = "ctrl+alt+space") -> None:
+                 talk_key: str = "ctrl+alt+space", assistant=None) -> None:
         self.emergency = EmergencyStop()
         self.cancel = threading.Event()
         self._speak = speak
@@ -81,6 +81,9 @@ class Session:
         self.speech = speech                # SpeechQueue (live app) or None (tests/CLI)
         self.on_quit = on_quit
         self.on_wake_word = on_wake_word
+        self.assistant = assistant          # optional conversational AI (relay.llm)
+        self._answer_cancel = threading.Event()
+        self._from_assistant = False
         self.talk_key = talk_key
         self.worker = UIAWorker(bus=bus)
         self.worker.start()
@@ -243,11 +246,67 @@ class Session:
                 self.say(f"Did you mean: {phrase}? Say yes or no.", _REQ)
                 self.offer(lambda: self.handle(phrase))
                 return []
+            if self.assistant is not None and not self._from_assistant:
+                return self.ask(utterance)
             self.say(f"Sorry, I didn't understand \"{utterance.strip()}\". "
                      "Say help to hear what I can do.", _REQ)
             return []
         self.last_activity = intent.kind
         return self.runner.run(steps, cancel=self.cancel)
+
+    # ---- conversational assistant ----
+    def ask(self, question: str, page_text: str = ""):
+        """Stream an AI answer, speaking each sentence the moment it's complete. A
+        suggested command is announced and then run through the normal safety gate."""
+        if self.assistant is None:
+            self.say("The AI assistant isn't set up on this computer, so I can only do "
+                     "my built-in commands. Say help to hear them.", _REQ)
+            return []
+        self._answer_cancel.clear()
+        first = threading.Event()
+
+        def speak(sentence: str) -> None:
+            if self._answer_cancel.is_set():
+                return
+            first.set()
+            self._speak_part(sentence, None)
+
+        def thinking_cue() -> None:            # a soft tick if the answer is slow to start
+            if not first.is_set() and self.speech is not None:
+                from relay.audio.earcons import earcon
+                self.speech.play(*earcon("heard"))
+        cue = threading.Timer(1.2, thinking_cue)
+        cue.daemon = True
+        cue.start()
+        try:
+            kind, payload = self.assistant.respond(
+                question, speak, context=self._assistant_context(), page_text=page_text,
+                cancel=self._answer_cancel)
+        finally:
+            cue.cancel()
+        if kind == "command" and payload:
+            self.say(f"I understood that as: {payload}.", _REQ)
+            self._from_assistant = True
+            try:
+                return self.handle(payload)
+            finally:
+                self._from_assistant = False
+        if kind == "offline":
+            self.say("I can't reach the AI assistant right now, so I can only do my "
+                     "built-in commands. Say help to hear them.", _REQ)
+        elif payload:
+            self.runner.last_said = payload     # so "repeat" repeats the answer
+        self.last_activity = "answer"
+        return []
+
+    @staticmethod
+    def _assistant_context() -> str:
+        try:
+            from relay.system.windows import _friendly_app, foreground
+            fg = foreground()
+            return f"The user is currently in {_friendly_app(fg.app)}." if fg else ""
+        except Exception:
+            return ""
 
     # ---- confirmation flow ----
     def _on_confirm_needed(self, decision, target_label, retry) -> None:
@@ -416,7 +475,9 @@ class Session:
 
     # ---- control words ----
     def stop_speaking(self) -> None:
-        """Silence RELAY and pause any reading (talk-key / stop-key / 'stop')."""
+        """Silence RELAY, pause any reading and stop a streaming answer
+        (talk-key / stop-key / 'stop')."""
+        self._answer_cancel.set()
         self.reader.stop()
         self._interrupt_speech()
 
@@ -427,6 +488,7 @@ class Session:
         if command == Command.EMERGENCY_STOP:
             self.emergency.engage("user")
             self.cancel.set()
+            self._answer_cancel.set()
             self._pending = None
             self.reader.stop()
             self.set_dictation(False)
@@ -434,6 +496,7 @@ class Session:
                      "to work again.", pol.Priority.CRITICAL)
         elif command == Command.CANCEL_TASK:
             self.cancel.set()
+            self._answer_cancel.set()
             self._pending = None
             self._offer = None
             self._capture = None

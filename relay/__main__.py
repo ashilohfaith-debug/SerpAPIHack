@@ -157,6 +157,12 @@ def _start(panel: bool = False) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from relay.envfile import load_env
+    load_env()                    # the developer's keys/settings from .env (optional)
+    return _main(argv)
+
+
+def _main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="relay", description="RELAY accessibility assistant")
     p.add_argument("--version", action="version", version=f"relay {__version__}")
     p.add_argument("--selftest", action="store_true", help="verify core wiring and exit")
@@ -202,6 +208,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--check", action="store_true",
                    help="check everything works on this computer (spoken result)")
     p.add_argument("--quiet", action="store_true", help="with --check: don't speak the result")
+    p.add_argument("--llm-check", action="store_true",
+                   help="measure the AI assistant's latency through your router")
     p.add_argument("--demo-daily", action="store_true",
                    help="safe offline demo of everyday skills (time, battery, maths, notes...)")
     args = p.parse_args(argv)
@@ -277,6 +285,9 @@ def main(argv: list[str] | None = None) -> int:
         from relay.app import speak_once
         speak_once(args.say)
         return 0
+    if args.llm_check:
+        from relay.demo import llm_check
+        return llm_check()
     if args.check:
         from relay.diagnostics import setup_logging
         from relay.health import main as check_main

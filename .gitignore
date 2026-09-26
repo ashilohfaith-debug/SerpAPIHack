@@ -25,3 +25,5 @@ review-receipts/
 # never commit key material of any kind
 *.key
 *.pfx
+# local settings with keys (see .env.example)
+.env

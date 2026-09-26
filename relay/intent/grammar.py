@@ -104,6 +104,8 @@ class Kind:
     QUIT = "quit"
     PICK = "pick"           # "open the second one" — from the last list RELAY read out
     SEND = "send"           # send the message being written (always read back + confirmed)
+    ASK = "ask"             # a question for the conversational assistant
+    SUMMARIZE = "summarize" # "summarise this page" — the page text goes to the assistant
     UNKNOWN = "unknown"
 
 
@@ -353,6 +355,17 @@ def parse(utterance: str) -> Intent:
                  r"(?:reminders|timers|alarms)\b|\bdo i have (?:any )?(?:reminders|timers)\b|"
                  r"^(?:my )?reminders$", low):
         return I(Kind.LIST_REMINDERS)
+
+    # ---- the conversational assistant ----
+    m = re.match(r"^(?:ask|question|ask relay|ask the (?:ai|assistant))[\s:,]+(.+)$", keep)
+    if m:
+        return I(Kind.ASK, text=payload_after(raw, r"ask(?: relay| the ai| the assistant)?"
+                                                   r"|question") or m.group(1))
+    if re.search(r"\b(?:summari[sz]e|sum up|give me (?:a |the )?summary of|tl ?;? ?dr)\b|"
+                 r"\bwhat(?:'s| is) this (?:page|article|email|mail|document|pdf|message)"
+                 r"(?: all)? about\b|\bexplain (?:this|the) (?:page|article|email|mail|"
+                 r"document|pdf|message|screen)\b", low):
+        return I(Kind.SUMMARIZE, request=raw)
 
     # ---- reading ----
     if re.search(r"\b(?:read|what(?:'s| is) (?:in|on)) (?:the |my )?clipboard\b|"

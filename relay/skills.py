@@ -798,6 +798,28 @@ class Skills:
             return
         self.say(pol.describe(snap, self.s.narration_mode))
 
+    # ---------------------------------------------------------------- AI assistant
+    def k_ask(self, i):
+        return self.s.ask(i.slots.get("text", ""))
+
+    def k_summarize(self, i):
+        if self.s.assistant is None:
+            self.say("Summaries need the AI assistant, which isn't set up on this computer. "
+                     "Do you want me to read the page instead? Say yes or no.")
+            self.s.offer(lambda: self.k_read_all(type(i)(Kind.READ_ALL, {"language": ""})))
+            return
+        self.say("Getting the text.", pol.Priority.FOCUS)
+        title, body = self._document()
+        if not body:
+            body = self._ocr_text()
+        if not body:
+            self.say("I couldn't find any text on this screen to summarise.")
+            return
+        from relay.memory.store import looks_sensitive
+        body = "\n".join(ln for ln in body.splitlines() if not looks_sensitive(ln))
+        request = i.slots.get("request") or "Summarise this page."
+        return self.s.ask(f"{request} (Page title: {_short_title(title)})", page_text=body)
+
     # ---------------------------------------------------------------- typing / saving
     def k_type(self, i):
         text = apply_spoken_punctuation(i.slots.get("text", ""))

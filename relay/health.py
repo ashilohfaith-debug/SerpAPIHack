@@ -156,6 +156,56 @@ def _single_instance():
                   "(that's fine)")
 
 
+def _online_checks(state) -> list[Check]:
+    """Services configured in .env (skipped when not configured)."""
+    out: list[Check] = []
+    from relay.sarvam import SarvamClient, float_to_wav, settings
+    sv = settings()
+    if sv["key"]:
+        client = SarvamClient(sv["key"], base=sv["base"])
+
+        def sarvam_voice():
+            client.warm()
+            t = time.perf_counter()
+            audio, sr = client.tts("Relay online voice check.", sv["language"],
+                                   speaker=sv["speaker"], model=sv["tts_model"])
+            state["sarvam_audio"] = (audio, sr)
+            return len(audio) > 0, (f"{sv['tts_model']} {sv['speaker'] or 'default voice'}, "
+                                    f"{sv['language']}: {time.perf_counter() - t:.2f}s per "
+                                    "sentence")
+        out.append(_run("Sarvam voice (online)", sarvam_voice))
+        if sv["stt"]:
+            def sarvam_stt():
+                import numpy as np
+                audio, sr = state["tts"].synth_to_array("what time is it")
+                if sr != 16000:
+                    n = int(len(audio) * 16000 / sr)
+                    audio = np.interp(np.linspace(0, len(audio), n, endpoint=False),
+                                      np.arange(len(audio)), audio).astype(np.float32)
+                t = time.perf_counter()
+                text, lang = client.stt(float_to_wav(audio), mode="translate",
+                                        model=sv["stt_model"])
+                return "time" in text.lower(), (f"heard {text!r} ({lang}) in "
+                                                f"{time.perf_counter() - t:.2f}s")
+            if "tts" in state:
+                out.append(_run("Sarvam speech recognition (online)", sarvam_stt))
+    from relay.config import Config
+    from relay.llm import Router, routes_from_config
+    routes = routes_from_config(Config.load())
+    if routes:
+        def assistant():
+            router = Router(routes)
+            t = time.perf_counter()
+            text = "".join(router.stream([{"role": "user",
+                                           "content": "Reply with just the word ready."}],
+                                         max_tokens=10))
+            return bool(text.strip()), (f"first token {router.last_ttft:.2f}s via "
+                                        f"{router.last_route}, done "
+                                        f"{time.perf_counter() - t:.2f}s")
+        out.append(_run("AI assistant router (online)", assistant))
+    return out
+
+
 def run_checks(speak: bool = True) -> list[Check]:
     lookups: list[str] = []
     real_getaddrinfo = socket.getaddrinfo
@@ -186,9 +236,10 @@ def run_checks(speak: bool = True) -> list[Check]:
         ]
     finally:
         socket.getaddrinfo = real_getaddrinfo
-    results.append(Check("Works offline (no network used)", not lookups,
-                         "no network lookups during the check" if not lookups
+    results.append(Check("Offline parts use no network", not lookups,
+                         "no network lookups during the checks above" if not lookups
                          else "looked up: " + ", ".join(sorted(set(lookups)))))
+    results += _online_checks(state)
     if speak and "tts" in state:
         failed = [r.name for r in results if not r.ok]
         line = ("All checks passed. Relay is ready to use." if not failed else

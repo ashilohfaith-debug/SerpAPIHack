@@ -48,7 +48,14 @@ def main() -> int:
         stop.wait(min(0.4, len(audio) / sr / 4))
 
     speech = SpeechQueue(tts, player=silent_player)
-    s = Session(speak=lambda t: (spoken.append(t), speech.say(t)), db_path=":memory:")
+    from relay.config import Config
+    from relay.envfile import load_env
+    from relay.llm import Assistant, Router, routes_from_config
+    load_env()
+    routes = routes_from_config(Config.load())         # AI answers too, if a router is set
+    assistant = Assistant(Router(routes)) if routes else None
+    s = Session(speak=lambda t: (spoken.append(t), speech.say(t)), db_path=":memory:",
+                assistant=assistant)
     d = Dispatcher(s)
     loop = VoiceLoop(d.submit, stt=WhisperSTT(), speech=speech, wake_required=True,
                      threaded=False)
@@ -78,6 +85,8 @@ def main() -> int:
         ("What's the date today?", True, "Today is"),           # push-to-talk, no wake word
         ("Open notepad and type something.", False, None),       # NOT addressed: ignored
     ]
+    if assistant is not None:        # not a built-in command: answered by the AI router
+        cases.insert(-1, ("Relay, what is the capital of Japan?", False, "Tokyo"))
     ok_all = True
     try:
         for text, ptt, expect in cases:

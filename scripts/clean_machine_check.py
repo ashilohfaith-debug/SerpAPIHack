@@ -112,6 +112,7 @@ def clean_env(data_dir: Path, cache: Path) -> dict:
     keep["HF_HOME"] = str(cache)
     keep["HTTP_PROXY"] = keep["HTTPS_PROXY"] = "http://127.0.0.1:9"
     keep["NO_PROXY"] = ""
+    keep["RELAY_OFFLINE"] = "1"      # a bundled .env must not turn this offline proof online
     return keep
 
 

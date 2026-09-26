@@ -50,9 +50,19 @@ Dev/packaging only: pytest, ruff, pyinstaller (all permissive).
 | Piper voice `en_US-lessac-medium` (earlier default) | Blizzard 2013 Lessac data: **research use only, no commercial use** | fine for testing; do not ship publicly |
 
 ## External services
-None. RELAY calls no web API and needs no key or account. (The one-time model download
-with `--setup-models` fetches the Piper voice and Whisper model files from Hugging Face;
-a packaged build ships them, so an end user never downloads anything.)
+None by default: without a `.env` file RELAY calls no web API and needs no key or
+account. (The one-time model download with `--setup-models` fetches the Piper voice and
+Whisper model files from Hugging Face; a packaged build ships them, so an end user never
+downloads anything.)
+
+Optional, only when the developer configures them in `.env` (`docs/AI_AND_VOICE.md`):
+
+| Service | Used for | Client code | Terms to check before a public release |
+|---|---|---|---|
+| FreeLLMAPI (MIT, self-hosted router) or any OpenAI-compatible `/v1` endpoint | AI answers | `relay/llm/` (stdlib `http.client`, no SDK) | FreeLLMAPI is described as local-first, single-user, personal experimentation; each upstream free provider has its own terms |
+| Sarvam AI API | Bulbul voice, Saaras recognition | `relay/sarvam/` (stdlib, no SDK) | Sarvam's API terms and pricing |
+
+No new Python dependency was added for either.
 
 ## Reference projects (audited, see NOTICE)
 - **screen-use** (MIT), **clacky** (MIT) — small components/patterns adapted, with attribution in `NOTICE`.

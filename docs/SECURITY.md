@@ -8,12 +8,25 @@ references) and the honest limits.
 - **Local by default.** No screenshots, audio, documents or activity are transmitted
   anywhere. Essential mode has no network dependency at all. (Status questions like
   "am I online" ask Windows locally — no packets are sent.)
-- **No keys, no accounts, no cloud.** RELAY contains no API client and needs no key or
-  sign-in. Speech recognition (faster-whisper), the voice (Piper) and screen reading
-  (UI Automation) all run locally. Once the models are on disk the speech model is loaded
-  with `local_files_only` so start-up makes no network request (`relay/audio/stt.py`);
-  `relay --check` verifies that no network lookup happens, and a test runs the everyday
-  commands with networking blocked (`tests/test_daily.py`).
+- **No keys, no accounts, no cloud by default.** Without a `.env` file RELAY makes no
+  network request and needs no key or sign-in. Speech recognition (faster-whisper), the
+  voice (Piper) and screen reading (UI Automation) all run locally. Once the models are
+  on disk the speech model is loaded with `local_files_only` so start-up makes no
+  network request (`relay/audio/stt.py`); `relay --check` verifies that the offline parts
+  make no network lookup, and a test runs the everyday commands with networking blocked
+  (`tests/test_daily.py`).
+- **Optional online extras (developer's `.env`).** AI answers (FreeLLMAPI / any
+  OpenAI-compatible router) and the Sarvam voice/recogniser are off unless the developer
+  fills in `.env`; `RELAY_OFFLINE=1` forces them off. When on: built-in commands still
+  never touch the network; only requests the offline grammar can't handle are sent;
+  page text only on "summarise this page" (password-like lines removed); anything that
+  looks like a password or code is never sent (`relay/llm/assistant.py`,
+  `relay/sarvam/voice.py`); with online recognition the wake word is checked locally
+  first, so room conversation is never uploaded (`relay/loop.py::on_utterance`). An
+  AI-suggested action must parse with the offline grammar, can never be a confirmation /
+  emergency / quit / delete phrase, is announced, and still passes the permission gate.
+  Keys are never logged, spoken or shown in `repr`. Details and the risks of shipping one
+  key to every user: `docs/AI_AND_VOICE.md`.
 - **No screenshot retention.** Screen state (L1) lives in RAM and is replaced, not
   stored (`relay/perception/worker.py`). OCR captures are used and discarded.
 - **Secret redaction in logs.** The logger drops password/OTP/token-shaped values

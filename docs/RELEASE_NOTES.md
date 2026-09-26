@@ -1,5 +1,46 @@
 # RELAY — release notes
 
+## 0.3.0 — Instant AI answers and the Sarvam voice (optional, one `.env` file)
+
+Still works with no keys, fully offline. New, and only when the developer fills in
+`.env` once (users never need a key of their own — this is not bring-your-own-key):
+
+### Ask anything, answered like a conversation
+- Anything the built-in commands don't cover goes to an AI router — FreeLLMAPI or any
+  OpenAI-compatible `/v1` endpoint — and the answer is **spoken sentence by sentence
+  while it is still being written**. "summarise this page" / "what is this email about"
+  summarise what's on screen; follow-up questions keep context; "ask …" forces a question.
+- Latency first: streaming, persistent connections opened at start-up, synthesis of the
+  next sentence while the current one plays, and **hedged routing** (race `auto:fast`
+  and `auto`; fail over at once on errors; rest a rate-limited route; give up after 6 s
+  and keep working offline). With a simulated 0.35 s router, first audio is ready in
+  **0.65–0.73 s**; `relay --llm-check` measures real providers.
+- An AI-suggested action (`DO: …`) must parse with the offline grammar, can never be a
+  confirmation / emergency / quit / delete phrase, is announced, and still passes the
+  permission gate.
+
+### Sarvam voice and recognition
+- `SARVAM_API_KEY` switches RELAY's voice to Sarvam Bulbul (any failure falls back to
+  the offline voice for that sentence, and RELAY says so once). Passwords and codes are
+  always spoken by the offline voice.
+- `SARVAM_STT=on` adds Saaras recognition (Indian accents; Indian languages translated
+  to English commands). The wake word is checked on the laptop first, so room
+  conversation is never uploaded.
+- `SARVAM_BASE_URL` lets a public build talk to your own gateway instead of carrying
+  the real key.
+
+### Also
+- `.env.example` (tracked) → `.env` (git-ignored, bundled by `build.ps1` with a warning).
+  `RELAY_OFFLINE=1` ignores every key.
+- `relay --check` adds Sarvam voice, Sarvam recognition and AI router checks when
+  configured, after proving the offline parts use no network.
+- Fixed: after "stop", an online-voice request still in flight no longer keeps the
+  microphone deaf; the router cancels a losing stream by closing its socket at once.
+- The public-domain voice `en_US-ljspeech-medium` is now downloaded and active.
+- Tests: 244 pass, including the real wire formats against local mock servers.
+  Live checks: end-to-end voice 9/9 (with an AI answer), assembled app 11/11 offline
+  and 11/11 with online services (mocked), window operations 7/7.
+
 ## 0.2.1 — No keys, basic laptops, works when opened
 
 ### No keys, no accounts, no cloud

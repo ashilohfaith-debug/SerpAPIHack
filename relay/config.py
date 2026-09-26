@@ -62,9 +62,16 @@ class Config:
     # narration
     narration_mode: str = "quick"  # quick | detailed | guided | quiet
     # runtime
-    mode: str = "essential"  # essential | enhanced | advanced (all local, no keys)
+    mode: str = "essential"  # essential | enhanced | advanced
     log_level: str = "INFO"
     custom_vocabulary: list[str] = field(default_factory=list)
+    # optional conversational AI via an OpenAI-compatible router (e.g. FreeLLMAPI) or
+    # the developer's gateway in front of it. Users never bring their own key. Empty
+    # URL = off; offline commands always work either way.
+    llm_url: str = ""                      # e.g. http://localhost:3001/v1
+    llm_key: str = ""                      # the router's/gateway's key (dev-owned)
+    llm_models: list[str] = field(default_factory=lambda: ["auto:fast", "auto"])
+    llm_timeout: float = 20.0
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:

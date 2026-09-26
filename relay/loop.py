@@ -144,6 +144,9 @@ class VoiceLoop:
             stt = WhisperSTT()
         self.dispatch = dispatch
         self.stt = stt
+        # With an online recogniser, the wake word is first checked by this local one,
+        # so room conversation is never uploaded — only speech addressed to RELAY.
+        self.wake_stt = None
         self.speech = speech
         self.wake_enabled = wake_required
         self.bus = bus
@@ -167,8 +170,10 @@ class VoiceLoop:
     def _reset(self) -> None:
         if self._custom_seg:
             self.seg = self._seg_factory()
-        else:   # prompted: sensitive; waiting for the wake word: aggressive (noise-proof)
-            self.seg = SpeechSegmenter(aggressiveness=2 if self._armed else 3)
+        elif self._armed:   # talk key: sensitive VAD, and end the command after 0.45 s quiet
+            self.seg = SpeechSegmenter(aggressiveness=2, end_frames=15)
+        else:               # waiting for the wake word: aggressive, noise-proof, 0.6 s
+            self.seg = SpeechSegmenter(aggressiveness=3, end_frames=20)
         self._preroll: collections.deque[bytes] = collections.deque(maxlen=PREROLL_FRAMES)
         self._buf = bytearray()
         self._in_utt = False
@@ -281,7 +286,29 @@ class VoiceLoop:
         if not pcm_bytes:
             return
         audio = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        gated = False
         try:
+            local = self.wake_stt
+            if (not prompted and local is not None and local is not self.stt
+                    and not self._open_mic()):
+                local_text = local.transcribe(audio)
+                woke, rest = detect_wake(local_text)
+                if not woke and self.wake_enabled:
+                    # "Really, what time is it?" counts only when the rest is a real
+                    # command — so room talk that starts with "really" is never uploaded
+                    near, near_rest = detect_wake_near_miss(local_text)
+                    if near and near_rest:
+                        from relay.intent import Kind, parse
+                        woke = parse(near_rest).kind != Kind.UNKNOWN
+                        rest = near_rest
+                if not woke or not self.wake_enabled:
+                    self._state("idle")
+                    return                         # not for RELAY: nothing is uploaded
+                if not rest:
+                    self._state("idle")
+                    self._rearm()
+                    return
+                prompted = gated = True            # addressed to RELAY: use the online one
             text = self.stt.transcribe(audio)
         except Exception as e:  # a bad decode must not kill the loop
             log.warning("STT failed: %s", e)
@@ -289,6 +316,10 @@ class VoiceLoop:
                 self._say("Sorry, I couldn't process that. Please try again.")
             self._state("idle")
             return
+        if gated:                                  # drop "Really," the online one also heard
+            near, near_rest = detect_wake_near_miss(text or "")
+            if near and near_rest and not detect_wake(text)[0]:
+                text = near_rest
         self._state("idle")
         self.on_transcript(text, prompted)
 

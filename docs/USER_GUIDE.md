@@ -111,6 +111,23 @@ RELAY only uses the internet when *you* ask for something on the web — and the
 your own browser that goes online. It speaks English for now; if you ask it to speak
 another language it tells you so plainly.
 
+If whoever set up RELAY turned on the online extras (section 13a), the only things that
+leave the computer are: questions RELAY's own commands can't answer, the page text when
+you say "summarise this page", and — with Sarvam recognition on — what you say right
+after "Relay" or the talk key. Never passwords or codes, never room conversation.
+
+## 13a. Asking anything (if the AI assistant is set up)
+Ask RELAY anything its built-in commands don't cover, the way you'd ask a person:
+"what's a good name for a cat" · "explain what an index fund is" · "how do I make
+lemon rice" · "ask why is the sky blue". The answer usually starts within a second or
+two and is spoken sentence by sentence; "stop" cuts it off, "repeat" says it again.
+Follow-up questions work ("and in winter?").
+- "summarise this page" / "what is this email about" — a short spoken summary of what's
+  on screen.
+- If you ask it to *do* something ("could you check the clock for me"), RELAY says
+  "I understood that as: what time is it" and does it the normal, safe way.
+- If the internet is down, RELAY says so and all its own commands keep working.
+
 ## 14. Getting help
 "help" · "help with reading" · "help with the web" · "help with typing" · "help with
 apps" · "help with files" · "help with system" · "help with notes" · "what apps do

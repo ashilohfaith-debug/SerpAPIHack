@@ -7,10 +7,17 @@ changed. It is a **transparent operator, not an autonomous agent**: it acts only
 you ask, announces every action before doing it, and never claims success it didn't
 observe.
 
-**No keys, no accounts, no cloud.** Everything — speech recognition, the voice, screen
-reading — runs on the laptop, offline, and is built for basic hardware: ~35 MB idle,
-~400 MB peak, and about 2.5 s from the end of a spoken command to the first word of the
-answer on an emulated budget dual-core laptop (measured; see `docs/PERFORMANCE.md`).
+**Works with no keys, no accounts, no cloud.** Everything — speech recognition, the
+voice, screen reading — runs on the laptop, offline, and is built for basic hardware:
+~35 MB idle, ~400 MB peak, and about 2.5 s from the end of a spoken command to the first
+word of the answer on an emulated budget dual-core laptop (measured; see
+`docs/PERFORMANCE.md`).
+
+**Optional online extras, set up once by the developer** (users never need a key):
+ChatGPT-style spoken answers to anything through FreeLLMAPI or any OpenAI-compatible
+router, and Sarvam's natural Indian voice. Copy `.env.example` to `.env`, paste the
+keys — see **[docs/AI_AND_VOICE.md](docs/AI_AND_VOICE.md)**. If the internet or a
+service fails, RELAY carries on offline.
 
 ## What a user can do (examples)
 | Need | Say |
@@ -24,6 +31,7 @@ answer on an emulated budget dual-core laptop (measured; see `docs/PERFORMANCE.m
 | Everyday | "what is 15 percent of 2 lakh" · "take a note buy milk" · "read my notes" · "remind me in 10 minutes to call mom" |
 | Control | "volume up" · "set volume to 40 percent" · "pause music" · "next track" · "speak slower" |
 | Safety | "stop" · "cancel" · "emergency stop" · risky actions need a spoken phrase ("confirm send", "confirm delete") |
+| Ask anything (AI extra) | "what's a good name for a cat" · "explain what an index fund is" · "summarise this page" · "ask why is the sky blue" |
 
 Full list: **[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**. English only for now.
 
@@ -50,7 +58,8 @@ A packaged build (no Python needed) is described in `docs/PACKAGING.md`.
 
 ## Checks you can run
 ```bash
-uv run python -m relay --check               # this computer: models, voice, mic, keys, screen, offline
+uv run python -m relay --check               # this computer: models, voice, mic, keys, screen, offline (+ online extras if set)
+uv run python -m relay --llm-check           # AI answers: first token / first sentence / first audio
 uv run pytest -m "not integration"          # unit/behaviour tests
 uv run python scripts/e2e_voice.py           # speech in -> action -> speech out, no mic
 uv run python scripts/bench_basic_laptop.py  # emulated low-end laptops (CPU + 1 GB caps)

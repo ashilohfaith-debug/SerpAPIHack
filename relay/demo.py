@@ -331,6 +331,68 @@ def daily_demo() -> int:
     return 0
 
 
+def llm_check() -> int:
+    """Measure the conversational assistant end to end through the configured router:
+    time to first token, time to the first spoken sentence, and to first AUDIO (with
+    RELAY's own voice synthesis) — the number a user actually feels."""
+    from relay.config import Config
+    from relay.llm import Assistant, Router, routes_from_config
+    setup_logging("WARNING")
+    routes = routes_from_config(Config.load())
+    if not routes:
+        print("No AI router configured. Put these in the .env file next to RELAY.cmd:\n"
+              "  RELAY_LLM_URL=http://localhost:3001/v1\n"
+              "  RELAY_LLM_KEY=freellmapi-...   (the unified key from its dashboard)")
+        return 2
+    router = Router(routes)
+    router.warm()
+    asst = Assistant(router)
+    tts = None
+    try:
+        from relay.audio import make_tts
+        tts = make_tts(prefer_piper=True)
+        from relay.sarvam import SarvamClient, SarvamTTS, settings
+        sv = settings()
+        if sv["key"]:                    # measure with the voice the user will hear
+            client = SarvamClient(sv["key"], base=sv["base"])
+            client.warm()
+            tts = SarvamTTS(client, tts, language=sv["language"], speaker=sv["speaker"],
+                            model=sv["tts_model"], on_fallback=print)
+        tts.synth_to_array("warm up")
+        print(f"voice: {'Sarvam ' + sv['tts_model'] if sv['key'] else type(tts).__name__}")
+    except Exception as e:
+        print("voice unavailable for timing:", e)
+    ok = True
+    for q in ("Say hello in five words.", "What is the capital of Japan?",
+              "Give me one short tip for staying focused.", "tell me a very short joke"):
+        t0 = time.perf_counter()
+        first = {}
+
+        def speak(sentence, t0=t0, first=first):
+            if "t" not in first:
+                first["t"] = time.perf_counter() - t0
+                if tts is not None:
+                    tts.synth_to_array(sentence)
+                    first["audio"] = time.perf_counter() - t0
+        kind, text = asst.respond(q, speak)
+        total = time.perf_counter() - t0
+        if kind == "offline":
+            ok = False
+            print(f"  [XX] {q!r}: no route answered")
+            continue
+        print(f"  [OK ] {q!r}\n        first token {router.last_ttft:.2f}s via "
+              f"{router.last_route} | first sentence {first.get('t', total):.2f}s | "
+              f"first audio {first.get('audio', total):.2f}s | done {total:.2f}s\n"
+              f"        {kind}: {text[:120]!r}")
+    print("\nroute health (learned first-token time):")
+    for r in router.routes:
+        h = router.health[r.name]
+        cool = max(0.0, h.cool_until - time.monotonic())
+        print(f"  {r.name:12} {h.ttft:5.2f}s  failures={h.failures}"
+              + (f"  cooling {cool:.0f}s" if cool else ""))
+    return 0 if ok else 1
+
+
 def panel_run() -> int:
     """Start the optional accessible panel (authenticated loopback HTTP+SSE) and keep
     the core running. Closing the panel does not stop RELAY."""
