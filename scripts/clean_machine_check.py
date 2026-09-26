@@ -113,6 +113,7 @@ def clean_env(data_dir: Path, cache: Path) -> dict:
     keep["HTTP_PROXY"] = keep["HTTPS_PROXY"] = "http://127.0.0.1:9"
     keep["NO_PROXY"] = ""
     keep["RELAY_OFFLINE"] = "1"      # a bundled .env must not turn this offline proof online
+    keep["RELAY_PALETTE"] = "0"      # no on-screen palette from this background test
     return keep
 
 
@@ -121,7 +122,8 @@ def main() -> int:
     if not (src / "relay-cli.exe").exists():
         print("No packaged build found — run packaging/build.ps1 first.")
         return 2
-    work = Path(tempfile.mkdtemp(prefix="relay_clean_"))
+    (ROOT / "build").mkdir(exist_ok=True)       # same drive as dist; never fills up C:
+    work = Path(tempfile.mkdtemp(prefix="relay_clean_", dir=str(ROOT / "build")))
     app = work / "Relay"
     shutil.copytree(src, app)
     data, cache = work / "userdata", work / "cache"
@@ -181,7 +183,12 @@ def main() -> int:
     for k, v in results.items():
         print(f"  [{'PASS' if v else 'FAIL'}] {k}")
     ok = all(results.values())
-    print("PASSED" if ok else "FAILED", f"(scratch copy: {work})")
+    if "--keep" in sys.argv:
+        print("PASSED" if ok else "FAILED", f"(scratch copy kept: {work})")
+    else:
+        time.sleep(1)                              # let the test instance release files
+        shutil.rmtree(work, ignore_errors=True)    # ~600 MB: never leave it behind
+        print("PASSED" if ok else "FAILED", "(scratch copy removed; --keep to inspect)")
     return 0 if ok else 1
 
 

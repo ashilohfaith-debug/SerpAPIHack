@@ -10,6 +10,7 @@ startup (no microphone, a hotkey taken by another program) is SPOKEN, not printe
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 
@@ -129,7 +130,8 @@ class RelayApp:
         # the on-screen palette: status light, "You: …" / "Relay: …", On/Off, Talk, ✕
         self._voice_state = "idle"
         self.palette = None
-        if self.session.store.get_pref("palette", default="1") == "1":
+        if (os.environ.get("RELAY_PALETTE", "1") != "0"
+                and self.session.store.get_pref("palette", default="1") == "1"):
             from relay.ui.palette import Palette
             self.palette = Palette(status=self._palette_status,
                                    on_toggle=lambda: self._palette_say(

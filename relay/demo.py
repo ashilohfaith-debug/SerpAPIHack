@@ -169,10 +169,20 @@ def transparent_demo() -> int:
 
 
 def do_command(command: str) -> int:
-    """Run one spoken command transparently against the real desktop."""
+    """Run one spoken command transparently against the real desktop — with the same
+    apps list and AI assistant as the running app, so it behaves exactly like saying it."""
+    from relay.config import Config
+    from relay.llm import Assistant, Router, routes_from_config
     from relay.session import Session
+    from relay.system.apps import AppCatalog
     setup_logging("WARNING")
-    s = Session(speak=_speak_print)
+    apps = AppCatalog()
+    apps.load_cached()
+    if not apps.entries:
+        apps.refresh()                       # first run: list the Start-menu apps now
+    routes = routes_from_config(Config.load())
+    s = Session(speak=_speak_print, apps=apps,
+                assistant=Assistant(Router(routes)) if routes else None)
     try:
         print(f"USER: {command}")
         s.handle(command)
