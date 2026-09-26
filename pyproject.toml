@@ -66,3 +66,7 @@ target-version = "py312"
 # worker supervisor) so one bad callback can't break the others — so the
 # opinionated BLE/S "blind except" rules are not part of this baseline.
 select = ["E", "F", "I"]
+
+[tool.vercel]
+entrypoint = "index.py:app"
+

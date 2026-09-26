@@ -1,10 +1,7 @@
-pyproject.toml
-relay/
-tests/
-scripts/
-packaging/
+.venv/
+models/
 build/
 dist/
-models/
-.venv/
+*.key
+*.pfx
 RELAY.cmd
