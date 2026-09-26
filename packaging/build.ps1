@@ -39,6 +39,16 @@ if (Test-Path ".env") {
     Write-Host "No .env: this build is offline-only (voice commands, Piper voice)."
 }
 
+Write-Host "== one-click install for whoever downloads it =="
+$installer = @(
+    "@echo off",
+    "rem Double-click to install Relay: desktop + Start-menu shortcut (Ctrl+Alt+R), then start it.",
+    "cd /d `"%~dp0`"",
+    "relay-cli.exe --install",
+    "start `"`" relay.exe --toggle"
+)
+Set-Content -Path "$dist\Install Relay.cmd" -Value $installer -Encoding ASCII
+
 Write-Host "== check the packaged app on a clean profile =="
 .venv\Scripts\python.exe scripts\clean_machine_check.py
 
