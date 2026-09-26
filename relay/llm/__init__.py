@@ -26,9 +26,18 @@ def routes_from_config(cfg) -> list[Route]:
         return []
     url = _local_router(url)
     models = [m for m in (cfg.llm_models or []) if m] or ["auto:fast"]
+    hints: dict[str, float] = {}
+    if models == ["auto:fast", "auto"]:              # default: use the tuned ranking
+        from relay.llm.tune import best_models
+        fastest = best_models(url, 3)                 # e.g. gemini-3.5-flash-lite 1.6 s
+        if fastest:
+            hints = dict(fastest)
+            hints["auto:fast"] = max(hints.values()) + 1.0   # the router's own pick: last
+            models = [m for m, _t in fastest] + ["auto:fast"]
     headers = {"X-Relay-Device": _device_id()}
     return [Route(name=f"{m}", base_url=url, api_key=key, model=m,
-                  timeout=float(cfg.llm_timeout), extra_headers=headers) for m in models]
+                  timeout=float(cfg.llm_timeout), extra_headers=headers,
+                  ttft_hint=hints.get(m, 0.0)) for m in models]
 
 
 _LOCAL_PORTS = (31415, 3001)        # FreeLLMAPI desktop app, then Docker / source

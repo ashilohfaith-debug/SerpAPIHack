@@ -44,9 +44,15 @@ class Router:
         self.client = client or LLMClient()
         self.min_hedge = min_hedge
         self.first_token_timeout = first_token_timeout
-        self.health = {r.name: _Health() for r in self.routes}
+        self.health = {r.name: _Health(ttft=r.ttft_hint or 0.8) for r in self.routes}
         self.last_route = ""
         self.last_ttft = 0.0
+
+    def replace_routes(self, routes: list[Route]) -> None:
+        """New routes (e.g. after tuning), keeping what was learned about old ones."""
+        self.health = {r.name: self.health.get(r.name) or _Health(ttft=r.ttft_hint or 0.8)
+                       for r in routes}
+        self.routes = list(routes)
 
     # ---- bookkeeping ----
     def ordered(self) -> list[Route]:

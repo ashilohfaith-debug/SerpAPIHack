@@ -40,6 +40,7 @@ class Route:
     model: str = "auto:fast"
     timeout: float = 20.0
     extra_headers: dict = field(default_factory=dict)
+    ttft_hint: float = 0.0         # measured first-token time (seeds the router's order)
 
     def __repr__(self) -> str:     # never print the key
         return f"Route({self.name!r}, {self.base_url!r}, model={self.model!r})"

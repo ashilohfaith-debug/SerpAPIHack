@@ -220,6 +220,8 @@ def _main(argv: list[str] | None = None) -> int:
     p.add_argument("--quiet", action="store_true", help="with --check: don't speak the result")
     p.add_argument("--llm-check", action="store_true",
                    help="measure the AI assistant's latency through your router")
+    p.add_argument("--llm-tune", action="store_true",
+                   help="time your router's models and use the fastest that follow the rules")
     p.add_argument("--demo-daily", action="store_true",
                    help="safe offline demo of everyday skills (time, battery, maths, notes...)")
     args = p.parse_args(argv)
@@ -298,6 +300,9 @@ def _main(argv: list[str] | None = None) -> int:
     if args.llm_check:
         from relay.demo import llm_check
         return llm_check()
+    if args.llm_tune:
+        from relay.demo import llm_tune
+        return llm_tune()
     if args.check:
         from relay.diagnostics import setup_logging
         from relay.health import main as check_main

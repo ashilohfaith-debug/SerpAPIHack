@@ -168,6 +168,19 @@ class RelayApp:
     def _set_wake(self, on: bool) -> None:
         self.loop.wake_enabled = on
 
+    def _tune_routes_if_needed(self) -> None:
+        """No fresh ranking of the router's models yet: time them in the background and
+        switch to the fastest when done (the first questions use auto:fast meanwhile)."""
+        routes = self.router.routes
+        if not routes or self.cfg.llm_models not in (["auto:fast", "auto"], None, []):
+            return
+        from relay.llm import routes_from_config
+        from relay.llm.tune import needs_tuning, tune_in_background
+        url, key = routes[0].base_url, routes[0].api_key
+        if needs_tuning(url):
+            tune_in_background(url, key, on_done=lambda _r: self.router.replace_routes(
+                routes_from_config(self.cfg)))
+
     # ---- on-screen palette and listening on/off ----
     def _palette_status(self) -> str:
         if not self.loop.enabled and not self.loop._armed:
@@ -370,6 +383,7 @@ class RelayApp:
             threading.Thread(target=self._warm_up, name="stt-warmup", daemon=True).start()
             if self.router is not None:
                 self.router.warm()              # DNS + TCP + TLS before the first question
+                self._tune_routes_if_needed()   # find the fastest models (cached for days)
             for cloud in (self.sarvam, self.sarvam_stt):
                 if cloud is not None:
                     threading.Thread(target=cloud.client.warm, daemon=True).start()

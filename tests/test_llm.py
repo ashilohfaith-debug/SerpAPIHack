@@ -469,3 +469,54 @@ def test_local_router_on_another_port_is_found(monkeypatch):
         assert llm._local_router("https://gw.example.com/v1") == "https://gw.example.com/v1"
     finally:
         srv.close()
+
+
+# ---------------------------------------------------------------- model tuning
+def test_tuning_picks_fast_chat_models_only():
+    from relay.llm.tune import candidates
+    ids = ["auto", "fusion", "claude-opus-4-5", "gemini-3.5-flash-lite", "qwen3.7-flash",
+           "text-embedding-3", "whisper-large", "qwen3-vl-235b-a22b-thinking",
+           "llama-3.1-8b-instruct", "deepseek-r1-distill-qwen-7b", "glm-4.7-flash",
+           "gemma-4-e4b-uncensored-aggressive", "mistral-small-3.2-24b"]
+    picked = candidates(ids)
+    assert picked[0] == "gemini-3.5-flash-lite"                # flash-lite ranks first
+    assert {"qwen3.7-flash", "glm-4.7-flash", "llama-3.1-8b-instruct"} <= set(picked)
+    for bad in ("auto", "fusion", "claude-opus-4-5", "text-embedding-3", "whisper-large",
+                "qwen3-vl-235b-a22b-thinking", "deepseek-r1-distill-qwen-7b",
+                "gemma-4-e4b-uncensored-aggressive"):
+        assert bad not in picked
+
+
+def test_tuned_ranking_drives_the_routes(monkeypatch, tmp_path):
+    import time as _t
+
+    from relay.config import Config
+    from relay.llm import routes_from_config
+    from relay.llm.tune import best_models, save_cache
+    monkeypatch.delenv("RELAY_OFFLINE")
+    monkeypatch.setenv("RELAY_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("RELAY_LLM_URL", "http://127.0.0.1:9/v1")
+    assert [r.model for r in routes_from_config(Config())] == ["auto:fast", "auto"]
+    save_cache("http://127.0.0.1:9/v1", [
+        {"model": "gemini-3.5-flash-lite", "ok": True, "ttft": 1.25},
+        {"model": "qwen3.7-flash", "ok": True, "ttft": 1.47},
+        {"model": "broken-model", "ok": False, "ttft": 0.5},
+        {"model": "glm-4.7-flash", "ok": True, "ttft": 2.1},
+        {"model": "slow-model", "ok": True, "ttft": 5.0}])
+    routes = routes_from_config(Config())
+    assert [r.model for r in routes] == ["gemini-3.5-flash-lite", "qwen3.7-flash",
+                                         "glm-4.7-flash", "auto:fast"]   # router last
+    assert routes[0].ttft_hint == 1.25 and routes[-1].ttft_hint == 3.1   # backup: last
+    router = Router(routes)
+    assert router.ordered()[0].model == "gemini-3.5-flash-lite"   # fastest tried first
+    assert best_models("http://127.0.0.1:9/v1", 1) == [("gemini-3.5-flash-lite", 1.25)]
+    monkeypatch.setattr(_t, "time", lambda: 10 ** 10)             # a stale ranking…
+    assert best_models("http://127.0.0.1:9/v1") == []             # …is not used
+
+
+def test_new_routes_keep_what_was_learned():
+    a, b = Route("a", "http://x/v1", model="a"), Route("b", "http://x/v1", model="b")
+    router = Router([a])
+    router.health["a"].failures = 2
+    router.replace_routes([a, b])
+    assert router.health["a"].failures == 2 and "b" in router.health

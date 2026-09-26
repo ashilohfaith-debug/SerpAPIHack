@@ -331,6 +331,33 @@ def daily_demo() -> int:
     return 0
 
 
+def llm_tune() -> int:
+    """Time the router's likely-fast models with a real RELAY request and keep the
+    fastest ones that follow RELAY's rules (cached; the app uses the top three)."""
+    import os
+
+    from relay.config import Config
+    from relay.llm import routes_from_config
+    from relay.llm.tune import tune
+    setup_logging("WARNING")
+    url = os.environ.get("RELAY_LLM_URL", "").strip() or Config.load().llm_url
+    key = os.environ.get("RELAY_LLM_KEY", "").strip() or Config.load().llm_key
+    if not url:
+        print("No AI router configured (RELAY_LLM_URL in .env).")
+        return 2
+    print(f"Timing the likely-fast models at {url} …")
+    t0 = time.perf_counter()
+    results = tune(url, key)
+    print(f"done in {time.perf_counter() - t0:.1f}s\n")
+    for r in results:
+        mark = "OK " if r["ok"] else "-- "
+        why = r.get("reply") if r["ok"] or "reply" in r else r.get("error", "")
+        print(f"  {mark} {r['model']:34} first token {r.get('ttft', '-'):>6}s   {why!r}")
+    used = [rt.model for rt in routes_from_config(Config.load())]
+    print("\nRelay will race:", ", ".join(used))
+    return 0 if any(r["ok"] for r in results) else 1
+
+
 def llm_check() -> int:
     """Measure the conversational assistant end to end through the configured router:
     time to first token, time to the first spoken sentence, and to first AUDIO (with
