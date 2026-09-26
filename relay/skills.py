@@ -256,6 +256,20 @@ class Skills:
             return
         self.say(self.s.audio.set_headphone_mode(i.slots.get("mode", "auto")))
 
+    def k_listening(self, i):
+        audio = self.s.audio
+        if audio is None or not hasattr(audio, "set_listening"):
+            self.say("I can't switch listening off here.")
+            return
+        self.say(audio.set_listening(bool(i.slots.get("on"))))
+
+    def k_palette(self, i):
+        audio = self.s.audio
+        if audio is None or not hasattr(audio, "set_palette"):
+            self.say("There's no on-screen palette here.")
+            return
+        self.say(audio.set_palette(bool(i.slots.get("visible"))))
+
     def k_audio_status(self, i):
         self.say(self.s.audio.describe_audio() if self.s.audio is not None else
                  "I can't check the sound devices here.")

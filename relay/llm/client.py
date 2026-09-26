@@ -76,6 +76,7 @@ class _Conn:
         """From ANOTHER thread: unblock a read waiting on this socket right now (a
         cancelled stream must not hold the connection until its timeout)."""
         c = self._c
+        self._c = None                      # the next request opens a fresh connection
         sock = getattr(c, "sock", None) if c is not None else None
         if sock is not None:
             try:
@@ -139,8 +140,9 @@ class LLMClient:
                     resp = c.getresponse()
                     break
                 except (http.client.RemoteDisconnected, ConnectionResetError,
-                        BrokenPipeError, http.client.CannotSendRequest):
-                    conn.drop()
+                        ConnectionAbortedError, BrokenPipeError,
+                        http.client.CannotSendRequest):
+                    conn.drop()                     # a stale kept-alive socket: retry once
                     if attempt:
                         raise RouteError(route.name, 0, "connection lost") from None
                 except (OSError, http.client.HTTPException) as e:

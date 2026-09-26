@@ -368,3 +368,49 @@ def test_installed_copy_reads_the_project_env(tmp_path, monkeypatch):
     loaded = load_env([installed, loop_back])
     assert os.environ["RELAY_T9"] == "from_project"
     assert loaded == [installed, project, loop_back]      # each file once, no loop
+
+
+# ---------------------------------------------------------------- palette + listening
+def test_listening_and_palette_commands():
+    from relay.intent.grammar import Kind, parse
+    assert parse("stop listening").kind == Kind.LISTENING
+    assert parse("stop listening").slots["on"] is False
+    assert parse("start listening").slots["on"] is True
+    assert parse("hide the palette").kind == Kind.PALETTE
+    assert parse("show the palette").slots["visible"] is True
+    assert parse("stop").kind == Kind.CONTROL                  # still the stop word
+
+
+def test_switched_off_relay_ignores_the_room_but_not_the_talk_key():
+    from tests.test_daily import ScriptSeg
+    stt = Words("relay what time is it")
+    loop, dispatched, _ = _loop(headphones=False, speaking=False, stt=stt)
+    loop._seg_factory, loop._custom_seg = (lambda: ScriptSeg([True] * 20 + [False])), True
+    loop._reset()
+    loud = (6000 * np.sin(np.linspace(0, 300, 480))).astype(np.int16).tobytes()
+    loop.enabled = False
+    for _ in range(21):
+        loop.on_frame(loud)
+    assert stt.calls == 0 and dispatched == []               # off: nothing heard
+    loop.push_to_talk()                                      # the talk key still works
+    for _ in range(21):
+        loop.on_frame(loud)
+    assert stt.calls == 1
+
+
+def test_what_relay_heard_is_published_for_the_palette():
+    from relay.core import EventBus
+    from relay.loop import VoiceLoop
+    bus, heard = EventBus(), []
+    bus.subscribe("voice.heard", lambda e: heard.append(e.data["text"]))
+    loop = VoiceLoop(lambda t: None, stt=Words(""), wake_required=True, bus=bus,
+                     threaded=False)
+    loop.on_transcript("Relay, what time is it?")
+    assert heard == ["what time is it?"]
+
+
+def test_palette_states_and_text():
+    from relay.ui.palette import STATES, _shorten
+    for state in ("ready", "listening", "hearing", "working", "speaking", "off"):
+        assert state in STATES
+    assert len(_shorten("word " * 100)) <= 110

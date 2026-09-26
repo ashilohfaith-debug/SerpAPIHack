@@ -126,6 +126,22 @@ class RelayApp:
                               interrupt=self.session.stop_speaking)
         if self.sarvam_stt is not None:
             self.loop.wake_stt = self.stt   # wake word checked on this PC before any upload
+        # the on-screen palette: status light, "You: …" / "Relay: …", On/Off, Talk, ✕
+        self._voice_state = "idle"
+        self.palette = None
+        if self.session.store.get_pref("palette", default="1") == "1":
+            from relay.ui.palette import Palette
+            self.palette = Palette(status=self._palette_status,
+                                   on_toggle=lambda: self._palette_say(
+                                       self.set_listening(not self.loop.enabled)),
+                                   on_talk=self.loop.push_to_talk,
+                                   on_quit=self._quit_requested)
+        self.bus.subscribe("voice.state",
+                           lambda e: setattr(self, "_voice_state", e.data.get("to", "idle")))
+        self.bus.subscribe("voice.heard", lambda e: self.palette and self.palette.heard(
+            e.data.get("text", "")))
+        self.bus.subscribe("narration.say", lambda e: self.palette and self.palette.said(
+            e.data.get("text", "")))
         self.hotkeys = HotkeyManager()
         self.hotkeys.add(self.cfg.push_to_talk_hotkey, self.loop.push_to_talk)
         self.hotkeys.add(self.cfg.stop_hotkey, self.session.stop_speaking)
@@ -151,6 +167,47 @@ class RelayApp:
 
     def _set_wake(self, on: bool) -> None:
         self.loop.wake_enabled = on
+
+    # ---- on-screen palette and listening on/off ----
+    def _palette_status(self) -> str:
+        if not self.loop.enabled and not self.loop._armed:
+            return "off"
+        if self.speech.is_speaking:
+            return "speaking"
+        if self._voice_state == "transcribing":
+            return "hearing"
+        if self.loop._armed:
+            return "listening"
+        if self.dispatcher.busy:
+            return "working"
+        return "ready"
+
+    def _palette_say(self, text: str) -> None:
+        self.session.say(text, pol.Priority.REQUESTED)
+
+    def set_listening(self, on: bool) -> str:
+        """Listening on/off (palette switch, "stop listening"). Off: the microphone is
+        ignored except right after the talk key."""
+        self.loop.enabled = on
+        key = spoken_combo(self.cfg.push_to_talk_hotkey)
+        return ("I'm listening again. Say Relay, or press " + key + "." if on else
+                "Okay, I've stopped listening. Press " + key + " when you need me, and say "
+                "start listening to turn me back on.")
+
+    def set_palette(self, visible: bool) -> str:
+        self.session.store.set_pref("palette", "1" if visible else "0")
+        if self.palette is None and visible:
+            from relay.ui.palette import Palette
+            self.palette = Palette(status=self._palette_status,
+                                   on_toggle=lambda: self._palette_say(
+                                       self.set_listening(not self.loop.enabled)),
+                                   on_talk=self.loop.push_to_talk,
+                                   on_quit=self._quit_requested)
+            self.palette.start()
+        elif self.palette is not None:
+            self.palette.show(visible)
+        return "The palette is showing at the top of the screen." if visible else \
+            "The palette is hidden. Say show the palette to bring it back."
 
     def _quit_requested(self) -> None:
         """The launch key (Ctrl+Alt+R) pressed while RELAY runs: close, like 'quit Relay'."""
@@ -321,6 +378,8 @@ class RelayApp:
             self._announced_out = self.devices.output
             self._apply_headphone_mode()
             self.quit_signal.listen(self._quit_requested)   # Ctrl+Alt+R again = close
+            if self.palette is not None:
+                self.palette.start()                        # the bar at the top
             problems = self._startup_checks()
             self.session.onboard()
             if self.loop.headphones:
@@ -350,6 +409,8 @@ class RelayApp:
     def shutdown(self) -> None:
         if self._announce_timer is not None:
             self._announce_timer.cancel()
+        if self.palette is not None:
+            self.palette.stop()
         for fn in (self.devices.stop, self.quit_signal.stop, self.loop.stop, self.hotkeys.stop,
                    self.dispatcher.stop, self.speech.shutdown):
             try:

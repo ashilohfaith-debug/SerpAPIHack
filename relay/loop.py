@@ -143,7 +143,14 @@ class VoiceLoop:
         if stt is None:
             from relay.audio import WhisperSTT
             stt = WhisperSTT()
-        self.dispatch = dispatch
+
+        def _dispatch(text: str, _send=dispatch) -> None:
+            if self.bus is not None:                # the palette shows "You: …"
+                self.bus.emit("voice.heard", text=text)
+            _send(text)
+        self.dispatch = _dispatch
+        # listening on/off (palette switch, "stop listening"); the talk key still works
+        self.enabled = True
         self.stt = stt
         # With an online recogniser, the wake word is first checked by this local one,
         # so room conversation is never uploaded — only speech addressed to RELAY.
@@ -224,6 +231,8 @@ class VoiceLoop:
     # ---- audio ----
     def on_frame(self, frame: bytes) -> None:
         if len(frame) != FRAME_BYTES:
+            return
+        if not self.enabled and not self._armed:    # switched off: only the talk key
             return
         now = self._clock()
         with self._lock:

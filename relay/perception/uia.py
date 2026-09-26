@@ -15,6 +15,7 @@ OTPs) are detected and their values are never read.
 from __future__ import annotations
 
 import ctypes
+import time
 
 from relay.perception.semantic import Dialog, ScreenSnapshot, UIElement
 from relay.safety import is_protected_field
@@ -123,12 +124,24 @@ def _valid(ctrl) -> bool:
         return False
 
 
+def _is_chromium(root) -> bool:
+    """Chromium / Electron windows (Chrome, Edge, Brave, Claude, VS Code, WhatsApp,
+    Spotify…) nest their controls far deeper than classic Win32 apps."""
+    try:
+        return (root.ClassName or "").startswith("Chrome_WidgetWin")
+    except Exception:
+        return False
+
+
 def _enumerate(root, window_title: str, screen_area: int) -> list[UIElement]:
     elements: list[UIElement] = []
     visited = [0]
+    deep = _is_chromium(root)
+    max_depth = 30 if deep else MAX_DEPTH
+    max_elements = 200 if deep else MAX_ELEMENTS
 
     def walk(ctrl, depth: int) -> None:
-        if visited[0] >= MAX_VISITED or depth > MAX_DEPTH or len(elements) >= MAX_ELEMENTS:
+        if visited[0] >= MAX_VISITED or depth > max_depth or len(elements) >= max_elements:
             return
         visited[0] += 1
         role_full = ""
@@ -283,6 +296,11 @@ def observe(observation_version: int) -> ScreenSnapshot:
         focus_el = None
 
     elements = _enumerate(fg, title, screen_area)
+    if len(elements) < 5 and _is_chromium(fg):
+        # Chromium/Electron builds its accessibility tree only after the first request
+        # from an assistive tool: the first look can be nearly empty. Look once more.
+        time.sleep(0.4)
+        elements = _enumerate(fg, title, screen_area)
     # small-first (more specific), de-dup, assign stable uids
     elements.sort(key=lambda e: (e.bbox[2] - e.bbox[0]) * (e.bbox[3] - e.bbox[1]))
     seen: set[tuple] = set()

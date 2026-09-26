@@ -39,7 +39,7 @@ class _Health:
 
 class Router:
     def __init__(self, routes: list[Route], client: LLMClient | None = None,
-                 min_hedge: float = 0.5, first_token_timeout: float = 6.0) -> None:
+                 min_hedge: float = 0.5, first_token_timeout: float = 10.0) -> None:
         self.routes = list(routes)
         self.client = client or LLMClient()
         self.min_hedge = min_hedge

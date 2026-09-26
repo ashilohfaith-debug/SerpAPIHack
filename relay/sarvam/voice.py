@@ -30,7 +30,10 @@ def settings() -> dict:
         "tts_model": os.environ.get("SARVAM_TTS_MODEL", "bulbul:v3").strip() or "bulbul:v3",
         "speaker": os.environ.get("SARVAM_SPEAKER", "").strip(),
         "language": os.environ.get("SARVAM_LANGUAGE", "en-IN").strip() or "en-IN",
-        "stt": os.environ.get("SARVAM_STT", "off").strip().lower() in ("1", "on", "true", "yes"),
+        # one key = both: Bulbul voice AND Saaras recognition (SARVAM_STT=off keeps only
+        # the voice)
+        "stt": os.environ.get("SARVAM_STT", "on").strip().lower() not in ("0", "off", "false",
+                                                                          "no"),
         "stt_model": os.environ.get("SARVAM_STT_MODEL", "saaras:v3").strip() or "saaras:v3",
         # your own proxy in front of Sarvam (it adds the real key), for public builds
         "base": os.environ.get("SARVAM_BASE_URL", "").strip() or API_BASE,

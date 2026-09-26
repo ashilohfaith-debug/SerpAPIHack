@@ -58,3 +58,35 @@ def coexistence_advice(reader_name: str) -> str:
     return (f"I can tell {reader_name} is running. I'll stay out of its way — "
             "I won't repeat what it already reads, and I won't take its shortcuts. "
             "Just talk to me for anything you want me to do or explain.")
+
+
+# ---- the Windows "screen reader present" flag ----
+# Chromium and Electron apps (Chrome, Edge, Brave, Claude, VS Code, WhatsApp, Spotify…)
+# only build their full accessibility tree when an assistive technology is present.
+# Screen readers (NVDA, JAWS, Narrator) set this flag for exactly that reason; RELAY sets
+# it while it runs and puts the previous value back when it exits. It is not saved to
+# the user profile (no SPIF_UPDATEINIFILE), so it never outlives the sign-in session.
+_SPI_GETSCREENREADER, _SPI_SETSCREENREADER, _SPIF_SENDCHANGE = 0x0046, 0x0047, 0x0002
+
+
+def screen_reader_flag() -> bool:
+    import ctypes
+    value = ctypes.c_int(0)
+    try:
+        ctypes.windll.user32.SystemParametersInfoW(_SPI_GETSCREENREADER, 0,
+                                                   ctypes.byref(value), 0)
+    except Exception:
+        return False
+    return bool(value.value)
+
+
+def set_screen_reader_flag(on: bool) -> bool:
+    """Set the flag; returns the previous value (to restore later)."""
+    import ctypes
+    previous = screen_reader_flag()
+    try:
+        ctypes.windll.user32.SystemParametersInfoW(_SPI_SETSCREENREADER, 1 if on else 0,
+                                                   None, _SPIF_SENDCHANGE)
+    except Exception:
+        pass
+    return previous

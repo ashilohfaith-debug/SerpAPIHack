@@ -387,19 +387,23 @@ class Session:
             first.set()
             self._speak_part(sentence, None)
 
-        def thinking_cue() -> None:            # a soft tick if the answer is slow to start
-            if not first.is_set() and self.speech is not None:
-                from relay.audio.earcons import earcon
-                self.speech.play(*earcon("heard"))
-        cue = threading.Timer(1.2, thinking_cue)
-        cue.daemon = True
-        cue.start()
+        done = threading.Event()
+
+        def thinking_cue() -> None:            # soft ticks while the answer is slow to start
+            from relay.audio.earcons import earcon
+            wait = 1.2
+            while not done.wait(wait) and not first.is_set():
+                if self.speech is not None:
+                    self.speech.play(*earcon("heard"))
+                self._emit("assistant.thinking", {})
+                wait = 2.5
+        threading.Thread(target=thinking_cue, name="thinking-cue", daemon=True).start()
         try:
             kind, payload = self.assistant.respond(
                 question, speak, context=self._assistant_context(), page_text=page_text,
                 cancel=self._answer_cancel)
         finally:
-            cue.cancel()
+            done.set()
         if kind == "command" and payload:
             self.say(f"I understood that as: {payload}.", _REQ)
             self._from_assistant = True

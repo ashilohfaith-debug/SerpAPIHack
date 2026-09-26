@@ -124,6 +124,8 @@ class Kind:
     FILE_OP = "file_op"            # rename | move | copy | delete — the selected item
     CLOSE_ALL = "close_all"
     HEADING_NAV = "heading_nav"    # next / previous heading on a page
+    LISTENING = "listening"        # "stop listening" / "start listening" (palette switch)
+    PALETTE = "palette"            # show / hide the on-screen palette
     EMAIL = "email"                # check | compose
     UNKNOWN = "unknown"
 
@@ -273,6 +275,18 @@ _THIS = r"(?:this|it|that|the selected|the (?:file|folder|item)|this (?:file|fol
 
 def _laptop_control(low: str, keep: str):
     """Everyday laptop controls. Returns (Kind, slots) or None."""
+    # listening on / off, the on-screen palette
+    if re.fullmatch(r"(?:stop|pause) listening(?: to me)?|don't listen|do not listen|"
+                    r"go to sleep|sleep relay|relay go to sleep|mute (?:the )?(?:mic|microphone)",
+                    low):
+        return Kind.LISTENING, {"on": False}
+    if re.fullmatch(r"(?:start|resume) listening|listen again|wake up|you can listen(?: now)?|"
+                    r"unmute (?:the )?(?:mic|microphone)", low):
+        return Kind.LISTENING, {"on": True}
+    m = re.fullmatch(r"(hide|close|show|open)\s+(?:the\s+)?(?:relay\s+)?(?:palette|status bar|"
+                     r"bar|captions)", low)
+    if m:
+        return Kind.PALETTE, {"visible": m.group(1) in ("show", "open")}
     # Bluetooth / Wi-Fi
     radio = r"(bluetooth|wi-?\s?fi|wireless)"
     m = re.search(rf"\b(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+)?{radio}\b|"

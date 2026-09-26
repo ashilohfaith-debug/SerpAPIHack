@@ -226,14 +226,16 @@ def test_stt_falls_back_to_whisper(base):
 
 def test_settings_from_environment(monkeypatch):
     monkeypatch.delenv("RELAY_OFFLINE")
-    assert settings()["key"] == "" and settings()["stt"] is False
+    assert settings()["key"] == ""                       # no key: Sarvam fully off
     assert settings()["base"] == "https://api.sarvam.ai"
     monkeypatch.setenv("SARVAM_API_KEY", " abc ")
-    monkeypatch.setenv("SARVAM_STT", "on")
     monkeypatch.setenv("SARVAM_SPEAKER", "shubh")
     s = settings()
-    assert s["key"] == "abc" and s["stt"] and s["speaker"] == "shubh"
+    # ONE key turns on both: Bulbul voice and Saaras recognition
+    assert s["key"] == "abc" and s["stt"] is True and s["speaker"] == "shubh"
     assert s["tts_model"] == "bulbul:v3" and s["language"] == "en-IN"
+    monkeypatch.setenv("SARVAM_STT", "off")               # keep only the voice
+    assert settings()["stt"] is False
 
 
 # ---------------------------------------------------------------- privacy gate
