@@ -83,6 +83,8 @@ class Session:
         self.on_wake_word = on_wake_word
         self.assistant = assistant          # optional conversational AI (relay.llm)
         self.audio = audio                  # headphone mode / audio devices (the live app)
+        self._step_failed = False           # a skill couldn't do its part (multi-step runs)
+        self._in_steps = False
         self._answer_cancel = threading.Event()
         self._from_assistant = False
         self.talk_key = talk_key
@@ -194,6 +196,99 @@ class Session:
     def set_dictation(self, on: bool) -> None:
         self.dictation = on
 
+    _EDITORS = ("notepad", "wordpad", "winword", "word", "notepad++", "code", "writer",
+                "soffice")
+    _BLANK = re.compile(r"^\*?\s*(?:untitled|document\s*\d*|new \d+|new tab|word)\b", re.I)
+
+    def _fresh_document(self) -> bool:
+        """'open Notepad and type …': Notepad (and Word) reopen your previous documents,
+        so what's in front may be someone's unsaved work. Type into a NEW blank page.
+        Returns False if no blank page could be made (then nothing is typed)."""
+        from relay.planner.planner import Step
+        from relay.system import windows
+        w = windows.foreground()
+        if w is None:
+            return True
+        app = (w.app or "").lower().removesuffix(".exe")
+        if app not in self._EDITORS or self._BLANK.match(w.title or ""):
+            return True
+        self.say("That opened an existing document, so I'm starting a new blank page to "
+                 "keep it safe.", _REQ)
+        self.runner.run([Step("hotkey", "open a new blank page", {
+            "keys": ["ctrl", "n"], "announce": "", "done_text": ""})])
+        time.sleep(0.8)
+        now = windows.foreground()
+        if now is None or not self._BLANK.match(now.title or ""):
+            self.say("I couldn't get a blank page, so I won't type there.", _REQ)
+            return False                        # never type into the old document
+        return True
+
+    def _open_then_unknown(self, utterance: str) -> tuple[str, str] | None:
+        """'open <an app I can find> and <something I can't do>' -> (open part, rest)."""
+        m = re.match(r"^\s*(?:please\s+)?(open|launch|start)\s+(.+?)\s*,?\s+and\s+(.+?)[.!?]*$",
+                     utterance, re.I)
+        if not m:
+            return None
+        target = m.group(2)
+        from relay.system import files, web
+        if (self.apps.find(target) is None and web.site_url(target) is None
+                and files.folder_for_phrase(target) is None):
+            return None
+        return f"{m.group(1)} {target}", m.group(3)
+
+    def step_failed(self) -> None:
+        """A skill reports it couldn't do what was asked (stops a multi-step run)."""
+        self._step_failed = True
+
+    # ---- several steps in one request ----
+    _STOP_STATES = ("failed", "cancelled", "awaiting_confirmation")
+
+    def run_steps(self, steps: list[str]):
+        """Do each step in order, announcing the plan first; stop at the first step that
+        fails (never type into the wrong window because an app didn't open), on
+        cancel / emergency stop, or when a step needs a spoken confirmation."""
+        n = len(steps)
+        self.say(f"{n} steps: " + "; then ".join(steps) + ".", _REQ)
+        results: list = []
+        self._in_steps = True
+        try:
+            for k, step in enumerate(steps, 1):
+                if self.emergency.is_engaged or self.cancel.is_set() or \
+                        self._answer_cancel.is_set():
+                    self.say(f"Stopped before step {k}.", _REQ)
+                    break
+                self._step_failed = False
+                out = self.handle(step) or []
+                results.extend(out)
+                states = [getattr(r, "state", "") for r in out]
+                opening = re.match(r"^(?:open|launch|start|switch to|go to)\b", step, re.I)
+                bad = self._step_failed or any(s in self._STOP_STATES for s in states) or (
+                    opening and "uncertain" in states)
+                waiting = self._pending is not None or self._offer is not None
+                if bad and (self._step_failed or not waiting):
+                    rest = steps[k:]            # a failure is always reported first
+                    self.say(f"I stopped at step {k}, {step}, because it didn't work."
+                             + (" I didn't do: " + "; ".join(rest) + "." if rest else ""), _REQ)
+                    break
+                if waiting:                     # a yes/no or a confirmation phrase is due
+                    if k < n:
+                        self.say("When that's done, say the rest again: "
+                                 + "; then ".join(steps[k:]) + ".", _REQ)
+                    break
+                if k < n:
+                    time.sleep(0.4)             # let the screen settle before the next step
+                    if opening and parse(steps[k]).kind in (Kind.TYPE, Kind.DICTATION) \
+                            and not self._fresh_document():
+                        self.say("I stopped before typing. I didn't do: "
+                                 + "; ".join(steps[k:]) + ".", _REQ)
+                        break
+            else:
+                if n > 1:
+                    self.say(f"All {n} steps done.", _REQ)
+        finally:
+            self._in_steps = False
+        return results
+
     # ---- dispatch ----
     def handle(self, utterance: str):
         if self._pending is not None:
@@ -213,6 +308,25 @@ class Session:
                 self.say("Okay, cancelled.", _REQ)
                 return []
             return consumer(utterance.strip()) or []
+        if not self.dictation and not self._in_steps:
+            from relay.intent.compound import split_steps
+            steps = split_steps(utterance)          # "open Notepad and type hello"
+            if steps is not None:
+                if len(steps) == 1:
+                    return self.handle(steps[0])
+                log.info("command: %d steps", len(steps))
+                return self.run_steps(steps)
+            part = self._open_then_unknown(utterance)
+            if part is not None:                    # "open WhatsApp and send hi to Mom"
+                if self.assistant is not None and not self._from_assistant:
+                    return self.ask(utterance)      # the AI plans the whole thing
+                self._step_failed = False
+                opened = self.handle(part[0])
+                if not self._step_failed:
+                    self.say(f"I've done the first part. I can't do \"{part[1]}\" by "
+                             "myself yet; tell me the next step, like click, type, or press.",
+                             _REQ)
+                return opened
         intent = parse(utterance)
         # the command TYPE only — never the words, which may be private (dictation, notes)
         log.info("command: %s (%d words)%s", intent.kind, len(utterance.split()),
@@ -249,6 +363,7 @@ class Session:
                 return []
             if self.assistant is not None and not self._from_assistant:
                 return self.ask(utterance)
+            self.step_failed()
             self.say(f"Sorry, I didn't understand \"{utterance.strip()}\". "
                      "Say help to hear what I can do.", _REQ)
             return []
@@ -290,6 +405,12 @@ class Session:
             self._from_assistant = True
             try:
                 return self.handle(payload)
+            finally:
+                self._from_assistant = False
+        if kind == "plan" and payload:                 # several steps, each a safe command
+            self._from_assistant = True
+            try:
+                return self.run_steps(list(payload))
             finally:
                 self._from_assistant = False
         if kind == "offline":

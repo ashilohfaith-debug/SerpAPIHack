@@ -24,10 +24,39 @@ def routes_from_config(cfg) -> list[Route]:
     key = os.environ.get("RELAY_LLM_KEY", "").strip() or (cfg.llm_key or "").strip()
     if not url or offline_forced():
         return []
+    url = _local_router(url)
     models = [m for m in (cfg.llm_models or []) if m] or ["auto:fast"]
     headers = {"X-Relay-Device": _device_id()}
     return [Route(name=f"{m}", base_url=url, api_key=key, model=m,
                   timeout=float(cfg.llm_timeout), extra_headers=headers) for m in models]
+
+
+_LOCAL_PORTS = (31415, 3001)        # FreeLLMAPI desktop app, then Docker / source
+
+
+def _listening(host: str, port: int) -> bool:
+    import socket
+    try:
+        with socket.create_connection((host, port), timeout=0.3):
+            return True
+    except OSError:
+        return False
+
+
+def _local_router(url: str) -> str:
+    """A router on THIS computer at the wrong port (the FreeLLMAPI desktop app uses
+    31415, Docker and source installs 3001): use the port that is actually open."""
+    from urllib.parse import urlparse
+    u = urlparse(url)
+    host = u.hostname or ""
+    if host not in ("localhost", "127.0.0.1", "::1") or not u.port:
+        return url
+    if _listening(host, u.port):
+        return url
+    for port in _LOCAL_PORTS:
+        if port != u.port and _listening("127.0.0.1", port):
+            return url.replace(f"{host}:{u.port}", f"127.0.0.1:{port}", 1)
+    return url
 
 
 def _device_id() -> str:

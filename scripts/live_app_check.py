@@ -124,9 +124,17 @@ def main() -> int:
     time.sleep(0.3)
     results["stop key silences"] = not app.speech.is_speaking
 
-    app.dispatcher.submit("quit relay")
-    t.join(20)
-    results["quit by voice exits"] = not t.is_alive() and code.get("rc") == 0
+    results["audio devices watched"] = app.devices.output is not None
+    if "--quit-by-key" in sys.argv:       # Ctrl+Alt+R again: what the second launch does
+        from relay.core.single_instance import QuitSignal
+        results["launch key signal delivered"] = QuitSignal.request()
+        t.join(20)
+        results["launch key again closes Relay"] = not t.is_alive() and code.get("rc") == 0
+        results["said goodbye"] = any("Goodbye" in s for s in SPOKEN)
+    else:
+        app.dispatcher.submit("quit relay")
+        t.join(20)
+        results["quit by voice exits"] = not t.is_alive() and code.get("rc") == 0
     results["lock released"] = SingleInstance().acquire()
     if test_window.poll() is None:
         test_window.terminate()          # our own test window only

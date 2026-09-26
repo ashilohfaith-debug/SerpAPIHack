@@ -13,3 +13,5 @@ def _no_online_services(monkeypatch):
     for k in _ONLINE:
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("RELAY_OFFLINE", "1")        # relay.__main__ won't load .env
+    import relay.llm  # never find a real local router
+    monkeypatch.setattr(relay.llm, "_LOCAL_PORTS", ())

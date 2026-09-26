@@ -23,7 +23,7 @@ only the voice. (`tests/test_envfile.py::test_freellmapi_alone_runs_without_sarv
    build) copy `.env.example` to `.env`.
 2. Paste the key and save — for AI answers this is all:
    ```ini
-   RELAY_LLM_URL=http://localhost:3001/v1   # FreeLLMAPI on this PC
+   RELAY_LLM_URL=http://127.0.0.1:31415/v1  # FreeLLMAPI desktop app (Docker/source: 3001)
    RELAY_LLM_KEY=freellmapi-...             # the unified key from FreeLLMAPI's dashboard
    ```
    Optional, only if you want Sarvam's voice: `SARVAM_API_KEY=sk_...`, and then

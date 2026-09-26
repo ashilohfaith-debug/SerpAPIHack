@@ -108,6 +108,23 @@ class Kind:
     SEND = "send"           # send the message being written (always read back + confirmed)
     ASK = "ask"             # a question for the conversational assistant
     SUMMARIZE = "summarize" # "summarise this page" — the page text goes to the assistant
+    # laptop controls (relay/system/control.py)
+    RADIO = "radio"                # bluetooth / wifi: on | off | status
+    BRIGHTNESS = "brightness"      # up | down | set | get
+    DARK_MODE = "dark_mode"
+    SCREENSHOT = "screenshot"
+    POWER = "power"                # shutdown | restart | sleep | signout | cancel
+    STORAGE = "storage"
+    NETWORK_INFO = "network_info"
+    CHECK_UPDATES = "check_updates"
+    SETTINGS_PAGE = "settings_page"
+    RECYCLE_BIN = "recycle_bin"    # open | empty
+    WEATHER = "weather"
+    NEW_FOLDER = "new_folder"
+    FILE_OP = "file_op"            # rename | move | copy | delete — the selected item
+    CLOSE_ALL = "close_all"
+    HEADING_NAV = "heading_nav"    # next / previous heading on a page
+    EMAIL = "email"                # check | compose
     UNKNOWN = "unknown"
 
 
@@ -248,6 +265,156 @@ def _control(low: str) -> str | None:
     return cmd if words[0] in starts else None
 
 
+_DEV = r"(?:the\s+)?(?:computer|laptop|pc|system|machine|windows)"
+_KNOWN_DIRS = r"(desktop|documents|downloads|pictures|photos|music|videos|home)"
+_THIS = r"(?:this|it|that|the selected|the (?:file|folder|item)|this (?:file|folder|item)|" \
+        r"the selected (?:file|folder|item)|selected (?:file|folder|item))"
+
+
+def _laptop_control(low: str, keep: str):
+    """Everyday laptop controls. Returns (Kind, slots) or None."""
+    # Bluetooth / Wi-Fi
+    radio = r"(bluetooth|wi-?\s?fi|wireless)"
+    m = re.search(rf"\b(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+)?{radio}\b|"
+                  rf"\b(enable|disable|start|stop)\s+(?:the\s+|my\s+)?{radio}\b|"
+                  rf"^{radio}\s+(on|off)$|^(?:turn|switch)\s+(?:the\s+|my\s+)?{radio}\s+(on|off)$",
+                  low)
+    if m:
+        g = [x for x in m.groups() if x]
+        state = next(x for x in g if x in ("on", "off", "enable", "disable", "start", "stop"))
+        dev = next(x for x in g if x not in ("on", "off", "enable", "disable", "start", "stop"))
+        return Kind.RADIO, {"device": "bluetooth" if dev.startswith("blue") else "wifi",
+                            "state": "on" if state in ("on", "enable", "start") else "off"}
+    m = re.search(rf"^(?:is|are)\s+(?:the\s+|my\s+)?{radio}\s+(?:on|off|enabled|working)\b|"
+                  rf"\b{radio}\s+status\b|\bis\s+{radio}\s+(?:on|off)\b", low)
+    if m:
+        dev = next(x for x in m.groups() if x)
+        return Kind.RADIO, {"device": "bluetooth" if dev.startswith("blue") else "wifi",
+                            "state": "status"}
+    # network / IP
+    if re.search(r"\b(?:what(?:'s| is)|tell me)\s+my\s+ip\b|\bip address\b|"
+                 r"\bwhich\s+(?:wi-?\s?fi|network)\b|\bwhat\s+(?:wi-?\s?fi|network)\s+am i\b|"
+                 r"\bnetwork (?:name|details|info)\b", low):
+        return Kind.NETWORK_INFO, {}
+    # brightness
+    m = re.search(r"\b(?:set|change|put|make)\s+(?:the\s+)?(?:screen\s+)?brightness\s+(?:to|at)\s+"
+                  r"(\d{1,3})|\bbrightness\s+(?:to\s+)?(\d{1,3})\s*(?:percent|%)?$", low)
+    if m:
+        return Kind.BRIGHTNESS, {"action": "set", "level": int(m.group(1) or m.group(2))}
+    if re.search(r"\b(?:increase|raise|turn up|more)\s+(?:the\s+)?(?:screen\s+)?brightness\b|"
+                 r"\bbrightness\s+up\b|\b(?:make\s+(?:the\s+)?screen\s+)?brighter$", low):
+        return Kind.BRIGHTNESS, {"action": "up"}
+    if re.search(r"\b(?:decrease|lower|reduce|turn down|dim)\s+(?:the\s+)?(?:screen\s+)?"
+                 r"brightness\b|\bbrightness\s+down\b|\b(?:make\s+(?:the\s+)?screen\s+)?"
+                 r"(?:dimmer|darker)$|^dim (?:the )?screen$", low):
+        return Kind.BRIGHTNESS, {"action": "down"}
+    if re.search(r"\bwhat(?:'s| is)\s+the\s+(?:screen\s+)?brightness\b|^brightness$", low):
+        return Kind.BRIGHTNESS, {"action": "get"}
+    # dark mode
+    m = re.search(r"\b(?:turn|switch)\s+(on|off)\s+(?:the\s+)?dark\s+(?:mode|theme)\b|"
+                  r"\bdark\s+(?:mode|theme)\s+(on|off)\b|\b(enable|disable)\s+dark\s+mode\b|"
+                  r"\b(?:switch|change|go)\s+to\s+(dark|light)\s+(?:mode|theme)\b|"
+                  r"^(dark|light)\s+(?:mode|theme)$", low)
+    if m:
+        v = next(g for g in m.groups() if g)
+        return Kind.DARK_MODE, {"on": v in ("on", "enable", "dark")}
+    # screenshot
+    if re.search(r"\b(?:take|capture|grab|save)\s+(?:a\s+)?(?:screen\s*shot|screen\s+capture|"
+                 r"picture of (?:the|my) screen)\b|^screen\s*shot$|^print\s*screen$|"
+                 r"\bcapture (?:the |my )?screen\b", low):
+        return Kind.SCREENSHOT, {}
+    # power
+    if re.search(r"\bcancel\s+(?:the\s+)?(?:shut\s*down|restart|reboot)\b|"
+                 r"\b(?:don't|do not|stop the)\s+(?:shut\s*down|restart)\b|"
+                 r"\babort shutdown\b", low):
+        return Kind.POWER, {"action": "cancel"}
+    if re.search(rf"^(?:shut\s*down|switch off|turn off|power off)(?:\s+{_DEV})?$|"
+                 rf"^(?:shut|switch|turn|power)\s+{_DEV}\s+(?:down|off)$", low):
+        return Kind.POWER, {"action": "shutdown"}
+    if re.search(rf"^(?:restart|reboot)(?:\s+{_DEV})?$|^(?:restart|reboot)\s+{_DEV}\b", low):
+        return Kind.POWER, {"action": "restart"}
+    if re.search(rf"\b(?:put|send)\s+{_DEV}\s+to\s+sleep\b|^sleep\s+(?:mode|{_DEV})$|"
+                 rf"^(?:go to )?sleep mode$|^hibernate$", low):
+        return Kind.POWER, {"action": "sleep"}
+    if re.search(rf"^(?:sign|log)\s*(?:out|off)(?:\s+(?:of\s+)?{_DEV})?$", low):
+        return Kind.POWER, {"action": "signout"}
+    # storage / updates
+    if re.search(r"\bhow much\s+(?:storage|space|disk space|disk|free space|memory space)\b|"
+                 r"\b(?:storage|disk space|free space)\s+(?:left|free|remaining)\b|"
+                 r"^(?:storage|disk space|free space)$|\bis my (?:disk|drive|storage) full\b", low):
+        return Kind.STORAGE, {}
+    if re.search(r"\bcheck\s+for\s+(?:windows\s+)?updates?\b|^update windows$|"
+                 r"^(?:windows )?updates?$|\binstall (?:windows )?updates\b", low):
+        return Kind.CHECK_UPDATES, {}
+    # settings pages ("open bluetooth settings", "display settings", "go to sound settings")
+    m = re.match(r"^(?:open|show|go to|launch)?\s*(?:the\s+|my\s+)?(.+?)\s+settings?$|"
+                 r"^(?:open\s+)?settings?\s+(?:for|of)\s+(?:the\s+|my\s+)?(.+)$", low)
+    if m:
+        from relay.system.control import settings_uri
+        topic = next(g for g in m.groups() if g)
+        uri = settings_uri(topic)
+        if uri:
+            return Kind.SETTINGS_PAGE, {"uri": uri, "topic": topic}
+    if re.search(r"\bnight\s+light\b", low):
+        return Kind.SETTINGS_PAGE, {"uri": "ms-settings:nightlight", "topic": "night light"}
+    # recycle bin
+    if re.search(r"\b(?:empty|clear|clean)\s+(?:the\s+|my\s+)?(?:recycle\s*bin|trash|bin)\b", low):
+        return Kind.RECYCLE_BIN, {"action": "empty"}
+    if re.search(r"\b(?:open|show|go to)\s+(?:the\s+|my\s+)?(?:recycle\s*bin|trash)\b|"
+                 r"^(?:recycle\s*bin|trash)$", low):
+        return Kind.RECYCLE_BIN, {"action": "open"}
+    # weather
+    # only real requests: "nice weather today" in a room conversation is not one
+    m = re.search(r"^(?:what(?:'s| is)|how(?:'s| is)|tell me|check|get|give me)\s+(?:the\s+)?"
+                  r"(?:weather|forecast|weather forecast)(?:\s+(?:like\s+)?(?:in|at|for)\s+"
+                  r"([a-z .'-]+?))?(?:\s+(?:like|today|now|right now|outside|tomorrow))*$|"
+                  r"^(?:the\s+)?weather(?:\s+(?:forecast|report))?(?:\s+(?:in|at|for)\s+"
+                  r"([a-z .'-]+?))?(?:\s+(?:today|now))?$|"
+                  r"^(?:will it|is it going to)\s+rain(?:\s+(?:in|at)\s+([a-z .'-]+?))?"
+                  r"(?:\s+today|\s+tomorrow)?$|"
+                  r"^what(?:'s| is)\s+the\s+temperature(?:\s+(?:outside|in\s+([a-z .'-]+)))?$",
+                  low)
+    if m and not re.search(r"\b(?:search|google|youtube|play)\b", low):
+        place = next((g for g in m.groups() if g), "").strip()
+        return Kind.WEATHER, {"place": re.sub(r"\s+(?:today|now)$", "", place)}
+    # new folder
+    m = re.search(r"\b(?:create|make|add|new)\s+(?:a\s+)?(?:new\s+)?folder\b"
+                  r"(?:\s+(?:called|named))?\s*(.*?)(?:\s+(?:on|in)\s+(?:the\s+|my\s+)?"
+                  rf"{_KNOWN_DIRS}(?:\s+folder)?)?$", low)
+    if m:
+        name = (m.group(1) or "").strip()
+        name = re.sub(r"^(?:called|named)\s+", "", name)
+        return Kind.NEW_FOLDER, {"name": name, "where": m.group(2) or ""}
+    # the selected item in File Explorer
+    m = re.match(rf"^rename\s+{_THIS}\s+(?:to|as)\s+(.+)$", keep)
+    if m:
+        return Kind.FILE_OP, {"op": "rename", "to": m.group(1).strip().strip(".")}
+    m = re.match(rf"^(move|copy)\s+{_THIS}\s+(?:to|into)\s+(?:the\s+|my\s+)?"
+                 rf"{_KNOWN_DIRS}(?:\s+folder)?$", low)
+    if m:
+        return Kind.FILE_OP, {"op": m.group(1), "to": m.group(2)}
+    if re.fullmatch(rf"(?:delete|remove|trash)\s+{_THIS}", low):
+        return Kind.FILE_OP, {"op": "delete"}
+    # headings on a page
+    m = re.fullmatch(r"(?:go to |read )?(?:the )?(next|previous|prev|first)\s+heading", low)
+    if m:
+        return Kind.HEADING_NAV, {"step": -1 if m.group(1).startswith("prev") else 1,
+                                  "first": m.group(1) == "first"}
+    # close every window
+    if re.fullmatch(r"close\s+(?:all|every|all the|all my|everything)(?:\s+(?:windows|apps|"
+                    r"applications|programs|open windows))?", low):
+        return Kind.CLOSE_ALL, {}
+    # email (in the browser: Gmail)
+    if re.search(r"\b(?:check|read|open|show)\s+(?:my\s+)?(?:new\s+|latest\s+|last\s+)?"
+                 r"(?:e-?mails?|mails?|inbox|gmail)\b|^(?:my\s+)?(?:e-?mails?|inbox)$", low):
+        return Kind.EMAIL, {"action": "check"}
+    m = re.search(r"\b(?:send|write|compose|new)\s+(?:an?\s+)?(?:e-?mail|mail)"
+                  r"(?:\s+to\s+(.+))?$", low)
+    if m:
+        return Kind.EMAIL, {"action": "compose", "to": (m.group(1) or "").strip()}
+    return None
+
+
 def parse(utterance: str) -> Intent:
     raw = utterance.strip()
     low = normalize(raw)
@@ -323,6 +490,12 @@ def parse(utterance: str) -> Intent:
     if re.fullmatch(r"(?:quit|exit|close|shut down|turn off|switch off|goodbye|bye)\s+relay"
                     r"|quit|exit|goodbye(?: relay)?|good night relay|close yourself", low):
         return I(Kind.QUIT)
+
+    # ---- laptop controls (before control words: "cancel shutdown" isn't "cancel") ----
+    hit = _laptop_control(low, keep)
+    if hit is not None:
+        kind, slots = hit
+        return I(kind, **slots)
 
     # ---- control words (stop / pause / continue / cancel / repeat) ----
     cmd = _control(low)
@@ -570,7 +743,7 @@ def parse(utterance: str) -> Intent:
         return I(Kind.FIND_FILE, name=m.group(1).strip())
     m = re.match(r"^(?:open|read)\s+(?:the\s+|my\s+)?(?:file|document|pdf)\s+"
                  r"(?:called\s+|named\s+)?(.+)$", low)
-    if m:
+    if m and not re.match(r"^open\s+(?:the\s+)?file\s+(?:explorer|manager)$", low):
         verb = "read" if low.startswith("read") else "open"
         return I(Kind.OPEN_FILE, name=m.group(1).strip(), then=verb)
 

@@ -265,6 +265,238 @@ class Skills:
         if self.s.on_quit is not None:
             self.s.on_quit()
 
+    # ---------------------------------------------------------------- laptop controls
+    def k_radio(self, i):
+        from relay.system import control
+        dev, state = i.slots.get("device", "bluetooth"), i.slots.get("state", "status")
+        spoken = "Bluetooth" if dev == "bluetooth" else "Wi-Fi"
+        if state != "status":
+            self.say(f"Turning {spoken} {state}.")
+        self.say(control.radio(dev, state))
+
+    def k_brightness(self, i):
+        from relay.system import control
+        action = i.slots.get("action", "get")
+        if action != "get":
+            self.say({"up": "Making the screen brighter.", "down": "Dimming the screen.",
+                      "set": f"Setting brightness to {i.slots.get('level')} percent."}[action])
+        self.say(control.change_brightness(action, i.slots.get("level")))
+
+    def k_dark_mode(self, i):
+        from relay.system import control
+        on = bool(i.slots.get("on"))
+        self.say("Turning dark mode on." if on else "Turning dark mode off.")
+        self.say(control.set_dark_mode(on))
+
+    def k_screenshot(self, i):
+        from relay.system import control
+        self.say("Taking a screenshot.")
+        text, path = control.screenshot()
+        self.say(text)
+        if path is None:
+            self.s.step_failed()
+
+    def k_power(self, i):
+        from relay.system import control
+        action = i.slots.get("action", "")
+        if action == "cancel":
+            self.say(control.power("cancel"))
+            return
+        what = {"shutdown": ("shut down the computer", "confirm shut down"),
+                "restart": ("restart the computer", "confirm restart"),
+                "sleep": ("put the computer to sleep", "confirm sleep"),
+                "signout": ("sign you out of Windows", "confirm sign out")}[action]
+        extra = (" It will wait one minute, and apps with unsaved work may ask you first."
+                 if action in ("shutdown", "restart") else
+                 " Unsaved work in open apps could be lost." if action == "signout" else "")
+        self.s.ask_phrase(what[1], f"I'm about to {what[0]}.{extra}",
+                          lambda a=action: self.say(control.power(a)))
+
+    def k_storage(self, i):
+        from relay.system import control
+        self.say(control.storage_text())
+
+    def k_network_info(self, i):
+        from relay.system import control
+        self.say(control.network_text())
+
+    def k_check_updates(self, i):
+        return self._open_settings("ms-settings:windowsupdate-action", "Windows Update",
+                                   "Windows Update is open and checking for updates.")
+
+    def k_settings_page(self, i):
+        topic = i.slots.get("topic", "")
+        extra = (" Night light is the switch near the top." if "night" in topic else "")
+        return self._open_settings(i.slots["uri"], f"{topic} settings",
+                                   f"{topic.capitalize()} settings are open.{extra}")
+
+    def _open_settings(self, uri: str, label: str, ok_text: str):
+        from relay.system import windows
+        return self.run(Step("open_uri", f"open {label}", {
+            "uri": uri, "label": label,
+            "check": lambda: bool((w := windows.foreground()) and (
+                "settings" in w.title.lower() or w.app.lower().startswith("systemsettings"))),
+            "ok_text": ok_text, "speak_detail": True, "timeout": 8.0}))
+
+    def k_recycle_bin(self, i):
+        from relay.system import control, windows
+        if i.slots.get("action") == "empty":
+            self.s.ask_phrase("confirm empty", "I'm about to empty the Recycle Bin. Files in "
+                              "it will be gone for good.",
+                              lambda: self.say(control.empty_recycle_bin()))
+            return
+        return self.run(Step("open_uri", "open the Recycle Bin", {
+            "uri": "shell:RecycleBinFolder", "label": "Recycle Bin",
+            "check": lambda: bool((w := windows.foreground()) and
+                                  "recycle" in w.title.lower()),
+            "ok_text": "The Recycle Bin is open. Say what's on my screen to hear it.",
+            "speak_detail": True}))
+
+    def k_weather(self, i):
+        from relay.system import control
+        place = i.slots.get("place", "")
+        self.say(f"Checking the weather{' in ' + place if place else ''}.")
+        self.say(control.weather_text(place))
+
+    def k_new_folder(self, i):
+        from relay.system import control, files
+        name = re.sub(r"[<>:\"/\\|?*]", "", (i.slots.get("name") or "").strip()).strip(". ")
+        if not name:
+            self.say("What should I call the new folder?")
+            self.s.capture_next(lambda text: self.k_new_folder(type(i)(Kind.NEW_FOLDER, {
+                "name": text, "where": i.slots.get("where", "")})))
+            return
+        where = i.slots.get("where", "")
+        base, label = None, ""
+        if where:
+            base = files.known_folder("pictures" if where == "photos" else where)
+            label = f"your {where.capitalize()} folder"
+        if base is None:
+            here, _sel = control.explorer_selection()
+            if here is not None:
+                base, label = here, f"{here.name}, the folder you're in"
+        if base is None:
+            base, label = files.known_folder("desktop"), "your Desktop"
+        target = base / name
+        if target.exists():
+            self.say(f"There's already a folder called {name} in {label}.")
+            return
+        self.say(f"I'm going to create a folder called {name} in {label}.")
+        try:
+            target.mkdir(parents=False)
+        except OSError as e:
+            log.warning("new folder failed: %s", e)
+        if target.is_dir():
+            self.say(f"Done. The {name} folder is in {label}.")
+        else:
+            self.say("I couldn't create that folder.")
+            self.s.step_failed()
+
+    def k_file_op(self, i):
+        import shutil
+        from pathlib import Path
+
+        from relay.system import control, files
+        op = i.slots.get("op", "")
+        _folder, sel = control.explorer_selection()
+        if not sel:
+            self.say("Select the file first: open it in File Explorer and move to it with "
+                     "the arrow keys. Then say it again.")
+            self.s.step_failed()
+            return
+        if len(sel) > 1 and op == "rename":
+            self.say("More than one item is selected; select just one to rename it.")
+            self.s.step_failed()
+            return
+        item = sel[0]
+        what = item.name if len(sel) == 1 else f"{len(sel)} items"
+        if op == "delete":
+            self.s.ask_phrase("confirm delete", f"I'm about to move {what} to the Recycle "
+                              "Bin. You can get it back from there.",
+                              lambda: self._recycle(sel))
+            return
+        if op == "rename":
+            new = re.sub(r"[<>:\"/\\|?*]", "", i.slots.get("to", "")).strip(" .")
+            if not new:
+                self.say("What should the new name be?")
+                return
+            if not Path(new).suffix and item.suffix and item.is_file():
+                new += item.suffix                     # keep the file type
+            dest = item.with_name(new)
+            if dest.exists():
+                self.say(f"There's already something called {new} there.")
+                return
+            self.say(f"Renaming {item.name} to {new}.")
+            try:
+                item.rename(dest)
+            except OSError as e:
+                log.warning("rename failed: %s", e)
+            self.say(f"Done. It's now called {new}." if dest.exists() else
+                     "I couldn't rename it. It may be open in another program.")
+            return
+        to = i.slots.get("to", "")
+        base = files.known_folder("pictures" if to == "photos" else to)
+        if base is None:
+            self.say(f"I couldn't find your {to} folder.")
+            return
+        verb = "Moving" if op == "move" else "Copying"
+        self.say(f"{verb} {what} to your {to.capitalize()} folder.")
+        done = 0
+        for p in sel:
+            dest = base / p.name
+            if dest.exists():
+                continue
+            try:
+                (shutil.move if op == "move" else
+                 (shutil.copytree if p.is_dir() else shutil.copy2))(str(p), str(dest))
+                done += dest.exists()
+            except OSError as e:
+                log.warning("%s failed: %s", op, e)
+        self.say(f"Done. {what.capitalize() if len(sel) > 1 else what} "
+                 f"{'is' if len(sel) == 1 else 'are'} in your {to.capitalize()} folder."
+                 if done == len(sel) else
+                 f"{done} of {len(sel)} done; the rest already existed there or were in use.")
+
+    def _recycle(self, paths):
+        from relay.system import control
+        ok = sum(control.recycle(p) for p in paths)
+        self.say("Moved to the Recycle Bin." if ok == len(paths) else
+                 f"{ok} of {len(paths)} moved to the Recycle Bin; the rest are in use.")
+
+    def k_close_all(self, i):
+        from relay.system import windows
+        wins = [w for w in windows.list_windows()]
+        if not wins:
+            self.say("There are no windows to close.")
+            return
+        names = ", ".join(w.spoken for w in wins[:6]) + (" and more" if len(wins) > 6 else "")
+
+        def close_all():
+            for w in wins:
+                self.run(Step("window", f"close {w.spoken}", {
+                    "op": "close", "hwnd": w.hwnd, "label": w.spoken,
+                    "announce": f"Closing {w.spoken}."}))
+            left = [w for w in wins if windows.exists(w.hwnd)]
+            self.say("All closed." if not left else
+                     f"{len(left)} still open, probably asking about unsaved work: "
+                     + ", ".join(w.spoken for w in left) + ".")
+        self.s.ask_phrase("confirm close all", f"I'm about to close {len(wins)} windows: "
+                          f"{names}. Apps with unsaved work will ask you first.", close_all)
+
+    def k_email(self, i):
+        from relay.system import web
+        if i.slots.get("action") == "compose":
+            to = i.slots.get("to", "")
+            addr = to.replace(" at ", "@").replace(" dot ", ".").replace(" ", "")
+            url = "https://mail.google.com/mail/?view=cm&fs=1" + (
+                f"&to={addr}" if "@" in addr else "")
+            self.say("Opening a new email in Gmail." + (
+                "" if "@" in addr else " Say type, and the email address, to fill in who "
+                "it's to."))
+            return self._open_site(url, "a new email")
+        url = web.site_url("gmail") or "https://mail.google.com"
+        return self._open_site(url, "Gmail")
+
     # ---------------------------------------------------------------- dictation
     def k_dictation(self, i):
         on = bool(i.slots.get("on"))
@@ -377,7 +609,9 @@ class Skills:
                                       w.title.lower()),
                 "ok_text": f"Your {name} folder is open.", "speak_detail": True}))
         cat = self.s.apps
-        cat.wait_ready(3.0)
+        if not cat.wait_ready(3.0) or not cat.entries:     # first run: list still loading
+            self.say("One moment, I'm still finding the apps on this computer.")
+            cat.wait_ready(20.0)
         entry = cat.find(clean) if clean else None
         url = web.site_url(clean)
         if entry is not None and not (url and clean in web.SITES and
@@ -397,10 +631,43 @@ class Skills:
             return self._open_site(url, clean)
         if re.search(r"\.\w{2,4}$", clean):                 # looks like a file name
             return self.k_open_file(type(i)(Kind.OPEN_FILE, {"name": clean, "then": "open"}))
+        running = windows.find(clean) if clean else None     # open, but not on the Start menu
+        if running is not None:
+            return self.run(Step("window", f"switch to {running.spoken}", {
+                "op": "activate", "hwnd": running.hwnd, "label": running.spoken,
+                "announce": f"{running.spoken} is already open. Switching to it.",
+                "ok_text": f"You're in {running.spoken}.", "speak_detail": True}))
+        if cat.entries and clean and self._looks_like_document(target, clean):
+            return self.k_open_file(type(i)(Kind.OPEN_FILE, {"name": clean, "then": "open"}))
+        self.s.step_failed()
+        guess = cat.candidates(clean, limit=1, threshold=45) if clean else []
+        if guess:
+            name = guess[0].name
+            self.say(f"I couldn't find an app called {target}. Did you mean {name}? "
+                     "Say yes or no.")
+            self.s.offer(lambda: self.k_open_app(type(i)(Kind.OPEN_APP, {"app": name})))
+            return []
         self.say(f"I couldn't find an app called {target}. Do you want me to search the "
                  "web for it? Say yes or no.")
         self.s.offer(lambda: self._search(target))
         return []
+
+    @staticmethod
+    def _looks_like_document(said: str, clean: str) -> bool:
+        """"open my resume" may mean a document — but only open a file when the user
+        said so ("my …", "the file …") or a document is named exactly that. Never
+        'calculator' -> calculator3d.html."""
+        from relay.system import files
+        hits = files.find_files(clean, limit=3, time_budget=2.0)
+        docs = [h for h in hits if h.path.suffix.lower() in files.READABLE - {".html", ".htm"}
+                or h.path.suffix.lower() in (".xlsx", ".pptx", ".doc", ".xls", ".ppt")]
+        if not docs:
+            return False
+        flat = re.sub(r"[\s_\-.]+", "", clean.lower())
+        exact = any(re.sub(r"[\s_\-.]+", "", h.path.stem.lower()) == flat for h in docs)
+        cue = re.search(r"\b(?:my|file|document|doc|pdf|spreadsheet|presentation)\b",
+                        said.lower())
+        return exact or bool(cue)
 
     def _open_site(self, url: str, label: str):
         from relay.system import web, windows
@@ -438,6 +705,7 @@ class Skills:
                      "Say yes or no.")
             self.s.offer(lambda: self.k_open_app(type(i)(Kind.OPEN_APP, {"app": target})))
             return []
+        self.s.step_failed()
         self.say(f"I couldn't find a window for {target}. Say what windows are open to "
                  "hear them.")
 
@@ -454,6 +722,7 @@ class Skills:
         target = (i.slots.get("target") or "").strip()
         w = windows.find(target) if target else windows.foreground()
         if w is None:
+            self.s.step_failed()
             self.say(f"I couldn't find a window called {target}." if target else
                      "There's no window in front to do that to.")
             return
@@ -774,6 +1043,29 @@ class Skills:
                          f"{it.name}." for n, it in enumerate(items, 1))
         self.say(f"There are {len(items)} headings.")
         self.s.start_reading(body, title="", intro=False)
+
+    def k_heading_nav(self, i):
+        """"next heading" / "previous heading": walk the page's headings one at a time."""
+        rl = self.recent_list()
+        if rl and rl[0] == "headings":
+            items = rl[1]
+        else:
+            items = self._items("headings")
+            if not items:
+                self.say("This page has no headings I can find.")
+                self.s.step_failed()
+                return
+            self.remember_list("headings", items)
+            self._heading_pos = -1
+        step = int(i.slots.get("step", 1))
+        pos = 0 if i.slots.get("first") else getattr(self, "_heading_pos", -1) + step
+        if pos < 0 or pos >= len(items):
+            self.say("That was the last heading." if step > 0 else "That was the first heading.")
+            return
+        self._heading_pos = pos
+        it = items[pos]
+        level = f"level {it.level}, " if getattr(it, "level", 0) else ""
+        self.say(f"Heading {pos + 1} of {len(items)}, {level}{it.name}.")
 
     def k_read_focus(self, i):
         snap = self.s.worker.observe(3.0)

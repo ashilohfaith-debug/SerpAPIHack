@@ -70,6 +70,9 @@ def parse_reminder(text: str, now: _dt.datetime | None = None
     t = re.sub(r"\ba\s*\.\s*m\b\.?", "am", t)
     t = re.sub(r"\bp\s*\.\s*m\b\.?", "pm", t)
     t = re.sub(r"\b(\d{1,2})\s*(am|pm)\b", r"\1 \2", t)
+    # "set an alarm for 6", "wake me up for 7:30" -> "... at 6"
+    t = re.sub(r"\b(alarm|wake me(?: up)?)\s+(?:for|to)\s+(?=\d)", r"\1 at ", t)
+    alarm = bool(re.search(r"\b(?:alarm|wake me)\b", t))
     is_timer = bool(re.search(r"\btimer\b", t))
     due = None
     m = _DUR_BLOCK.search(t)
@@ -93,10 +96,11 @@ def parse_reminder(text: str, now: _dt.datetime | None = None
                 hour = 0
             day = now.date() + (_dt.timedelta(days=1) if "tomorrow" in t else _dt.timedelta())
             due = _dt.datetime.combine(day, _dt.time(hour, minute))
-            if not mer and "tomorrow" not in t:
+            if not mer and "tomorrow" not in t and not alarm:
                 # no am/pm: the next time it will be that o'clock
                 while due <= now and hour < 12:
                     due += _dt.timedelta(hours=12)
+            # an alarm / "wake me up at 7" with no am/pm means the morning
             if due <= now:
                 due += _dt.timedelta(days=1)
             t = t[:m.start()] + " " + t[m.end():]
@@ -109,7 +113,8 @@ def parse_reminder(text: str, now: _dt.datetime | None = None
     msg = re.sub(r"^(?:for|to|about|that|of)\s+", "", msg)
     msg = re.sub(r"\s+(?:to|for)$", "", msg).strip()
     if not msg:
-        msg = "your timer is done" if is_timer else "this is your reminder"
+        msg = ("your timer is done" if is_timer else "this is your alarm" if alarm
+               else "this is your reminder")
     return due, msg, is_timer
 
 

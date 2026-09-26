@@ -449,3 +449,23 @@ def test_routes_from_env_override_config(monkeypatch, tmp_path):
     dev = routes[0].extra_headers["X-Relay-Device"]
     assert len(dev) == 32 and routes_from_config(Config())[0].extra_headers[
         "X-Relay-Device"] == dev                              # stable per install
+
+
+def test_local_router_on_another_port_is_found(monkeypatch):
+    """The FreeLLMAPI desktop app uses port 31415, Docker/source 3001: a local URL with
+    the wrong port finds the one that is actually listening. Remote URLs are left alone."""
+    import socket
+
+    import relay.llm as llm
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+    try:
+        monkeypatch.setattr(llm, "_LOCAL_PORTS", (port,))
+        assert llm._local_router("http://localhost:9/v1") == f"http://127.0.0.1:{port}/v1"
+        here = f"http://127.0.0.1:{port}/v1"
+        assert llm._local_router(here) == here
+        assert llm._local_router("https://gw.example.com/v1") == "https://gw.example.com/v1"
+    finally:
+        srv.close()

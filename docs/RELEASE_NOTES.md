@@ -1,5 +1,41 @@
 # RELAY — release notes
 
+## 0.3.2 — Do things on the laptop, one step or many
+
+A sweep of 106 things a blind user says on a laptop found 43 that failed or did the
+wrong thing. All are handled now; details in the user guide (sections 4a, 4b).
+
+- **App names as speech recognition spells them.** "Antigravity" heard as "anti
+  gravity", "Andy gravity" or "and gravity"; "what sapp", "spot if i", "vs code" — all
+  match now (spacing-free and sound-alike matching). A weak match is offered ("Did you
+  mean Antigravity?"), never launched. Apps already open but not on the Start menu are
+  switched to.
+- **Laptop controls:** Bluetooth / Wi-Fi on-off and status, brightness, dark mode,
+  screenshot, shut down / restart / sleep / sign out (spoken confirmation; shut down
+  waits a minute and can be cancelled), storage, IP and Wi-Fi name, Windows Update, any
+  Settings page, the Recycle Bin, the weather (wttr.in, no key), alarms.
+- **File Explorer actions** on the selected item: rename, move, copy, delete (to the
+  Recycle Bin, confirmed), new folder; "close all windows" (confirmed); email via Gmail.
+- **Several steps in one request** ("open Notepad, type …, then save it as …"): the plan
+  is said first, steps run in order, and the run stops at the first failure. Free text
+  is never split, so a sentence being typed can't turn into a command.
+- **AI plans** (with FreeLLMAPI): the assistant can return up to 8 steps, each checked
+  against RELAY's own commands — all or nothing, never a confirmation phrase.
+- **FreeLLMAPI desktop app found automatically:** it listens on port 31415 (Docker and
+  source use 3001); a local router address with the wrong port is corrected.
+- **Fixes found by testing live on a real laptop:** "open file explorer" opened a file
+  named "explorer"; "close all windows" looked for a window called "all windows"; "set an
+  alarm for 6 am" wasn't understood and "wake me up at 7" meant 7 pm; a document search
+  fallback could open a similarly named file (e.g. calculator3d.html for "calculator") —
+  it now needs you to say it's a document or an exact name, and never runs while the app
+  list is still loading.
+- **Safety fix after a live-test incident:** Windows 11 Notepad reopens earlier tabs,
+  including unsaved ones, so "open Notepad and type …" could type into someone's
+  document. RELAY now opens a new blank page first, and types nothing if it can't.
+- Tests: 351 pass. Live on this laptop: weather, storage, Bluetooth status, network,
+  brightness, screenshot, new folder, "andy gravity" → Antigravity, two steps (open
+  Calculator + the time) and closing it — all passed.
+
 ## 0.3.1 — Headphones, closing by keyboard, FreeLLMAPI on its own
 
 ### Headphones and earphones

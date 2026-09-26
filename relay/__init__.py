@@ -26,7 +26,7 @@ import os as _os
 _os.environ.setdefault("KMP_BLOCKTIME", "0")
 _os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 
 def inference_threads() -> int:

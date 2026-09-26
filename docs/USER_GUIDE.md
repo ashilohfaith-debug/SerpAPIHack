@@ -69,6 +69,43 @@ the internet" · "status" (time, battery and internet together) · "what's the v
 Sums: "what is 25 times 4" · "what's 15 percent of 2 lakh" · "1200 divided by 12" ·
 "square root of 144" · "5 into 3" (times).
 
+Also: "what's the weather" / "what's the weather in Hyderabad" / "will it rain today" ·
+"how much storage is left" · "what's my IP address" (and which Wi-Fi you're on) ·
+"set an alarm for 6 am" · "wake me up at 7" (7 in the morning).
+
+## 4a. Controlling the laptop
+- "turn on Bluetooth" · "turn off Wi-Fi" · "is Bluetooth on"
+- "increase brightness" · "make the screen dimmer" · "set brightness to 40 percent"
+- "turn on dark mode" · "switch to light mode"
+- "take a screenshot" (saved in Pictures, Screenshots)
+- "open Bluetooth settings", "open display settings", "sound settings", "night light" —
+  any Settings page · "check for updates"
+- "shut down the computer", "restart", "sleep", "sign out" — RELAY asks you to say
+  "confirm shut down" (etc.) first; shut down and restart wait a minute, and "cancel
+  shutdown" stops them.
+- In File Explorer, on the selected file: "rename this to report", "move this to
+  documents", "copy this to desktop", "delete this file" (asks "confirm delete"; it goes
+  to the Recycle Bin). "create a new folder called projects on the desktop".
+  "open the recycle bin" · "empty the recycle bin" (asks "confirm empty").
+- "close all windows" (asks "confirm close all"; apps with unsaved work ask first).
+- "check my email" opens Gmail · "next heading" / "previous heading" on a web page.
+
+## 4b. Several things at once
+Say them in one breath with "and" or "then":
+- "open Notepad and type hello world"
+- "open Notepad, type the shopping list, then save it as groceries"
+- "open Chrome and search for today's cricket score"
+- "search for weather in Hyderabad and read the first result"
+- "open Chrome, WhatsApp and Gmail"
+
+RELAY says the steps first ("3 steps: …"), does them one by one, and **stops at the first
+step that doesn't work** — it never types into the wrong window because an app didn't
+open. If Notepad or Word opens on one of your existing documents, RELAY starts a new
+blank page before typing, so your document is never changed. "stop" or "cancel" ends
+the run between steps. Inside something you're typing, "and" is just a word: "type salt
+and pepper" types exactly that. With the AI assistant set up, you can ask in your own
+words ("make a shopping list with milk and eggs in Notepad") and it plans the steps.
+
 ## 5. Apps and windows
 - "open WhatsApp", "open Word", "open Calculator" — any app on your Start menu. If it's
   already open, RELAY switches to it.

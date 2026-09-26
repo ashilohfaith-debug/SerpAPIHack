@@ -37,18 +37,29 @@ URLs, code, tables or special symbols. Say numbers and units the way a person wo
 - Be warm and direct. Never say you are an AI model; never describe what you would do.
 - If you don't know or can't check something (live news, prices, weather), say so briefly.
 
-If the user is asking you to DO something on their computer that matches one of these \
-commands, reply with exactly one line "DO: <command>" and nothing else:
-open <app, website or folder> | switch to <app> | search the web for <query> | \
-search youtube for <query> | what time is it | what's the date | battery status | \
-am i connected to the internet | volume up | volume down | set volume to <n> percent | \
-mute | unmute | play music | pause music | next track | read the page | \
-read the clipboard | list links | list headings | what's on my screen | take a note <text> | \
+If the user wants something DONE on the computer, reply ONLY with command lines, one \
+per step, in order, each starting with "DO: " (at most 8 lines). Use only these commands:
+open <app, website, folder or file> | open <topic> settings | switch to <app> | \
+close <app> | close this window | minimize this window | maximize this window | \
+what windows are open | search the web for <query> | play <song or video> on youtube | \
+open the <first/second/third> result | read the page | list links | list headings | \
+click <name of a button, link or item> | type <text> | press <keys> | select all | copy | \
+paste | undo | save | save as <name> | new tab | close tab | go back | scroll down | \
+scroll up | what's on my screen | read the clipboard | find file <name> | \
+read the file <name> | create a new folder called <name> on the desktop | \
+rename this to <name> | move this to <desktop/documents/downloads> | take a note <text> | \
 read my notes | remind me in <n> minutes to <text> | remind me at <time> to <text> | \
-type <text> | press <keys> | select all | copy | paste | undo | save | close this window | \
-minimize this window | what windows are open | find file <name> | open file <name> | \
-speak faster | speak slower | help
-Never output confirmation phrases, passwords, or commands that are not in this list."""
+set an alarm for <time> | what time is it | what's the date | battery status | \
+how much storage is left | what's my ip address | what's the weather in <city> | \
+volume up | volume down | set volume to <n> percent | mute | unmute | play music | \
+pause music | next track | turn on bluetooth | turn off bluetooth | turn on wifi | \
+set brightness to <n> percent | turn on dark mode | turn off dark mode | \
+take a screenshot | check for updates | speak faster | speak slower
+Example — "open notepad and write a shopping list with milk and eggs":
+DO: open notepad
+DO: type Shopping list: milk, eggs.
+Write any text to type in full, ready to use. Never output confirmation phrases, \
+passwords, or commands that are not in this list."""
 
 _BLOCK = re.compile(r"^\s*(confirm|emergency|quit|exit|delete my notes|clear my notes|"
                     r"clear (my )?(task )?history|forget)\b", re.I)
@@ -58,12 +69,15 @@ _NEVER = {Kind.UNKNOWN, Kind.CONTROL, Kind.QUIT, Kind.DELETE_NOTES, Kind.CLEAR_H
 # streaming, "It costs 3." may still become "It costs 3.5 lakh."
 _SENTENCE_END = re.compile(r"[.!?।…]+[\"')\]]*\s")
 _MIN_CHUNK = 12          # merge a very short opener ("Sure.") into the next sentence
+_MAX_STEPS = 8           # longest plan the assistant may propose
 
 
 def validate_command(line: str) -> str | None:
     """Accept a model-suggested command only if it's one allowed, parseable command."""
     line = (line or "").strip().splitlines()[0].strip() if (line or "").strip() else ""
-    line = re.sub(r"^\s*DO\s*:\s*", "", line, flags=re.I).strip("`\"' .")
+    line = re.sub(r"^\s*DO\s*:\s*", "", line, flags=re.I).strip("`\"' ")
+    if not re.match(r"(?i)(?:type|write|take a note|note|remind me)\b", line):
+        line = line.rstrip(". ")                    # "DO: open notepad." -> "open notepad"
     if not line or _BLOCK.match(line) or looks_sensitive(line):
         return None
     return line if parse(line).kind not in _NEVER else None
@@ -115,8 +129,8 @@ class Assistant:
                         pending = full
                         continue
                 if mode == "cmd":
-                    if "\n" in full.lstrip():
-                        break                   # the command line is complete
+                    if len(re.findall(r"(?im)^\s*DO\s*:", full)) > _MAX_STEPS:
+                        break                   # enough steps; ignore the rest
                     continue
                 pending += delta
                 while True:                     # speak each finished sentence at once
@@ -140,10 +154,15 @@ class Assistant:
                 return "answer", full
             return "offline", ""
         if mode == "cmd":
-            cmd = validate_command(full)
             self._remember(utterance, full.strip())
-            return ("command", cmd) if cmd else ("answer", self._say_local(
-                speak, "I'm not able to do that one."))
+            lines = [ln for ln in full.splitlines() if re.match(r"^\s*DO\s*:", ln, re.I)]
+            cmds = [validate_command(ln) for ln in lines[:_MAX_STEPS]]
+            if not cmds or any(c is None for c in cmds):
+                # all or nothing: never run half of a plan that has an unsafe step
+                return "answer", self._say_local(speak, "I'm not able to do that one." if
+                                                 len(cmds) <= 1 else "I can't do all of that "
+                                                 "safely, so I haven't started.")
+            return ("command", cmds[0]) if len(cmds) == 1 else ("plan", cmds)
         tail = _clean_for_speech(pending)
         if tail:
             speak(tail)
