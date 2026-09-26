@@ -30,6 +30,8 @@ from relay.diagnostics import get_logger
 log = get_logger("audio.devices")
 
 _FORM_FACTOR = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E} 0"   # PKEY_AudioEndpoint_FormFactor
+_BUS = "{A45C254E-DF1C-4EFD-8020-67D146A850E0} 24"          # PKEY_Device_EnumeratorName
+_PHYSICAL = "{B3F8FA53-0004-438E-9003-51A46E139BFC} 2"      # the physical device behind it
 HEADPHONES, HEADSET, HANDSET = 3, 5, 6
 _HEAD_WORDS = ("headphone", "headset", "earphone", "earbud", "buds", "airpods", "hands-free",
                "handsfree", "neckband")
@@ -44,13 +46,26 @@ class Endpoint:
     id: str
     name: str
     form_factor: int = -1
+    # a plug-in (USB / Bluetooth) output whose own device also has a microphone: USB-C
+    # earphones and headset adapters, which Windows often just calls "Speakers"
+    with_mic: bool = False
 
     @property
-    def is_headphones(self) -> bool:
+    def said_headphones(self) -> bool:
+        """Windows (form factor) or the device's name says headphones."""
         if self.form_factor in (HEADPHONES, HEADSET, HANDSET):
             return True
         low = self.name.lower()
         return any(w in low for w in _HEAD_WORDS)
+
+    @property
+    def is_headphones(self) -> bool:
+        return self.said_headphones or self.with_mic
+
+    @property
+    def guessed(self) -> bool:
+        """Headphones by inference only (worth saying so, so the user can correct it)."""
+        return self.with_mic and not self.said_headphones
 
     @property
     def is_hands_free(self) -> bool:
@@ -73,6 +88,14 @@ def spoken_name(name: str) -> str:
     device = re.sub(r"\s+(?:stereo|hands-?free(?:\s+ag\s+audio)?)$", "", device,
                     flags=re.I).strip()
     return f"{device} {kind.lower()}" if device else kind
+
+
+def device_name(name: str) -> str:
+    """'Speakers (AB13X USB Audio)' -> 'AB13X USB Audio' (the product, not Windows' role
+    label — which is wrong for earphones Windows calls speakers)."""
+    clean = re.sub(r"\((?:R|TM)\)", "", name or "", flags=re.I).strip()
+    m = re.match(r"^([^()]+?)\s*\((.+)\)$", clean)
+    return m.group(2).strip() if m else clean
 
 
 class _Probe:
@@ -100,17 +123,41 @@ class _Probe:
         except Exception:
             return None                        # no device of this kind right now
         ep = self._known.get(dev_id)
-        if ep is None:                         # a device we haven't seen: read its name
-            name, ff = "", -1
+        if ep is None:                         # a device we haven't seen: read its details
+            name, ff, with_mic = "", -1, False
             try:
-                d = self._au.CreateDevice(dev)
-                name = str(d.FriendlyName or "")
-                v = (d.properties or {}).get(_FORM_FACTOR, -1)
+                name, props = self._details(dev)
+                v = props.get(_FORM_FACTOR, -1)
                 ff = v if isinstance(v, int) else -1
+                if flow == _RENDER:
+                    with_mic = self._has_own_mic(props)
             except Exception as e:
                 log.debug("device details unavailable: %s", e)
-            ep = self._known[dev_id] = Endpoint(dev_id, name, ff)
+            ep = self._known[dev_id] = Endpoint(dev_id, name, ff, with_mic)
         return ep
+
+    def _details(self, dev) -> tuple[str, dict]:
+        import warnings
+        with warnings.catch_warnings():        # pycaw warns about unreadable properties
+            warnings.simplefilter("ignore")
+            d = self._au.CreateDevice(dev)
+        return str(d.FriendlyName or ""), dict(d.properties or {})
+
+    def _has_own_mic(self, props: dict) -> bool:
+        """USB/Bluetooth output whose physical device also records (the laptop's own
+        audio chip has speakers and microphones too, so internal buses don't count)."""
+        bus = str(props.get(_BUS, "")).upper()
+        physical = props.get(_PHYSICAL)
+        if not physical or not (bus == "USB" or bus.startswith("BTH")):
+            return False
+        try:
+            mics = self._enum.EnumAudioEndpoints(_CAPTURE, 1)       # DEVICE_STATE_ACTIVE
+            for i in range(mics.GetCount()):
+                if self._details(mics.Item(i))[1].get(_PHYSICAL) == physical:
+                    return True
+        except Exception as e:
+            log.debug("could not list microphones: %s", e)
+        return False
 
 
 def default_endpoints() -> tuple[Optional[Endpoint], Optional[Endpoint]]:

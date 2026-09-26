@@ -8,9 +8,11 @@
   in later (wired, USB, Bluetooth) get RELAY's voice straight away, and it says so.
 - **Interrupt by voice with headphones:** RELAY can't hear itself, so it keeps listening
   while it talks — "stop", or "Relay" and a new request. Room conversation is still
-  ignored. Automatic for headphones/headsets; "headphone mode on/off/automatic" and
-  "I'm using headphones" override it (earphones in a combined laptop jack often appear
-  as speakers to Windows).
+  ignored. Automatic for headphones/headsets, and for USB/Bluetooth audio that has its
+  own microphone on the same device (USB-C earphones and adapters — e.g. an "AB13X USB
+  Audio" adapter that Windows calls "Speakers"; RELAY says it's guessing). "headphone
+  mode on/off/automatic" and "I'm using headphones" correct it **for that device only**,
+  remembered — the laptop's own speakers stay half-duplex.
 - **Unplugged mid-reading → paused**, not read aloud to the room ("Headphones
   disconnected, so I've paused. Say continue to carry on.").
 - A Bluetooth headset's hands-free microphone is avoided (it forces phone-call audio
@@ -27,13 +29,18 @@
 ### Fixes
 - The talk key and a spoken "Relay, …" now cancel a streaming AI answer too; before,
   only the current sentence stopped and the answer carried on.
+- The screen-reading thread now initialises Windows COM itself; it used to depend on
+  being the first to load it, which breaks as soon as another part (audio devices,
+  volume) loads it first.
 
 ### Setup
 - FreeLLMAPI alone is enough: `.env.example` lists it first; Sarvam is optional and its
   extra settings are commented out. A test proves no Sarvam call happens without its key.
 - One `.env` for both copies: the installed app's `.env` can hold just
   `RELAY_ENV_FILE=<path to the project's .env>`.
-- Tests: 269 pass.
+- Tests: 271 pass. Live: the assembled app saw the real devices and closed 0.6 s after
+  the Ctrl+Alt+R signal, saying goodbye. Headphone hot-plugging itself is covered by
+  unit tests only (no plug/unplug was performed here).
 
 ## 0.3.0 — Instant AI answers and the Sarvam voice (optional, one `.env` file)
 

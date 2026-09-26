@@ -46,8 +46,15 @@ class _WorkerThread:
         self._thread.start()
 
     def _run(self) -> None:
-        # Let the uiautomation/comtypes library initialise COM on this thread; all
-        # UIA calls happen here, so the apartment stays consistent.
+        # All UIA calls happen on this thread, so it owns COM: initialise it here, as a
+        # single-threaded apartment (what comtypes' own import does). Relying on that
+        # import only worked while this thread happened to import comtypes first; now
+        # other threads (audio-device watch, volume) may do so earlier.
+        try:
+            import comtypes
+            comtypes.CoInitialize()
+        except Exception:
+            pass
         while True:
             fn, box, done = self._q.get()
             if fn is None:

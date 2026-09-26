@@ -17,6 +17,7 @@ from relay.audio import SpeechQueue, WhisperSTT, make_tts
 from relay.audio.devices import (
     DeviceWatch,
     default_endpoints,
+    device_name,
     laptop_mic,
     mic_device_for,
     same,
@@ -158,26 +159,51 @@ class RelayApp:
         self.request_quit()
 
     # ---- headphones and audio devices ----
-    def _headphone_pref(self) -> str:
-        return self.session.store.get_pref("headphone_mode", default="auto")
+    def _marks(self) -> dict:
+        """What the user told us per device: {endpoint id: True (headphones) / False}."""
+        import json
+        try:
+            marks = json.loads(self.session.store.get_pref("headphone_devices", default="{}"))
+            return marks if isinstance(marks, dict) else {}
+        except ValueError:
+            return {}
+
+    def _is_headphones(self, ep) -> bool:
+        if ep is None:                     # devices unknown: the user's general choice
+            return self.session.store.get_pref("headphone_mode", default="auto") == "on"
+        marks = self._marks()
+        return bool(marks[ep.id]) if ep.id in marks else ep.is_headphones
 
     def _apply_headphone_mode(self) -> None:
-        out, mode = self.devices.output, self._headphone_pref()
-        self.loop.headphones = mode == "on" or (mode == "auto" and bool(out and out.is_headphones))
+        self.loop.headphones = self._is_headphones(self.devices.output)
 
     def set_headphone_mode(self, mode: str) -> str:
-        """'on' | 'off' | 'auto' — from "headphone mode on" etc. Returns what to say."""
+        """'on' | 'off' | 'auto' for the device in use now, remembered for that device
+        ("I'm using headphones" once for USB-C earphones Windows calls speakers; the
+        laptop's own speakers are not affected). Returns what to say."""
+        import json
         mode = mode if mode in ("on", "off", "auto") else "auto"
-        self.session.store.set_pref("headphone_mode", mode)
+        out = self.devices.output
+        if out is None:
+            self.session.store.set_pref("headphone_mode", mode)
+            name = "the sound device"
+        else:
+            marks = self._marks()
+            if mode == "auto":
+                marks.pop(out.id, None)
+            else:
+                marks[out.id] = mode == "on"
+            self.session.store.set_pref("headphone_devices", json.dumps(marks))
+            name = spoken_name(out.name) or "this device"
         self._apply_headphone_mode()
         if mode == "on":
-            return ("Headphone mode on. I'll keep listening while I talk, so you can "
-                    "interrupt me just by speaking.")
+            return (f"Headphone mode on for {name}, and I'll remember it. I'll keep listening "
+                    "while I talk, so you can interrupt me just by speaking.")
         if mode == "off":
-            return ("Headphone mode off. While I'm talking I won't listen; press "
+            return (f"Headphone mode off for {name}. While I'm talking I won't listen; press "
                     f"{spoken_combo(self.cfg.push_to_talk_hotkey)} to interrupt me.")
-        return ("Headphone mode is automatic: it's on whenever headphones are connected. "
-                + ("It's on now." if self.loop.headphones else "It's off now."))
+        return (f"Okay, for {name} I'll go by what Windows says. Headphone mode is "
+                + ("on." if self.loop.headphones else "off."))
 
     def describe_audio(self) -> str:
         """Where RELAY's voice goes and where it listens ("where is the sound going")."""
@@ -191,9 +217,9 @@ class RelayApp:
                      "keeps its full sound quality")
         elif inp is not None and inp.name:
             said += f", and listening through {spoken_name(inp.name)}"
-        auto = self._headphone_pref() == "auto"
+        told = out is not None and out.id in self._marks()
         return (said + f". Headphone mode is {'on' if self.loop.headphones else 'off'}"
-                + (", and set to switch automatically." if auto else "."))
+                + (", as you told me for this device." if told else "."))
 
     def _on_audio_change(self, old_out, new_out, old_in, new_in) -> None:
         """Windows' default device changed: headphones plugged in or out, a headset's
@@ -206,8 +232,8 @@ class RelayApp:
         if same(old_out, new_out):
             return
         self._apply_headphone_mode()
-        if old_out is not None and old_out.is_headphones and not (
-                new_out is not None and new_out.is_headphones):
+        if (old_out is not None and self._is_headphones(old_out)
+                and not (new_out is not None and self._is_headphones(new_out))):
             # headphones removed: never carry on reading private text out loud
             reading = self.session.reader.reading
             if reading or self.speech.is_speaking:
@@ -220,14 +246,23 @@ class RelayApp:
         self._announce_timer.daemon = True
         self._announce_timer.start()
 
+    @staticmethod
+    def _guess_line(out) -> str:
+        return (f"{device_name(out.name) or 'This device'} has its own microphone, so I think "
+                "it's headphones or earphones: you can interrupt me just by talking. If it's "
+                "a speaker, say headphone mode off.")
+
     def _announce_audio(self) -> None:
         out, before = self.devices.output, self._announced_out
         paused, self._paused_for_privacy = self._paused_for_privacy, ""
         self._announced_out = out
         name = spoken_name(out.name) if out is not None else ""
-        if out is not None and out.is_headphones:
-            line = f"{name or 'Headphones'} connected."
-            if self.loop.headphones:
+        if out is not None and self._is_headphones(out):
+            if out.guessed and out.id not in self._marks():
+                line = self._guess_line(out)
+            else:
+                line = f"{name or 'Headphones'} connected."
+            if self.loop.headphones and not (out.guessed and out.id not in self._marks()):
                 line += " You can interrupt me just by talking."
             if paused == "reading":
                 line += " I paused the reading; say continue to carry on."
@@ -235,7 +270,7 @@ class RelayApp:
             line = ("Headphones disconnected, so I've paused. Say continue to carry on."
                     if paused == "reading" else
                     "Headphones disconnected, so I stopped talking.")
-        elif before is not None and before.is_headphones:
+        elif before is not None and self._is_headphones(before):
             line = f"Headphones disconnected. I'll talk through the {name or 'speakers'}."
         elif out is not None and not same(before, out):
             line = f"Now speaking through {name or 'a different device'}."
@@ -289,7 +324,10 @@ class RelayApp:
             problems = self._startup_checks()
             self.session.onboard()
             if self.loop.headphones:
-                self.session.say("You're on headphones, so you can interrupt me just by "
+                out = self.devices.output
+                self.session.say(self._guess_line(out) if out is not None and out.guessed
+                                 and out.id not in self._marks() else
+                                 "You're on headphones, so you can interrupt me just by "
                                  "talking.", pol.Priority.REQUESTED)
             for p in problems:
                 self.session.say(p, pol.Priority.CRITICAL)

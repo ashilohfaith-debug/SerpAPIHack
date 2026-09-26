@@ -191,7 +191,9 @@ def _app(out=SPEAKERS, reading=False, speaking=False):
         _on_audio_change = RelayApp._on_audio_change
         _announce_audio = RelayApp._announce_audio
         _apply_headphone_mode = RelayApp._apply_headphone_mode
-        _headphone_pref = RelayApp._headphone_pref
+        _marks = RelayApp._marks
+        _is_headphones = RelayApp._is_headphones
+        _guess_line = RelayApp.__dict__["_guess_line"]
         set_headphone_mode = RelayApp.set_headphone_mode
         describe_audio = RelayApp.describe_audio
 
@@ -239,13 +241,42 @@ def test_unplugging_while_idle_just_says_where_sound_goes():
                                     "Realtek Audio speakers."]
 
 
-def test_headphone_mode_off_is_respected():
+def test_headphone_mode_is_remembered_per_device():
+    app, said, _, _ = _app(out=BOAT)
+    assert app.loop.headphones
+    assert "Headphone mode off for boAt Rockerz 450 headphones" in app.set_headphone_mode("off")
+    assert not app.loop.headphones
+    _change(app, BOAT, SPEAKERS)
+    _change(app, SPEAKERS, BOAT)                          # reconnected later: remembered
+    assert not app.loop.headphones                        # the user said: not headphones
+    assert said[-1] == "Now speaking through boAt Rockerz 450 headphones."
+    assert app.set_headphone_mode("auto").endswith("Headphone mode is on.")
+    assert app.loop.headphones
+
+
+def test_usb_earphones_that_windows_calls_speakers():
+    ab13x = Endpoint("usb", "Speakers (AB13X USB Audio)", 1, with_mic=True)
+    assert ab13x.is_headphones and ab13x.guessed
+    assert dv.device_name(ab13x.name) == "AB13X USB Audio"
     app, said, _, _ = _app()
-    assert "Headphone mode off" in app.set_headphone_mode("off")
-    _change(app, SPEAKERS, BOAT)
-    assert not app.loop.headphones and said == ["boAt Rockerz 450 headphones connected."]
-    assert app.set_headphone_mode("auto").endswith("It's on now.") and app.loop.headphones
-    assert "Headphone mode on" in app.set_headphone_mode("on")
+    _change(app, SPEAKERS, ab13x)
+    assert app.loop.headphones and said == [
+        "AB13X USB Audio has its own microphone, so I think it's headphones or earphones: "
+        "you can interrupt me just by talking. If it's a speaker, say headphone mode off."]
+    app.set_headphone_mode("off")                         # they were USB speakers after all
+    _change(app, ab13x, SPEAKERS)
+    _change(app, SPEAKERS, ab13x)
+    assert not app.loop.headphones and said[-1] == "Now speaking through AB13X USB Audio speakers."
+
+
+def test_saying_im_using_headphones_does_not_touch_the_laptop_speakers():
+    app, _, _, _ = _app()                                 # laptop speakers in use
+    app.devices.output = Endpoint("usb2", "Speakers (USB Audio Device)", 1)
+    assert not app._is_headphones(app.devices.output)
+    app.set_headphone_mode("on")                          # "I'm using headphones"
+    assert app.loop.headphones
+    _change(app, app.devices.output, SPEAKERS)
+    assert not app.loop.headphones                        # speakers: still half-duplex
 
 
 def test_a_bluetooth_double_switch_is_announced_once():

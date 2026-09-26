@@ -34,9 +34,12 @@ copy it into Documents and say "read the file user guide".
 - A Bluetooth headset's own microphone would turn its sound into phone-call quality,
   so RELAY keeps using the laptop's microphone and your headphones stay clear.
 - "where is the sound going" — which speaker and microphone RELAY is using.
-- "headphone mode on" / "headphone mode off" / "headphone mode automatic" — if your
-  earphones are in the laptop's own jack, Windows may report them as speakers; say
-  "I'm using headphones" to turn voice-interrupt on.
+- USB-C earphones and adapters are often called "speakers" by Windows. If the device
+  also has a microphone, RELAY guesses they're earphones and tells you so.
+- "I'm using headphones" / "headphone mode on", "headphone mode off", "headphone mode
+  automatic" — corrects RELAY for the device in use now, and it remembers that device.
+  The laptop's own speakers are not affected. (Earphones in the laptop's own jack often
+  look like speakers to Windows: say "I'm using headphones" once.)
 
 ## 3. Stopping, cancelling, and safety
 | Say or press | What happens |
