@@ -34,7 +34,8 @@ _FORWARD_EVENTS = {"voice.state", "task.state", "perception.change", "narration.
 # Only these commands are accepted from the panel (all go through the safety pipeline).
 _ALLOWED_COMMANDS = {"handle", "set_mode", "onboard", "ping"}
 
-_PANEL_HTML = Path(__file__).resolve().parent.parent.parent / "frontend" / "panel.html"
+_FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
+_PANEL_HTML = _FRONTEND_DIR / "panel.html"
 
 
 def token_ok(supplied: str, expected: str) -> bool:
@@ -140,7 +141,7 @@ class IpcServer:
 
             def do_GET(self):
                 path = urlparse(self.path).path
-                if path in ("/", "/panel.html"):
+                if path in ("/", "/panel.html", "/index.html"):
                     if not self._auth():
                         return
                     try:
@@ -152,6 +153,22 @@ class IpcServer:
                     self.send_header("Content-Length", str(len(html)))
                     self.end_headers()
                     self.wfile.write(html)
+                    return
+                if path in ("/style.css", "/app.js"):
+                    if not self._auth():
+                        return
+                    static_file = _FRONTEND_DIR / path.lstrip("/")
+                    try:
+                        data = static_file.read_bytes()
+                    except OSError:
+                        self._json(404, {"error": "not found"})
+                        return
+                    ctype = "text/css; charset=utf-8" if path.endswith(".css") else "application/javascript; charset=utf-8"
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
                     return
                 if path == "/events":
                     if not self._auth():

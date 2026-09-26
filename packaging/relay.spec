@@ -28,12 +28,19 @@ for pkg in ("ctranslate2", "onnxruntime", "piper", "piper_phonemize",
     except Exception:
         pass
 
-# ship the accessible panel next to the package
-datas += [("../frontend/panel.html", "frontend")]
+# ship the accessible frontend next to the package
+datas += [("../frontend/panel.html", "frontend"),
+          ("../frontend/index.html", "frontend"),
+          ("../frontend/style.css", "frontend"),
+          ("../frontend/app.js", "frontend")]
+
 
 hiddenimports += ["win32com", "win32com.client", "comtypes", "comtypes.client",
                   "uiautomation", "pywintypes", "pythoncom", "pyperclip",
-                  "mss", "psutil"]
+                  "mss", "psutil",
+                  # the on-screen palette (Tkinter) and modules imported only lazily
+                  "tkinter", "relay.ui.palette", "relay.system.control",
+                  "relay.intent.compound", "relay.llm.tune", "relay.audio.devices"]
 
 a = Analysis(
     ["../relay/__main__.py"],
@@ -42,7 +49,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=["hooks"],          # local overrides (webrtcvad-wheels metadata)
-    excludes=["tkinter", "matplotlib", "pytest"],
+    excludes=["matplotlib", "pytest"],    # tkinter is needed: the palette
     noarchive=False,
 )
 pyz = PYZ(a.pure)

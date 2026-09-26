@@ -1,5 +1,33 @@
 # RELAY — release notes
 
+## 0.3.3 — Palette, one Sarvam key, fastest AI routes, exe verified end to end
+
+- **On-screen palette** at the top of the screen: a status light (ready, listening,
+  working, speaking, off), "You: …" (what Relay heard) and "Relay: …" (its answer), and
+  On/Off, Talk and Close buttons. It never takes keyboard focus. "stop listening" /
+  "start listening", "hide the palette" / "show the palette".
+- **One Sarvam key** turns on both the Bulbul voice and Saaras recognition
+  (`SARVAM_STT=off` keeps only the voice).
+- **Fastest AI routes:** `relay --llm-tune` (and the app, in the background every few
+  days) times the router's models with a real Relay request and races the fastest that
+  follow Relay's rules — on this laptop gemini-3.5-flash-lite (≈1.25 s to the first
+  word) and qwen3.7-flash (≈1.5 s), with the router's own `auto:fast` as the backup.
+  Rate-limited routes are rested and routed around.
+- **Electron and Chromium apps** (Claude, VS Code / Antigravity, Brave, WhatsApp,
+  Spotify): Relay now sees their buttons ("what are my options" in Claude lists its
+  toolbar instead of one item).
+- `relay --do "…"` behaves exactly like saying it (Start-menu apps and the AI assistant
+  included). The packaged app has a double-click **Install Relay**.
+- Fixes: the palette was missing from the packaged exe (Tkinter was excluded from the
+  build); the build's clean-profile check left a 600 MB copy in %TEMP% every time (4 GB
+  freed on C:).
+- **Installed exe tested end to end on this laptop:** version, the full check (offline
+  parts, Sarvam voice and recognition, AI router), 15 real commands through the exe
+  (time, date, battery, storage, network, Bluetooth, brightness, weather, sums, an AI
+  question, "open andy gravity" → Antigravity, a two-step command with Calculator,
+  closing it, screenshot, new folder), and the running app: Ctrl+Alt+R starts it with
+  the microphone listening and presses again to close it.
+
 ## 0.3.2 — Do things on the laptop, one step or many
 
 A sweep of 106 things a blind user says on a laptop found 43 that failed or did the
