@@ -8,7 +8,7 @@ certificate). Nothing here claims a result that wasn't observed.
 ## Run the checks
 ```
 uv run python -m relay --check                 # this computer, spoken result
-uv run pytest -m "not integration"            # 188 unit/behaviour tests (+2 need an unlocked, interactive desktop)
+uv run pytest -m "not integration"            # 389 unit/behaviour tests (+2 need an unlocked, interactive desktop)
 uv run python scripts/acceptance.py            # offline acceptance suite (8 checks)
 uv run python scripts/e2e_voice.py             # speech in -> action -> speech out
 uv run python scripts/live_app_check.py        # the real app: hotkeys, mic, quit

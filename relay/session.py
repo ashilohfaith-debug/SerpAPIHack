@@ -27,9 +27,6 @@ from relay.accessibility import (
     PendingConfirmation,
     confirmation_phrase,
     is_cancel,
-    is_first_run,
-    mark_onboarded,
-    onboarding_script,
 )
 from relay.audio.wake import Command
 from relay.core import EmergencyStop, new_task_id
@@ -246,15 +243,8 @@ class Session:
             self.bus.emit("voice.rearm")
 
     def onboard(self) -> None:
-        wake = self.store.get_pref("wake_word", default="relay")
-        from relay.audio.hotkeys import spoken_combo
-
-        for line in onboarding_script(
-            wake_word=wake, first_run=is_first_run(), talk_key=spoken_combo(self.talk_key)
-        ):
-            self.say(line, _REQ)
-        mark_onboarded()
-        self._rearm_voice()
+        from relay.accessibility.onboarding import run_onboarding
+        run_onboarding(self)
 
     # ---- turn-taking helpers used by skills ----
     def offer(self, action: Callable[[], object]) -> None:

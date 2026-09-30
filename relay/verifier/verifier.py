@@ -44,7 +44,8 @@ class Verifier:
         snap = self.worker.observe(timeout)
         
         def match(name: str) -> bool:
-            if not name: return False
+            if not name:
+                return False
             n = name.lower()
             return t == n or n.startswith(t) or (f" {t} " in f" {n} ") or (t in n and len(t) >= 4)
             

@@ -235,6 +235,7 @@ def test_stt_falls_back_to_whisper(base):
 
 def test_settings_from_environment(monkeypatch):
     monkeypatch.delenv("RELAY_OFFLINE")
+    monkeypatch.setattr("relay.memory.secrets.get_secret", lambda k, default="": "")
     assert settings()["key"] == ""  # no key: Sarvam fully off
     assert settings()["base"] == "https://api.sarvam.ai"
     monkeypatch.setenv("SARVAM_API_KEY", " abc ")

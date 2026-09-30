@@ -25,9 +25,10 @@ log = get_logger("sarvam")
 def settings() -> dict:
     """Sarvam settings from the environment (.env). Empty key = Sarvam off."""
     from relay.envfile import offline_forced
+    from relay.memory.secrets import get_secret
 
     return {
-        "key": "" if offline_forced() else os.environ.get("SARVAM_API_KEY", "").strip(),
+        "key": "" if offline_forced() else os.environ.get("SARVAM_API_KEY", "").strip() or get_secret("SARVAM_API_KEY", "").strip(),
         "tts_model": os.environ.get("SARVAM_TTS_MODEL", "bulbul:v3").strip() or "bulbul:v3",
         "speaker": os.environ.get("SARVAM_SPEAKER", "").strip(),
         "language": os.environ.get("SARVAM_LANGUAGE", "en-IN").strip() or "en-IN",

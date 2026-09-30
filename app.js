@@ -672,15 +672,15 @@
         const match = COMMAND_PRESETS.find(c => query.toLowerCase().includes(c.text.toLowerCase())) || {
           category: 'custom',
           text: query,
-          desc: "Executed custom spoken command on Windows PC",
+          desc: "Simulated custom command in web demo",
           app: 'notepad',
           focusSelector: '#simNotepadContent',
-          spoken: `RELAY heard: ${query}. Executed action via Windows UI Automation.`,
+          spoken: `RELAY heard: ${query}. (Mock simulation - actual Relay executes via Windows UI Automation).`,
           steps: [
-            { label: "Speech In", detail: `faster-whisper transcribed '${query}'` },
-            { label: "Intent Match", detail: "Parsed intent parameters and verified permissions" },
-            { label: "Execution", detail: "Injected action via Windows Automation APIs" },
-            { label: "Verification", detail: "Confirmed UI state change" },
+            { label: "Speech In", detail: `Simulated transcription of '${query}'` },
+            { label: "Intent Match", detail: "Parsed intent parameters in simulation" },
+            { label: "Execution", detail: "Simulated action (Web UI only)" },
+            { label: "Verification", detail: "Simulated UI state change" },
             { label: "Narration", detail: "Spoken feedback to user" }
           ]
         };

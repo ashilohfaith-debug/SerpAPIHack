@@ -3,7 +3,7 @@ and the accessible spoken-confirmation flow."""
 
 from .coexist import coexistence_advice, screen_reader_running
 from .confirm import PendingConfirmation, confirmation_phrase, is_cancel
-from .onboarding import is_first_run, mark_onboarded, onboarding_script
+from .onboarding import is_first_run, mark_onboarded
 
 __all__ = [
     "screen_reader_running",
@@ -11,7 +11,6 @@ __all__ = [
     "PendingConfirmation",
     "confirmation_phrase",
     "is_cancel",
-    "onboarding_script",
     "is_first_run",
     "mark_onboarded",
 ]

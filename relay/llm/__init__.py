@@ -28,9 +28,10 @@ def routes_from_config(cfg) -> list[Route]:
     the file. The key belongs to the developer's router or gateway — users never need
     one of their own. Empty URL = assistant off (offline commands only)."""
     from relay.envfile import offline_forced
+    from relay.memory.secrets import get_secret
 
-    url = os.environ.get("RELAY_LLM_URL", "").strip() or (cfg.llm_url or "").strip()
-    key = os.environ.get("RELAY_LLM_KEY", "").strip() or (cfg.llm_key or "").strip()
+    url = os.environ.get("RELAY_LLM_URL", "").strip() or get_secret("RELAY_LLM_URL", "").strip() or (cfg.llm_url or "").strip()
+    key = os.environ.get("RELAY_LLM_KEY", "").strip() or get_secret("RELAY_LLM_KEY", "").strip() or (cfg.llm_key or "").strip()
     if not url or offline_forced():
         return []
     url = _local_router(url)
