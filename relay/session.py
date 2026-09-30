@@ -593,15 +593,34 @@ class Session:
         self.last_activity = "answer"
         return []
 
-    @staticmethod
-    def _assistant_context() -> str:
+    def _assistant_context(self) -> str:
+        ctx_parts = []
         try:
             from relay.system.windows import _friendly_app, foreground
 
             fg = foreground()
-            return f"The user is currently in {_friendly_app(fg.app)}." if fg else ""
+            if fg:
+                ctx_parts.append(f"The user is currently in {_friendly_app(fg.app)}.")
         except Exception:
-            return ""
+            pass
+
+        try:
+            # Inject relevant user preferences and notes into LLM assistant context
+            prefs = self.store.all_prefs()
+            if prefs:
+                pref_lines = [f"{p['key']}: {p['value']}" for p in prefs if not p["key"].startswith("note:")]
+                if pref_lines:
+                    ctx_parts.append("User preferences: " + "; ".join(pref_lines[:10]))
+            notes = self.notes.list(limit=5)
+            if notes:
+                note_lines = [n.get("text", "") for n in notes if n.get("text")]
+                if note_lines:
+                    ctx_parts.append("User notes/memories: " + "; ".join(note_lines))
+        except Exception:
+            pass
+
+        return "\n".join(ctx_parts)
+
 
     # ---- confirmation flow ----
     def _on_confirm_needed(self, decision, target_label, retry) -> None:
