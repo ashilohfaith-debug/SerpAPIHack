@@ -36,6 +36,10 @@ def _default_observe(version: int) -> ScreenSnapshot:
     return uia.observe(version)
 
 
+_ACTIVE_WORKERS: list[_WorkerThread] = []
+_WORKERS_LOCK = threading.Lock()
+
+
 class _WorkerThread:
     """One COM-owning thread that serves callables from a queue."""
 
@@ -43,6 +47,10 @@ class _WorkerThread:
         self._q: "queue.Queue[tuple]" = queue.Queue()
         self._thread = threading.Thread(target=self._run, name="uia-worker", daemon=True)
         self.alive = True
+        with _WORKERS_LOCK:
+            _ACTIVE_WORKERS.append(self)
+            # Prune dead threads to prevent unbound list growth
+            _ACTIVE_WORKERS[:] = [w for w in _ACTIVE_WORKERS if w.alive and w._thread.is_alive()]
         self._thread.start()
 
     def _run(self) -> None:
@@ -55,16 +63,25 @@ class _WorkerThread:
             comtypes.CoInitialize()
         except Exception:
             pass
-        while True:
-            fn, box, done = self._q.get()
-            if fn is None:
-                return
-            try:
-                box["value"] = fn()
-            except BaseException as e:  # report any provider failure to the caller
-                box["error"] = e
-            finally:
-                done.set()
+        try:
+            while True:
+                fn, box, done = self._q.get()
+                if fn is None:
+                    return
+                try:
+                    box["value"] = fn()
+                except BaseException as e:  # report any provider failure to the caller
+                    box["error"] = e
+                finally:
+                    done.set()
+                if not self.alive:
+                    # Thread was abandoned due to caller timeout; terminate upon unblocking
+                    log.info("abandoned UIA thread unblocked and self-terminated")
+                    return
+        finally:
+            with _WORKERS_LOCK:
+                if self in _ACTIVE_WORKERS:
+                    _ACTIVE_WORKERS.remove(self)
 
     def submit(self, fn: Callable, timeout: float):
         box: dict = {}
@@ -160,10 +177,21 @@ class UIAWorker:
         return snap is None or self._current is None \
             or snap.observation_version != self._current.observation_version
 
-    # --- lightweight change monitor (foreground-window poll) ---
+    # --- event-driven change monitor (WinEvents + debouncing + polling fallback) ---
     def start_change_monitor(self, interval: float = 0.3) -> None:
         if self._monitor is not None:
             return
+        try:
+            from relay.perception.events import WinEventMonitor
+            self._winevent_monitor = WinEventMonitor(
+                on_change=lambda: self.observe(), debounce_s=0.15
+            )
+            if self._winevent_monitor.start():
+                log.info("event-driven screen observation active (WinEvents)")
+                return
+        except Exception as e:
+            log.warning("could not initialize WinEvent monitor: %s", e)
+        # Polling fallback if WinEvents unavailable
         self._monitor_stop.clear()
         self._monitor = threading.Thread(target=self._monitor_loop, args=(interval,),
                                          name="uia-change-monitor", daemon=True)
@@ -182,7 +210,19 @@ class UIAWorker:
                 self.observe()  # publishes a change event if the structure differs
 
     def stop(self) -> None:
+        if hasattr(self, "_winevent_monitor") and self._winevent_monitor is not None:
+            try:
+                self._winevent_monitor.stop()
+            except Exception:
+                pass
+            self._winevent_monitor = None
         self._monitor_stop.set()
+        if self._monitor is not None and self._monitor.is_alive():
+            try:
+                self._monitor.join(timeout=1.0)
+            except Exception:
+                pass
+            self._monitor = None
         with self._lock:
             w = self._worker
             self._worker = None

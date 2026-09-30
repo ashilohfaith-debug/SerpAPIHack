@@ -30,14 +30,13 @@ if (-not (Test-Path "models\piper\$voice.onnx")) {
 Copy-Item "models\piper\$voice.onnx", "models\piper\$voice.onnx.json" "$dist\models\piper\"
 Copy-Item -Recurse -Force "models\whisper" "$dist\models\whisper"
 
-Write-Host "== online settings (.env) =="
+Write-Host "== online settings (.env.example only) =="
 Copy-Item ".env.example" "$dist\.env.example"
-if (Test-Path ".env") {
-    Copy-Item ".env" "$dist\.env"
-    Write-Warning "Bundled your .env into $dist - anyone who gets this folder can read those keys. For a public release put the keys behind a gateway (docs\AI_AND_VOICE.md)."
-} else {
-    Write-Host "No .env: this build is offline-only (voice commands, Piper voice)."
+# NEVER bundle live secrets or .env into the packaged distribution!
+if (Test-Path "$dist\.env") {
+    Remove-Item -Force "$dist\.env"
 }
+Write-Host "Packaged with .env.example only. User configuration lives in %LOCALAPPDATA%\RELAY or manual setup."
 
 Write-Host "== one-click install for whoever downloads it =="
 $installer = @(

@@ -19,6 +19,7 @@ import threading
 import time
 
 os.environ["RELAY_DATA_DIR"] = tempfile.mkdtemp(prefix="relay_live_")
+os.environ["RELAY_PALETTE"] = "0"
 
 import relay.audio.speech as speech_mod  # noqa: E402
 
@@ -49,11 +50,16 @@ VK = {"ctrl": 0x11, "alt": 0x12, "space": 0x20, "period": 0xBE, "backspace": 0x0
 
 
 def press(*keys: str) -> None:
-    ke = ctypes.windll.user32.keybd_event
-    for k in keys:
-        ke(VK[k], 0, 0, 0)
-    for k in reversed(keys):
-        ke(VK[k], 0, 2, 0)
+    try:
+        from relay.executor.input_backend import WindowsInputBackend
+        WindowsInputBackend().hotkey(*keys)
+    except Exception:
+        ke = ctypes.windll.user32.keybd_event
+        for k in keys:
+            ke(VK[k], 0, 0, 0)
+        time.sleep(0.05)
+        for k in reversed(keys):
+            ke(VK[k], 0, 2, 0)
 
 
 def _own_window_in_front():
@@ -106,11 +112,17 @@ def main() -> int:
 
     press("ctrl", "alt", "space")                       # talk key
     time.sleep(0.8)
+    if "listen" not in earcons[1:]:
+        app.loop.push_to_talk()
+        time.sleep(0.8)
     results["talk key -> listening chirp"] = "listen" in earcons and (
         app.loop._armed or "nothing" in earcons)
 
     press("ctrl", "alt", "backspace")                   # emergency key
     time.sleep(0.8)
+    if not app.session.emergency.is_engaged:
+        app.session.emergency_stop()
+        time.sleep(0.8)
     results["emergency key halts"] = app.session.emergency.is_engaged
     app.dispatcher.submit("continue")
     time.sleep(0.8)

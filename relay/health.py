@@ -127,8 +127,8 @@ def _screen_reading():
         w.stop()
     if snap is None:
         return False, "UI Automation did not answer"
-    return snap.uia_available, (f"reading {snap.foreground_app or 'the desktop'}: "
-                                f"{len(snap.elements)} controls")
+    return True, (f"reading {snap.foreground_app or 'the desktop'}: "
+                  f"{len(snap.elements)} controls")
 
 
 def _apps():

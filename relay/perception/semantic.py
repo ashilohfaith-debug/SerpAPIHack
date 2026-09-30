@@ -28,6 +28,12 @@ class UIElement:
     states: dict = field(default_factory=dict)  # enabled/offscreen/focused/selected/toggled
     window_title: str = ""
     provenance: str = "uia"     # "uia" | "ocr" (ocr is inferred, lower trust)
+    description: str = ""       # accessible description / HelpText
+    ancestry: tuple[str, ...] = ()  # hierarchy of container roles
+    confidence: float = 1.0     # observation confidence score
+    timestamp: float = 0.0      # observation monotonic timestamp
+    stable_id: str = ""         # AutomationId or runtime fingerprint
+    app: str = ""               # process / application name
 
     @property
     def center(self) -> tuple[int, int]:
@@ -35,10 +41,15 @@ class UIElement:
         return ((left + right) // 2, (top + bottom) // 2)
 
     def to_dict(self) -> dict:
-        return {"uid": self.uid, "name": self.name, "role": self.role,
-                "bbox": list(self.bbox), "value": self.value,
-                "actions": list(self.actions), "states": self.states,
-                "window_title": self.window_title, "provenance": self.provenance}
+        return {
+            "uid": self.uid, "name": self.name, "role": self.role,
+            "bbox": list(self.bbox), "value": self.value,
+            "actions": list(self.actions), "states": self.states,
+            "window_title": self.window_title, "provenance": self.provenance,
+            "description": self.description, "ancestry": list(self.ancestry),
+            "confidence": self.confidence, "timestamp": self.timestamp,
+            "stable_id": self.stable_id, "app": self.app,
+        }
 
 
 @dataclass(frozen=True)

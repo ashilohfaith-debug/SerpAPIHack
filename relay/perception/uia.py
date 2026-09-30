@@ -65,13 +65,31 @@ def _app_name(ctrl) -> str:
         return ""
 
 
+def _is_password_ctrl(ctrl) -> bool:
+    try:
+        if getattr(ctrl, "IsPassword", False):
+            return True
+        if hasattr(ctrl, "CurrentIsPassword") and ctrl.CurrentIsPassword:
+            return True
+        if hasattr(ctrl, "GetPropertyValue") and ctrl.GetPropertyValue(30019):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _actions_and_value(ctrl, role: str, name: str) -> tuple[tuple[str, ...], str, dict]:
     """Derive available high-level actions, a readable value, and states from the
     UIA patterns the control exposes. Never returns a protected field's value."""
     actions: list[str] = []
     value = ""
     states: dict = {}
-    protected = is_protected_field(role=role, name=name)
+    is_pwd = _is_password_ctrl(ctrl)
+    protected = is_protected_field(role=role, name=name, is_password_field=is_pwd)
+    if is_pwd:
+        states["is_password"] = True
+    if protected:
+        states["protected"] = True
 
     def has(getter: str) -> bool:
         try:
@@ -268,6 +286,11 @@ def observe(observation_version: int) -> ScreenSnapshot:
     screen_area = user32.GetSystemMetrics(0) * user32.GetSystemMetrics(1)
 
     fg = auto.GetForegroundControl()
+    if fg is None:
+        try:
+            fg = auto.GetRootControl()
+        except Exception:
+            fg = None
     if fg is None:
         return ScreenSnapshot(observation_version, uia_available=False)
 

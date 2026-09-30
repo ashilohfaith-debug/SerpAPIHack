@@ -422,24 +422,30 @@
     animateStepper(cmd.steps.length, () => {
       positionFocusBox(cmd.focusSelector);
 
+      const isSim = !state.ipcConnected;
+      const simPrefix = isSim ? "[Demo Simulation] " : "";
+
       // Play success chime or alert earcon
       if (cmd.isAlert) {
         earcons.alert();
-        if (voiceTag) voiceTag.textContent = "Safety Confirmation Required";
+        if (voiceTag) voiceTag.textContent = `Safety Confirmation Required ${isSim ? "(Simulator)" : ""}`;
       } else {
         earcons.success();
-        if (voiceTag) voiceTag.textContent = "RELAY Spoken Narration (Piper)";
+        if (voiceTag) voiceTag.textContent = `RELAY Spoken Narration (Piper) ${isSim ? "(Simulator)" : ""}`;
       }
 
       // Display spoken answer
       if (speechText) speechText.textContent = `"${cmd.spoken}"`;
       announce(cmd.spoken, cmd.isAlert ? 'assertive' : 'polite');
 
-      // Speak aloud through browser TTS
+      // Speak aloud through browser TTS with demonstration notice
       speak(cmd.spoken);
 
       // Log in Mirror Terminal
-      addTerminalLog(cmd.isAlert ? `⚠️ SAFETY: ${cmd.spoken}` : `🗣 ${cmd.spoken}`, cmd.isAlert ? 'alert' : 'narration');
+      addTerminalLog(
+        cmd.isAlert ? `⚠️ SAFETY: ${simPrefix}${cmd.spoken}` : `🗣 ${simPrefix}${cmd.spoken}`,
+        cmd.isAlert ? 'alert' : 'narration'
+      );
     });
   }
 
@@ -543,9 +549,23 @@
         </button>
       `;
 
-      card.querySelector('.cmd-action-btn').addEventListener('click', () => {
+      card.setAttribute('tabindex', '0');
+      card.setAttribute('role', 'region');
+      card.setAttribute('aria-label', `Voice command: ${cmd.text}`);
+
+      const runBtn = card.querySelector('.cmd-action-btn');
+      runBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         executeCommand(cmd);
       });
+
+      card.addEventListener('keydown', (e) => {
+        if (e.target === card && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          executeCommand(cmd);
+        }
+      });
+
       container.appendChild(card);
     });
   }
@@ -558,14 +578,54 @@
     // 2. Render initial commands
     renderCommandCards(state.activeCategory);
 
-    // 3. Category switching
-    document.querySelectorAll('.cat-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        earcons.click();
-        document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        state.activeCategory = btn.dataset.category;
-        renderCommandCards(state.activeCategory);
+    // 3. Category switching & Tab Accessibility with Roving Focus
+    const catButtons = Array.from(document.querySelectorAll('.cat-btn'));
+    function selectTab(btn, focus = true) {
+      earcons.click();
+      catButtons.forEach((b) => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+        b.setAttribute('tabindex', '-1');
+      });
+      btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
+      btn.setAttribute('tabindex', '0');
+      if (focus) btn.focus();
+      state.activeCategory = btn.dataset.category;
+      renderCommandCards(state.activeCategory);
+      announce(`Selected category: ${btn.querySelector('span')?.textContent || state.activeCategory}`);
+    }
+
+    catButtons.forEach((btn, index) => {
+      // Set initial roving tabindex
+      if (btn.classList.contains('active')) {
+        btn.setAttribute('tabindex', '0');
+        btn.setAttribute('aria-selected', 'true');
+      } else {
+        btn.setAttribute('tabindex', '-1');
+        btn.setAttribute('aria-selected', 'false');
+      }
+
+      btn.addEventListener('click', () => selectTab(btn, false));
+
+      btn.addEventListener('keydown', (e) => {
+        let nextIndex = null;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          nextIndex = (index + 1) % catButtons.length;
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          nextIndex = (index - 1 + catButtons.length) % catButtons.length;
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          nextIndex = 0;
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          nextIndex = catButtons.length - 1;
+        }
+        if (nextIndex !== null) {
+          selectTab(catButtons[nextIndex], true);
+        }
       });
     });
 
@@ -581,13 +641,20 @@
       });
     }
 
-    // 5. Soundboard Earcon buttons
+    // 5. Soundboard Earcon buttons (Click + Enter/Space Keyboard Activation)
     document.querySelectorAll('.sound-card').forEach((card) => {
-      card.addEventListener('click', () => {
+      function playSound() {
         const soundType = card.dataset.sound;
         if (soundType && earcons[soundType]) {
           earcons[soundType]();
           announce(`Played ${soundType} earcon audio cue`);
+        }
+      }
+      card.addEventListener('click', playSound);
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          playSound();
         }
       });
     });

@@ -163,7 +163,11 @@ class IpcServer:
                     except OSError:
                         self._json(404, {"error": "not found"})
                         return
-                    ctype = "text/css; charset=utf-8" if path.endswith(".css") else "application/javascript; charset=utf-8"
+                    ctype = (
+                        "text/css; charset=utf-8"
+                        if path.endswith(".css")
+                        else "application/javascript; charset=utf-8"
+                    )
                     self.send_response(200)
                     self.send_header("Content-Type", ctype)
                     self.send_header("Content-Length", str(len(data)))

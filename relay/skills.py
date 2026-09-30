@@ -395,19 +395,17 @@ class Skills:
         if target.exists():
             self.say(f"There's already a folder called {name} in {label}.")
             return
-        self.say(f"I'm going to create a folder called {name} in {label}.")
-        try:
-            target.mkdir(parents=False)
-        except OSError as e:
-            log.warning("new folder failed: %s", e)
-        if target.is_dir():
-            self.say(f"Done. The {name} folder is in {label}.")
-        else:
-            self.say("I couldn't create that folder.")
+        step = Step("new_folder", f"create a folder called {name} in {label}", {
+            "target": target, "name": name, "label": label,
+            "announce": f"I'm going to create a folder called {name} in {label}.",
+            "ok_text": f"Done. The {name} folder is in {label}.",
+            "speak_detail": True,
+        })
+        res = self.run(step)
+        if not res or res[0].state != "verified":
             self.s.step_failed()
 
     def k_file_op(self, i):
-        import shutil
         from pathlib import Path
 
         from relay.system import control, files
@@ -440,13 +438,15 @@ class Skills:
             if dest.exists():
                 self.say(f"There's already something called {new} there.")
                 return
-            self.say(f"Renaming {item.name} to {new}.")
-            try:
-                item.rename(dest)
-            except OSError as e:
-                log.warning("rename failed: %s", e)
-            self.say(f"Done. It's now called {new}." if dest.exists() else
-                     "I couldn't rename it. It may be open in another program.")
+            step = Step("file_op", f"rename {item.name} to {new}", {
+                "op": "rename", "src": item, "dest": dest,
+                "announce": f"Renaming {item.name} to {new}.",
+                "ok_text": f"Done. It's now called {new}.",
+                "speak_detail": True,
+            })
+            res = self.run(step)
+            if not res or res[0].state != "verified":
+                self.s.step_failed()
             return
         to = i.slots.get("to", "")
         base = files.known_folder("pictures" if to == "photos" else to)
@@ -454,28 +454,35 @@ class Skills:
             self.say(f"I couldn't find your {to} folder.")
             return
         verb = "Moving" if op == "move" else "Copying"
-        self.say(f"{verb} {what} to your {to.capitalize()} folder.")
-        done = 0
+        steps = []
         for p in sel:
             dest = base / p.name
             if dest.exists():
                 continue
-            try:
-                (shutil.move if op == "move" else
-                 (shutil.copytree if p.is_dir() else shutil.copy2))(str(p), str(dest))
-                done += dest.exists()
-            except OSError as e:
-                log.warning("%s failed: %s", op, e)
-        self.say(f"Done. {what.capitalize() if len(sel) > 1 else what} "
-                 f"{'is' if len(sel) == 1 else 'are'} in your {to.capitalize()} folder."
-                 if done == len(sel) else
-                 f"{done} of {len(sel)} done; the rest already existed there or were in use.")
+            steps.append(Step("file_op", f"{op} {p.name} to your {to.capitalize()} folder", {
+                "op": op, "src": p, "dest": dest,
+                "announce": f"{verb} {p.name} to your {to.capitalize()} folder.",
+                "ok_text": f"Done. {p.name} is in your {to.capitalize()} folder.",
+                "speak_detail": True,
+            }))
+        if not steps:
+            self.say(f"The items already exist in your {to.capitalize()} folder.")
+            return
+        res = self.run(*steps)
+        done = sum(1 for r in res if r.state == "verified")
+        if done < len(steps):
+            self.s.step_failed()
 
     def _recycle(self, paths):
-        from relay.system import control
-        ok = sum(control.recycle(p) for p in paths)
-        self.say("Moved to the Recycle Bin." if ok == len(paths) else
-                 f"{ok} of {len(paths)} moved to the Recycle Bin; the rest are in use.")
+        paths_list = list(paths)
+        what = paths_list[0].name if len(paths_list) == 1 else f"{len(paths_list)} items"
+        step = Step("recycle", f"move {what} to the Recycle Bin", {
+            "paths": paths_list,
+            "announce": f"Moving {what} to the Recycle Bin.",
+            "ok_text": f"Moved {what} to the Recycle Bin.",
+            "speak_detail": True,
+        })
+        self.run(step)
 
     def k_close_all(self, i):
         from relay.system import windows
@@ -545,14 +552,17 @@ class Skills:
 
     # ---------------------------------------------------------------- notes
     def k_take_note(self, i):
-        text = (i.slots.get("text") or "").strip()
+        from relay.intent.normalize import clean_dictation_homophones
+        text = clean_dictation_homophones((i.slots.get("text") or "").strip())
         if not text:
             self.say("What should the note say?")
-            self.s.capture_next(lambda t: self._save_note(t))
+            self.s.capture_next(lambda t: self._save_note(clean_dictation_homophones(t)))
             return
         self._save_note(text)
 
     def _save_note(self, text: str):
+        from relay.intent.normalize import clean_dictation_homophones
+        text = clean_dictation_homophones(text)
         if self.s.notes.add(text):
             self.say(f"Noted: {text.rstrip('.')}.")
         else:

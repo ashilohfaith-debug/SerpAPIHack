@@ -117,8 +117,10 @@ class Executor:
         return self._run(action, f"launch_app {command}", do)
 
     def invoke_element(self, el: UIElement) -> ActionOutcome:
+        is_pwd = bool(el.states.get("is_password") or el.states.get("protected"))
         action = Action(kind="invoke", target_app=el.window_title,
-                        target_label=el.name, target_role=el.role)
+                        target_label=el.name, target_role=el.role,
+                        is_password_field=is_pwd)
 
         def do():
             present, ok = self.worker.run(
@@ -131,8 +133,10 @@ class Executor:
         return self._run(action, f"invoke {el.role} {el.name!r}", do)
 
     def set_element_text(self, el: UIElement, text: str) -> ActionOutcome:
+        is_pwd = bool(el.states.get("is_password") or el.states.get("protected"))
         action = Action(kind="set_value", target_app=el.window_title,
-                        target_label=el.name, target_role=el.role, text=text)
+                        target_label=el.name, target_role=el.role, text=text,
+                        is_password_field=is_pwd)
 
         def do():
             done, ok = self.worker.run(
@@ -240,6 +244,49 @@ class Executor:
             ok = bool(fn())
             return ok, f"{what} {'changed' if ok else 'unchanged'}"
         return self._run(action, f"system_{what}", do)
+
+    def create_folder(self, path) -> ActionOutcome:
+        action = Action(kind="create_folder", target_app="explorer.exe",
+                        target_label=str(path), reversible=True)
+
+        def do():
+            from pathlib import Path
+            p = Path(path)
+            p.mkdir(parents=False)
+            return p.is_dir(), f"created folder {p.name}"
+        return self._run(action, f"create_folder {path}", do)
+
+    def file_op(self, op: str, src, dest) -> ActionOutcome:
+        action = Action(kind=f"file_{op}", target_app="explorer.exe",
+                        target_label=str(src), reversible=(op in ("rename", "move", "copy")))
+
+        def do():
+            import shutil
+            from pathlib import Path
+            s = Path(src)
+            d = Path(dest)
+            if op == "rename":
+                s.rename(d)
+                return d.exists(), f"renamed to {d.name}"
+            if op == "move":
+                shutil.move(str(s), str(d))
+                return d.exists(), f"moved to {d}"
+            if op == "copy":
+                (shutil.copytree if s.is_dir() else shutil.copy2)(str(s), str(d))
+                return d.exists(), f"copied to {d}"
+            return False, f"unsupported file operation {op}"
+        return self._run(action, f"file_op {op} {src} -> {dest}", do)
+
+    def recycle(self, paths) -> ActionOutcome:
+        paths_list = list(paths)
+        action = Action(kind="delete_file", target_app="explorer.exe",
+                        target_label=", ".join(str(p) for p in paths_list))
+
+        def do():
+            from relay.system import control
+            ok = sum(control.recycle(p) for p in paths_list)
+            return ok == len(paths_list), f"recycled {ok} of {len(paths_list)}"
+        return self._run(action, f"recycle {len(paths_list)} items", do)
 
 
 def _catalog_launch(entry) -> None:

@@ -123,3 +123,90 @@ def voice_machine(machine_id: str, bus: EventBus | None = None) -> StateMachine:
 
 def task_machine(machine_id: str, bus: EventBus | None = None) -> StateMachine:
     return StateMachine("task", machine_id, TaskState.PENDING, TASK_TRANSITIONS, bus)
+
+
+class RelayState(str, Enum):
+    """The complete 17-state dialogue, voice and execution state machine."""
+    BOOTING = "booting"
+    GREETING = "greeting"
+    LOADING = "loading"
+    IDLE = "idle"
+    LISTENING = "listening"
+    TRANSCRIBING = "transcribing"
+    CLARIFYING = "clarifying"
+    PLANNING = "planning"
+    AWAITING_CONFIRMATION = "awaiting_confirmation"
+    ACTING = "acting"
+    VERIFYING = "verifying"
+    REPORTING = "reporting"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
+    EMERGENCY_STOPPED = "emergency_stopped"
+    FAILED = "failed"
+    RECOVERING = "recovering"
+
+
+RELAY_TRANSITIONS: dict[RelayState, set[RelayState]] = {
+    RelayState.BOOTING: {RelayState.GREETING, RelayState.LOADING, RelayState.FAILED},
+    RelayState.GREETING: {RelayState.LOADING, RelayState.IDLE, RelayState.LISTENING},
+    RelayState.LOADING: {RelayState.IDLE, RelayState.LISTENING, RelayState.FAILED},
+    RelayState.IDLE: {
+        RelayState.LISTENING, RelayState.PLANNING, RelayState.PAUSED, RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.LISTENING: {
+        RelayState.TRANSCRIBING,
+        RelayState.IDLE,
+        RelayState.CANCELLED,
+        RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.TRANSCRIBING: {
+        RelayState.PLANNING, RelayState.CLARIFYING, RelayState.IDLE, RelayState.FAILED,
+        RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.CLARIFYING: {
+        RelayState.LISTENING,
+        RelayState.PLANNING,
+        RelayState.CANCELLED,
+        RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.PLANNING: {
+        RelayState.AWAITING_CONFIRMATION, RelayState.ACTING, RelayState.CLARIFYING,
+        RelayState.CANCELLED, RelayState.FAILED, RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.AWAITING_CONFIRMATION: {
+        RelayState.LISTENING, RelayState.ACTING, RelayState.CANCELLED, RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.ACTING: {
+        RelayState.VERIFYING, RelayState.RECOVERING, RelayState.PAUSED,
+        RelayState.CANCELLED, RelayState.FAILED, RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.VERIFYING: {
+        RelayState.REPORTING, RelayState.ACTING, RelayState.RECOVERING,
+        RelayState.FAILED, RelayState.CANCELLED, RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.REPORTING: {
+        RelayState.IDLE, RelayState.LISTENING, RelayState.PAUSED, RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.PAUSED: {
+        RelayState.IDLE, RelayState.PLANNING, RelayState.ACTING,
+        RelayState.CANCELLED, RelayState.EMERGENCY_STOPPED,
+    },
+    RelayState.CANCELLED: {RelayState.IDLE, RelayState.LISTENING},
+    RelayState.EMERGENCY_STOPPED: {RelayState.IDLE, RelayState.RECOVERING},
+    RelayState.FAILED: {RelayState.RECOVERING, RelayState.IDLE, RelayState.LISTENING},
+    RelayState.RECOVERING: {
+        RelayState.IDLE, RelayState.PLANNING, RelayState.ACTING,
+        RelayState.FAILED, RelayState.CANCELLED, RelayState.EMERGENCY_STOPPED,
+    },
+}
+
+
+def relay_state_machine(machine_id: str = "relay", bus: EventBus | None = None) -> StateMachine:
+    return StateMachine(
+        "relay",
+        machine_id,
+        RelayState.BOOTING,
+        RELAY_TRANSITIONS,
+        bus,
+        error_state=RelayState.FAILED,
+    )

@@ -85,3 +85,23 @@ def apply_spoken_punctuation(text: str) -> str:
         out = re.sub(pat, rep, out, flags=re.IGNORECASE)
     out = re.sub(r"[ \t]+([,.?!:;)])", r"\1", out)
     return out
+
+
+def clean_dictation_homophones(text: str) -> str:
+    """Correct common homophone recognition slips in notes and dictated tasks.
+    E.g., 'by milk' -> 'buy milk', 'By Milk' -> 'buy milk'."""
+    if not text:
+        return ""
+    t = text
+    # Fix "by/bye <grocery/item>" -> "buy <item>"
+    t = re.sub(
+        r"\b(?:by|bye)\s+(milk|eggs?|bread|groceries|food|coffee|tea|fruits?|butter|cheese|water)\b",
+        r"buy \1",
+        t,
+        flags=re.IGNORECASE,
+    )
+    # If the note starts with "by/bye" followed by a word, convert to "buy"
+    t = re.sub(r"^(?:by|bye)\s+([a-zA-Z]+)", r"buy \1", t, flags=re.IGNORECASE)
+    # Lowercase capitalized common items when preceded by buy
+    t = re.sub(r"\bbuy\s+([A-Z][a-z]+)\b", lambda m: f"buy {m.group(1).lower()}", t)
+    return t

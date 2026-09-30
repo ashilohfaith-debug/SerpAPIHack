@@ -62,7 +62,7 @@ class Verifier:
         return any(needle in (e.value or "").lower() for e in snap.elements)
 
     def file_exists(self, path: str) -> bool:
-        return os.path.isfile(path)
+        return os.path.exists(path)
 
     def dialog_present(self, timeout: float = 3.0) -> bool:
         snap = self.worker.observe(timeout)

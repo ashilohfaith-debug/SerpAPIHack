@@ -40,7 +40,8 @@ hiddenimports += ["win32com", "win32com.client", "comtypes", "comtypes.client",
                   "mss", "psutil",
                   # the on-screen palette (Tkinter) and modules imported only lazily
                   "tkinter", "relay.ui.palette", "relay.system.control",
-                  "relay.intent.compound", "relay.llm.tune", "relay.audio.devices"]
+                  "relay.intent.compound", "relay.llm.tune", "relay.audio.devices",
+                  "relay.goals.goal", "relay.goals.assignment", "relay.workspace.agent"]
 
 a = Analysis(
     ["../relay/__main__.py"],

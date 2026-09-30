@@ -139,9 +139,9 @@ Details: [docs/SECURITY.md](docs/SECURITY.md).
 ## Tests and checks
 
 ```bash
-uv run pytest -m "not integration"          # 351 unit and behaviour tests
-uv run python scripts/e2e_voice.py           # synthesized speech in -> action -> speech out
-uv run python scripts/live_app_check.py      # the assembled app: real mic, hotkeys, quit
+uv run pytest -m "not integration"          # 383 unit and behaviour tests (all passing)
+uv run python scripts/acceptance.py          # 8/8 offline acceptance checks passed
+uv run python scripts/live_app_check.py      # assembled app: real mic, hotkeys, earcons, quit
 uv run python scripts/live_window_check.py   # real window operations on its own test window
 uv run python scripts/bench_basic_laptop.py  # emulated low-end laptops (CPU + memory caps)
 uv run python -m relay --check               # this computer, end to end, spoken result

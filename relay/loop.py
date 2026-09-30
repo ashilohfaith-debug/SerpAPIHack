@@ -179,6 +179,8 @@ class VoiceLoop:
         self._silent_tries = 0        # talk key pressed but nothing heard, in a row
         self._noise_rms = 0.0         # running estimate of the room's background level
         self.screened_out = 0         # unprompted sounds dropped before the speech model
+        if self.bus is not None:
+            self.bus.subscribe("voice.rearm", lambda _e: self.rearm())
         self._reset()
 
     # ---- state ----
@@ -327,7 +329,7 @@ class VoiceLoop:
                     return                         # not for RELAY: nothing is uploaded
                 if not rest:
                     self._state("idle")
-                    self._rearm()
+                    self.rearm()
                     return
                 prompted = gated = True            # addressed to RELAY: use the online one
             text = self.stt.transcribe(audio)
@@ -357,7 +359,7 @@ class VoiceLoop:
         if prompted:
             if woke and not rest:
                 self._say("Yes? What would you like to do?")
-                self._rearm()
+                self.rearm()
                 return
             self.dispatch(rest if woke else text)
             return
@@ -382,7 +384,23 @@ class VoiceLoop:
         if rest:
             self.dispatch(rest)
         else:
-            self._rearm()                  # "Relay" ... (pause) ... "open notepad"
+            self.rearm()                  # "Relay" ... (pause) ... "open notepad"
+
+    def rearm(self) -> None:
+        """Arm one listening turn without requiring the wake word.
+        Waits for active speech to finish before playing the listening earcon."""
+        if not self._threaded or not self._relay_is_talking():
+            self._rearm()
+            return
+
+        def _arm() -> None:
+            if self.speech is not None:
+                end_t = time.monotonic() + 10.0
+                while self._relay_is_talking() and time.monotonic() < end_t:
+                    time.sleep(0.05)
+            self._rearm()
+
+        threading.Thread(target=_arm, name="rearm-wait", daemon=True).start()
 
     def _rearm(self) -> None:
         with self._lock:

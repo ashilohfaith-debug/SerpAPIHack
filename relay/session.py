@@ -171,6 +171,10 @@ class Session:
         if persist:
             self.store.set_pref("speech_rate", f"{self.speech_rate:.2f}")
 
+    def _rearm_voice(self) -> None:
+        if self.bus is not None:
+            self.bus.emit("voice.rearm")
+
     def onboard(self) -> None:
         wake = self.store.get_pref("wake_word", default="relay")
         from relay.audio.hotkeys import spoken_combo
@@ -178,20 +182,24 @@ class Session:
                                       talk_key=spoken_combo(self.talk_key)):
             self.say(line, _REQ)
         mark_onboarded()
+        self._rearm_voice()
 
     # ---- turn-taking helpers used by skills ----
     def offer(self, action: Callable[[], object]) -> None:
         """A yes/no follow-up: 'yes' runs ``action``; 'no' drops it."""
         self._offer = action
+        self._rearm_voice()
 
     def capture_next(self, consumer: Callable[[str], object]) -> None:
         """The next utterance is free text for a question RELAY just asked."""
         self._capture = consumer
+        self._rearm_voice()
 
     def ask_phrase(self, phrase: str, summary: str, retry: Callable[[], object]) -> None:
         self.say(summary, _CONF)
         self._pending = PendingConfirmation(phrase=phrase, summary=summary, retry=retry)
         self.say(f"To confirm, say: {phrase}. Or say cancel.", _CONF)
+        self._rearm_voice()
 
     def set_dictation(self, on: bool) -> None:
         self.dictation = on
@@ -445,6 +453,7 @@ class Session:
         self._pending = PendingConfirmation(phrase=phrase, summary=decision.spoken_summary,
                                             retry=retry)
         self.say(f"To confirm, say: {phrase}. Or say cancel.", _CONF)
+        self._rearm_voice()
 
     @staticmethod
     def _says_phrase(utterance: str, phrase: str) -> bool:

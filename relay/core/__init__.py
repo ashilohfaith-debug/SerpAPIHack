@@ -5,9 +5,22 @@ from .bus import Event, EventBus
 from .cancellation import CancellationToken, Cancelled
 from .emergency import EmergencyStop
 from .ids import new_action_id, new_session_id, new_task_id
-from .state import TASK_TRANSITIONS, VOICE_TRANSITIONS, StateMachine, TaskState, VoiceState
+from .state import (
+    RELAY_TRANSITIONS,
+    TASK_TRANSITIONS,
+    VOICE_TRANSITIONS,
+    RelayState,
+    StateMachine,
+    TaskState,
+    VoiceState,
+    relay_state_machine,
+    task_machine,
+    voice_machine,
+)
 
 __all__ = [
+    "RELAY_TRANSITIONS",
+    "RelayState",
     "TASK_TRANSITIONS",
     "VOICE_TRANSITIONS",
     "CancellationToken",
@@ -21,4 +34,7 @@ __all__ = [
     "new_action_id",
     "new_session_id",
     "new_task_id",
+    "relay_state_machine",
+    "task_machine",
+    "voice_machine",
 ]

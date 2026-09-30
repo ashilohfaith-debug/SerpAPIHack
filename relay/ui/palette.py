@@ -70,8 +70,13 @@ class Palette:
     def show(self, visible: bool) -> None:
         self._q.put(("show", "1" if visible else "0"))
 
-    def stop(self) -> None:
+    def stop(self, timeout: float = 3.0) -> None:
         self._q.put(("quit", ""))
+        if self._thread is not None and self._thread.is_alive():
+            try:
+                self._thread.join(timeout=timeout)
+            except Exception:
+                pass
 
     def start(self) -> bool:
         self._thread = threading.Thread(target=self._run, name="palette", daemon=True)
@@ -167,15 +172,28 @@ class Palette:
                 while True:
                     kind, text = self._q.get_nowait()
                     if kind == "quit":
-                        root.destroy()
+                        try:
+                            root.quit()
+                            root.destroy()
+                        except Exception:
+                            pass
                         return
                     if kind == "show":
                         self.visible = text == "1"
-                        root.deiconify() if self.visible else root.withdraw()
+                        try:
+                            root.deiconify() if self.visible else root.withdraw()
+                        except Exception:
+                            pass
                     elif kind == "you":
-                        you.configure(text="You: " + _shorten(text))
+                        try:
+                            you.configure(text="You: " + _shorten(text))
+                        except Exception:
+                            pass
                     elif kind == "relay":
-                        relay.configure(text="Relay: " + _shorten(text))
+                        try:
+                            relay.configure(text="Relay: " + _shorten(text))
+                        except Exception:
+                            pass
             except queue.Empty:
                 pass
             try:
@@ -185,13 +203,27 @@ class Palette:
             if state != last["state"]:
                 last["state"] = state
                 colour, line = STATES.get(state, STATES["ready"])
-                light.itemconfigure(dot, fill=colour)
-                status.configure(text=line)
-                toggle.configure(text="On" if state == "off" else "Off")
-            root.after(150, tick)
+                try:
+                    light.itemconfigure(dot, fill=colour)
+                    status.configure(text=line)
+                    toggle.configure(text="On" if state == "off" else "Off")
+                except Exception:
+                    pass
+            try:
+                root.after(150, tick)
+            except Exception:
+                pass
 
-        root.after(150, tick)
+        try:
+            root.after(150, tick)
+        except Exception:
+            pass
         try:
             root.mainloop()
         except Exception as e:
             log.warning("palette stopped: %s", e)
+        finally:
+            try:
+                root.destroy()
+            except Exception:
+                pass

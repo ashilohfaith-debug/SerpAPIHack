@@ -22,6 +22,7 @@ current mode (quick / detailed / guided / quiet).
 
 from __future__ import annotations
 
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -109,17 +110,48 @@ class TransparentRunner:
         # them again would talk over it (RELAY still reports everything else)
         self.screen_reader = False
 
-    def say(self, text: str, priority: int = pol.Priority.TASK) -> None:
+    def say(self, text: str, priority: int = pol.Priority.TASK, wait: bool = False,
+            timeout: float = 10.0) -> None:
         if not text or not pol.should_speak(priority, self.mode):
             return
         self.last_said = text
+        done_evt = threading.Event() if wait else None
+
+        def _on_done(_completed: bool = True) -> None:
+            if done_evt is not None:
+                done_evt.set()
+
         if self._speak is not None:
             try:
-                self._speak(text)
+                import inspect
+                sig = None
+                try:
+                    sig = inspect.signature(self._speak)
+                except (ValueError, TypeError):
+                    pass
+                if sig and "on_done" in sig.parameters:
+                    self._speak(text, on_done=_on_done)
+                else:
+                    self._speak(text)
+                    if done_evt is not None:
+                        done_evt.set()
             except Exception:
-                pass
+                if done_evt is not None:
+                    done_evt.set()
+        else:
+            if done_evt is not None:
+                done_evt.set()
+
         if self.bus is not None:
             self.bus.emit("narration.say", text=text)
+
+        if wait and done_evt is not None:
+            end_t = time.monotonic() + timeout
+            while time.monotonic() < end_t:
+                if done_evt.wait(timeout=0.05):
+                    break
+                if self.emergency is not None and self.emergency.is_engaged:
+                    break
 
     def _stopped(self, cancel) -> bool:
         if self.emergency is not None and self.emergency.is_engaged:
@@ -159,7 +191,7 @@ class TransparentRunner:
         prev = self.ctx.last_narrated or self.worker.observe(3.0)
         announce = step.payload.get("announce", f"I'm going to {step.description}.")
         if announce:
-            self.say(announce)                      # announce BEFORE acting
+            self.say(announce, wait=True)                      # announce before acting (wait)
         outcome, detail = self._act(step)
         if outcome == "AWAIT":                      # needs spoken confirmation first
             return StepResult(step.description, "awaiting_confirmation", detail)
@@ -256,6 +288,18 @@ class TransparentRunner:
             return self._act_system(p), ""
         if kind == "activate":
             return self._act_activate(step)
+        if kind == "new_folder":
+            o = self.ex.create_folder(p["target"])
+            ok = self.vf.file_exists(str(p["target"]))
+            msg = p.get("ok_text", f"The {p.get('name', '')} folder is in {p.get('label', '')}.")
+            return self.vf.verify(o, ok, msg), ""
+        if kind == "file_op":
+            o = self.ex.file_op(p["op"], p["src"], p["dest"])
+            ok = self.vf.file_exists(str(p["dest"]))
+            return self.vf.verify(o, ok, p.get("ok_text", "")), ""
+        if kind == "recycle":
+            o = self.ex.recycle(p["paths"])
+            return self.vf.verify(o, o.ok, p.get("ok_text", "moved to the Recycle Bin")), ""
         return None, "unsupported step"
 
     def _act_launch(self, p):
@@ -383,9 +427,11 @@ class TransparentRunner:
         if el is None:
             return None, _REF_ERROR_SPEECH.get(err, "I couldn't do that.")
         if self.engine is not None and self._on_confirm_needed is not None:
+            is_pwd = bool(el.states.get("is_password") or el.states.get("protected"))
             dec = self.engine.classify(Action(
                 kind="invoke", target_app=el.window_title,
-                target_label=el.name, target_role=el.role))
+                target_label=el.name, target_role=el.role,
+                is_password_field=is_pwd))
             if dec.requires_confirmation:
                 self._on_confirm_needed(
                     dec, el.name,
