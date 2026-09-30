@@ -155,7 +155,21 @@ def main() -> int:
     if not (src / "relay-cli.exe").exists():
         print("No packaged build found — run packaging/build.ps1 first.")
         return 2
-    (ROOT / "build").mkdir(exist_ok=True)  # same drive as dist; never fills up C:
+    # Ensure models are present in dist/relay before test
+    dist_piper = src / "models" / "piper"
+    dist_whisper = src / "models" / "whisper"
+    src_piper = ROOT / "models" / "piper"
+    src_whisper = ROOT / "models" / "whisper"
+    if src_piper.exists() and not any(dist_piper.glob("*.onnx")):
+        dist_piper.mkdir(parents=True, exist_ok=True)
+        for f in src_piper.glob("*"):
+            if f.is_file():
+                shutil.copy2(f, dist_piper / f.name)
+    if src_whisper.exists() and not (dist_whisper.exists() and any(dist_whisper.rglob("*.bin"))):
+        if dist_whisper.exists():
+            shutil.rmtree(dist_whisper)
+        shutil.copytree(src_whisper, dist_whisper)
+
     work = Path(tempfile.mkdtemp(prefix="relay_clean_", dir=str(ROOT / "build")))
     app = work / "Relay"
     shutil.copytree(src, app)
@@ -163,6 +177,7 @@ def main() -> int:
     data.mkdir()
     cache.mkdir()
     env = clean_env(data, cache)
+
     results = {}
 
     problems = dll_scan(app)
