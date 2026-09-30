@@ -87,10 +87,18 @@ class WinEventMonitor:
             log.warning("error in change observer: %s", e)
 
     def _run(self) -> None:
+        try:
+            from relay.perception.ocr import attach_thread_to_active_desktop
+
+            attach_thread_to_active_desktop()
+        except Exception:
+            pass
+
         user32 = getattr(ctypes, "windll", None) and getattr(ctypes.windll, "user32", None)
         if user32 is None or not hasattr(user32, "SetWinEventHook"):
             log.info("WinEventHook not supported on this platform")
             return
+
 
         def _callback(h_hook, event, hwnd, id_obj, id_child, id_thread, dw_time):
             # Screen out mouse move or non-client events

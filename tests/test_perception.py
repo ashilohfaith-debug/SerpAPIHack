@@ -120,3 +120,41 @@ def test_real_uia_observe_returns_snapshot():
     # On a live desktop there is a foreground window with a title or some controls.
     assert snap.foreground_title or snap.elements or snap.foreground_app
     w.stop()
+
+
+# ---- OCR and reading-order tests ----
+def test_ocr_to_text_reading_order():
+    from relay.perception.ocr import to_text
+
+    regions = [
+        _el(1, "World", bbox=(100, 10, 150, 30)),
+        _el(2, "Hello", bbox=(10, 10, 60, 30)),
+        _el(3, "Second", bbox=(10, 50, 60, 70)),
+        _el(4, "Line", bbox=(70, 50, 120, 70)),
+    ]
+    txt = to_text(regions)
+    assert txt == "Hello World\nSecond Line"
+
+
+def test_ocr_read_screen_synthetic_image(monkeypatch):
+    from PIL import Image, ImageDraw
+
+    from relay.perception.ocr import OCR
+
+    # Create synthetic test image with clean large text
+    img = Image.new("RGB", (400, 150), color=(255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    draw.text((20, 40), "Relay Audit", fill=(0, 0, 0))
+
+    ocr = OCR()
+    # Mock _capture_window_printwindow to return our synthetic PIL image
+    import relay.perception.ocr as ocr_module
+
+    monkeypatch.setattr(ocr_module, "_capture_window_printwindow", lambda hwnd: img)
+
+    regions = ocr.read_screen(hwnd=12345)
+    assert len(regions) > 0
+    assert any("Audit" in r.name or "Relay" in r.name.replace(" ", "") for r in regions)
+    assert regions[0].provenance == "ocr"
+
+

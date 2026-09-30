@@ -1427,15 +1427,18 @@ class Skills:
 
         fg = windows.foreground()
         region = None
+        hwnd = None
         if fg is not None:
             import ctypes
             from ctypes import wintypes
 
+            hwnd = fg.hwnd
             r = wintypes.RECT()
             if ctypes.windll.user32.GetWindowRect(fg.hwnd, ctypes.byref(r)):
                 region = (max(0, r.left), max(0, r.top), r.right, r.bottom)
-        regions = self.s.ocr.read_screen(region=region)
+        regions = self.s.ocr.read_screen(region=region, hwnd=hwnd)
         return ocr_mod.to_text(regions)
+
 
     def k_ocr_read(self, i):
         self.say(

@@ -114,6 +114,9 @@ def list_windows() -> list[WindowInfo]:
     out: list[WindowInfo] = []
     if user32 is None:
         return out
+    from relay.perception.ocr import attach_thread_to_active_desktop
+
+    attach_thread_to_active_desktop()
     own_pid = ctypes.windll.kernel32.GetCurrentProcessId()
 
     @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -147,6 +150,9 @@ def foreground_blocks_input() -> bool:
     window (UIPI), and SendInput doesn't report it — so RELAY must check first."""
     if user32 is None:
         return False
+    from relay.perception.ocr import attach_thread_to_active_desktop
+
+    attach_thread_to_active_desktop()
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
         return False
@@ -208,6 +214,9 @@ def _self_elevated() -> bool:
 def foreground() -> WindowInfo | None:
     if user32 is None:
         return None
+    from relay.perception.ocr import attach_thread_to_active_desktop
+
+    attach_thread_to_active_desktop()
     hwnd = user32.GetForegroundWindow()
     if not hwnd or not user32.IsWindow(hwnd):
         wins = list_windows()
@@ -215,6 +224,7 @@ def foreground() -> WindowInfo | None:
             return wins[0]
         return None
     return WindowInfo(int(hwnd), _title(hwnd), _proc_name(hwnd), bool(user32.IsIconic(hwnd)))
+
 
 
 def find(query: str, windows: list[WindowInfo] | None = None) -> WindowInfo | None:

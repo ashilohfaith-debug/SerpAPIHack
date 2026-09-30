@@ -363,6 +363,14 @@ def observe(observation_version: int) -> ScreenSnapshot:
     screen_area = user32.GetSystemMetrics(0) * user32.GetSystemMetrics(1)
 
     fg = auto.GetForegroundControl()
+    if fg is None or getattr(fg, "ClassName", "") == "#32769":
+        # Fall back to foreground hwnd
+        try:
+            hwnd = user32.GetForegroundWindow()
+            if hwnd and user32.IsWindow(hwnd):
+                fg = auto.ControlFromHandle(hwnd)
+        except Exception:
+            pass
     if fg is None:
         try:
             fg = auto.GetRootControl()
@@ -370,6 +378,7 @@ def observe(observation_version: int) -> ScreenSnapshot:
             fg = None
     if fg is None:
         return ScreenSnapshot(observation_version, uia_available=False)
+
 
     title = ""
     try:

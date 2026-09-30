@@ -55,6 +55,9 @@ class _WorkerThread:
         self._thread.start()
 
     def _run(self) -> None:
+        from relay.perception.ocr import attach_thread_to_active_desktop
+
+        attach_thread_to_active_desktop()
         # All UIA calls happen on this thread, so it owns COM: initialise it here, as a
         # single-threaded apartment (what comtypes' own import does). Relying on that
         # import only worked while this thread happened to import comtypes first; now
@@ -65,6 +68,7 @@ class _WorkerThread:
             comtypes.CoInitialize()
         except Exception:
             pass
+
         try:
             import uiautomation as auto
 
@@ -216,9 +220,13 @@ class UIAWorker:
         self._monitor.start()
 
     def _monitor_loop(self, interval: float) -> None:
+        from relay.perception.ocr import attach_thread_to_active_desktop
+
+        attach_thread_to_active_desktop()
         last_hwnd = None
         user32 = ctypes.windll.user32
         while not self._monitor_stop.wait(interval):
+
             try:
                 hwnd = user32.GetForegroundWindow()
             except Exception:
