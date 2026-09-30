@@ -48,11 +48,18 @@ class _WorkerThread:
         self._q: "queue.Queue[tuple]" = queue.Queue()
         self._thread = threading.Thread(target=self._run, name="uia-worker", daemon=True)
         self.alive = True
+        self._observing = False
         with _WORKERS_LOCK:
             _ACTIVE_WORKERS.append(self)
             # Prune dead threads to prevent unbound list growth
             _ACTIVE_WORKERS[:] = [w for w in _ACTIVE_WORKERS if w.alive and w._thread.is_alive()]
         self._thread.start()
+
+    def is_observing(self) -> bool:
+        return self._observing
+
+    def set_observing(self, val: bool) -> None:
+        self._observing = val
 
     def _run(self) -> None:
         from relay.perception.ocr import attach_thread_to_active_desktop
@@ -129,14 +136,20 @@ class UIAWorker:
                 self._worker = _WorkerThread()
             return self._worker
 
-    def observe(self, timeout: float = 2.0) -> ScreenSnapshot | None:
+    def observe(self, timeout: float = 5.0) -> ScreenSnapshot | None:
         """Take a fresh observation. Returns the snapshot, or None on timeout
         (worker restarted). Publishes ``perception.change`` when the structure
         changed vs the previous snapshot."""
         worker = self._ensure_worker()
+        if worker.is_observing():
+            return self._current
         self._version += 1
         version = self._version
-        box, timed_out = worker.submit(lambda: self._observe_fn(version), timeout)
+        worker.set_observing(True)
+        try:
+            box, timed_out = worker.submit(lambda: self._observe_fn(version), timeout)
+        finally:
+            worker.set_observing(False)
         if timed_out or box is None:
             log.warning("observe timed out (v%s)", version)
             return None

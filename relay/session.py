@@ -506,9 +506,26 @@ class Session:
         return self.runner.run(steps, cancel=self.cancel)
 
     # ---- conversational assistant ----
+    def reload_assistant(self) -> bool:
+        """Reload routes and initialize assistant if credentials were added/updated."""
+        try:
+            from relay.config import Config
+            from relay.llm import Assistant, Router, routes_from_config
+
+            cfg = Config.load()
+            routes = routes_from_config(cfg)
+            if routes:
+                self.assistant = Assistant(Router(routes))
+                return True
+        except Exception as e:
+            log.warning("could not reload assistant: %s", e)
+        return False
+
     def ask(self, question: str, page_text: str = ""):
         """Stream an AI answer, speaking each sentence the moment it's complete. A
         suggested command is announced and then run through the normal safety gate."""
+        if self.assistant is None:
+            self.reload_assistant()
         if self.assistant is None:
             self.say(
                 "The AI assistant isn't set up on this computer, so I can only do "

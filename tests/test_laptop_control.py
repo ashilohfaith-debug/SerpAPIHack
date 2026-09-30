@@ -416,3 +416,36 @@ def test_a_blank_notepad_is_used_as_it_is(monkeypatch):
         assert rec.ran[0] == "open Notepad" and rec.ran[1].startswith("type")
     finally:
         s.close()
+
+
+def test_api_key_voice_command_and_colloquial_screen_matching(monkeypatch):
+    from relay.intent.grammar import Kind, parse
+    from relay.session import Session
+
+    # Test colloquial screen description phrases
+    assert parse("what do you see").kind == Kind.DESCRIBE_SCREEN
+    assert parse("tell me what you see").kind == Kind.DESCRIBE_SCREEN
+    assert parse("what can you see").kind == Kind.DESCRIBE_SCREEN
+    assert parse("tell me what is on my screen").kind == Kind.DESCRIBE_SCREEN
+    assert parse("describe my screen").kind == Kind.DESCRIBE_SCREEN
+
+    # Test API key voice command parsing
+    assert parse("save api key").kind == Kind.API_KEY
+    assert parse("save my api key").kind == Kind.API_KEY
+    assert parse("check api key").kind == Kind.API_KEY
+
+    # Test API key execution
+    spoken = []
+    s = Session(speak=lambda t, p=None: spoken.append(t))
+    try:
+        import pyperclip
+
+        monkeypatch.setattr(pyperclip, "paste", lambda: "freellmapi-test1234567890abcdef")
+        s.handle("save api key")
+        assert any("securely saved" in msg or "API key was saved" in msg for msg in spoken)
+        spoken.clear()
+        s.handle("check api key")
+        assert any("API key is" in msg for msg in spoken)
+    finally:
+        s.close()
+

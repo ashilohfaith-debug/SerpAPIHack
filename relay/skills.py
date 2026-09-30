@@ -461,6 +461,47 @@ class Skills:
             "Windows Update is open and checking for updates.",
         )
 
+    def k_api_key(self, i):
+        action = i.slots.get("action", "save")
+        from relay.memory.secrets import get_secret, save_secret
+
+        if action == "status":
+            key = get_secret("RELAY_LLM_KEY") or get_secret("FREELLMAPI_KEY")
+            url = get_secret("RELAY_LLM_URL") or get_secret("FREELLMAPI_URL")
+            if key and url:
+                self.say("Your AI API key is configured and connected.")
+            elif key:
+                self.say("Your API key is saved, using the local router endpoint.")
+            else:
+                self.say("No API key is currently saved. Copy your Free LLM API key, then say save API key.")
+            return
+
+        import pyperclip
+
+        try:
+            raw = pyperclip.paste().strip()
+        except Exception:
+            raw = ""
+
+        if len(raw) < 10 or " " in raw:
+            self.say(
+                "I didn't find an API key on the clipboard. Copy your key first, then say save API key."
+            )
+            return
+
+        save_secret("RELAY_LLM_KEY", raw)
+        save_secret("FREELLMAPI_KEY", raw)
+        if not get_secret("RELAY_LLM_URL"):
+            save_secret("RELAY_LLM_URL", "http://127.0.0.1:31415/v1")
+        if not get_secret("FREELLMAPI_URL"):
+            save_secret("FREELLMAPI_URL", "http://127.0.0.1:31415/v1")
+
+        reloaded = self.s.reload_assistant()
+        if reloaded:
+            self.say("Your API key has been securely saved with Windows encryption, and the AI assistant is now online.")
+        else:
+            self.say("Your API key was saved, but the local model proxy could not be reached right now.")
+
     def k_settings_page(self, i):
         topic = i.slots.get("topic", "")
         extra = " Night light is the switch near the top." if "night" in topic else ""

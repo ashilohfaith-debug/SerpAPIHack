@@ -243,6 +243,8 @@ def to_text(regions: list[UIElement]) -> str:
     """OCR regions -> reading-order text: rows top-to-bottom, words left-to-right."""
     if not regions:
         return ""
+    import re
+
     rows: list[list[UIElement]] = []
     for r in sorted(regions, key=lambda e: (e.bbox[1], e.bbox[0])):
         h = max(1, r.bbox[3] - r.bbox[1])
@@ -250,5 +252,9 @@ def to_text(regions: list[UIElement]) -> str:
             rows[-1].append(r)
         else:
             rows.append([r])
-    return "\n".join(" ".join(e.name for e in sorted(row, key=lambda e: e.bbox[0])) for row in rows)
+    raw = "\n".join(" ".join(e.name for e in sorted(row, key=lambda e: e.bbox[0])) for row in rows)
+    # Strip box-drawing and unmapped decorative unicode glyphs that cause TTS / console encoding errors
+    cleaned = re.sub(r"[\u2500-\u257f\u2580-\u259f\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]", " ", raw)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in cleaned.splitlines()]
+    return "\n".join(line for line in lines if line)
 

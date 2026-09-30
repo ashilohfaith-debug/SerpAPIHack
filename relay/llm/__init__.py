@@ -24,14 +24,28 @@ __all__ = [
 
 
 def routes_from_config(cfg) -> list[Route]:
-    """Routes from config.toml / environment. RELAY_LLM_URL and RELAY_LLM_KEY override
-    the file. The key belongs to the developer's router or gateway — users never need
-    one of their own. Empty URL = assistant off (offline commands only)."""
+    """Routes from config.toml / environment / DPAPI secrets. RELAY_LLM_URL and RELAY_LLM_KEY
+    (or FREELLMAPI_KEY/URL) override the file. Multiple providers and backup endpoints
+    are supported with automatic racing and failover. Empty URL = assistant off."""
     from relay.envfile import offline_forced
     from relay.memory.secrets import get_secret
 
-    url = os.environ.get("RELAY_LLM_URL", "").strip() or get_secret("RELAY_LLM_URL", "").strip() or (cfg.llm_url or "").strip()
-    key = os.environ.get("RELAY_LLM_KEY", "").strip() or get_secret("RELAY_LLM_KEY", "").strip() or (cfg.llm_key or "").strip()
+    key = (
+        os.environ.get("RELAY_LLM_KEY", "").strip()
+        or get_secret("RELAY_LLM_KEY", "").strip()
+        or os.environ.get("FREELLMAPI_KEY", "").strip()
+        or get_secret("FREELLMAPI_KEY", "").strip()
+        or (cfg.llm_key or "").strip()
+    )
+    url = (
+        os.environ.get("RELAY_LLM_URL", "").strip()
+        or get_secret("RELAY_LLM_URL", "").strip()
+        or os.environ.get("FREELLMAPI_URL", "").strip()
+        or get_secret("FREELLMAPI_URL", "").strip()
+        or (cfg.llm_url or "").strip()
+    )
+    if not url and key:
+        url = "http://127.0.0.1:31415/v1"
     if not url or offline_forced():
         return []
     url = _local_router(url)
@@ -46,7 +60,7 @@ def routes_from_config(cfg) -> list[Route]:
             hints["auto:fast"] = max(hints.values()) + 1.0  # the router's own pick: last
             models = [m for m, _t in fastest] + ["auto:fast"]
     headers = {"X-Relay-Device": _device_id()}
-    return [
+    routes = [
         Route(
             name=f"{m}",
             base_url=url,
@@ -58,6 +72,32 @@ def routes_from_config(cfg) -> list[Route]:
         )
         for m in models
     ]
+
+    # Check for backup provider endpoint
+    backup_url = (
+        os.environ.get("RELAY_BACKUP_LLM_URL", "").strip()
+        or get_secret("RELAY_BACKUP_LLM_URL", "").strip()
+    )
+    backup_key = (
+        os.environ.get("RELAY_BACKUP_LLM_KEY", "").strip()
+        or get_secret("RELAY_BACKUP_LLM_KEY", "").strip()
+        or key
+    )
+    if backup_url and backup_url != url:
+        backup_url = _local_router(backup_url)
+        for m in ["auto:fast", "auto"]:
+            routes.append(
+                Route(
+                    name=f"backup:{m}",
+                    base_url=backup_url,
+                    api_key=backup_key,
+                    model=m,
+                    timeout=float(cfg.llm_timeout),
+                    extra_headers=headers,
+                    ttft_hint=hints.get(m, 0.0) + 2.0,  # try primary first
+                )
+            )
+    return routes
 
 
 _LOCAL_PORTS = (31415, 3001)  # FreeLLMAPI desktop app, then Docker / source

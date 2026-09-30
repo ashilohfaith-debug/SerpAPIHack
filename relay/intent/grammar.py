@@ -113,6 +113,7 @@ class Kind:
     AUDIO_STATUS = "audio_status"  # "where is the sound going", "am I using headphones"
     QUIT = "quit"
     PICK = "pick"  # "open the second one" — from the last list RELAY read out
+    API_KEY = "api_key"  # voice setup/status of FreeLLMAPI key
     SEND = "send"  # send the message being written (always read back + confirmed)
     ASK = "ask"  # a question for the conversational assistant
     SUMMARIZE = "summarize"  # "summarise this page" — the page text goes to the assistant
@@ -534,6 +535,19 @@ def _laptop_control(low: str, keep: str):
         low,
     ):
         return Kind.CHECK_UPDATES, {}
+    # api key management
+    if re.search(
+        r"\b(?:save|add|set|update|paste|store)\s+(?:the\s+|my\s+)?(?:free\s+)?(?:llm\s+|ai\s+)?api\s*key\b|"
+        r"\bread\s+(?:the\s+)?api\s*key\s+(?:from\s+)?(?:the\s+)?clipboard\b",
+        low,
+    ):
+        return Kind.API_KEY, {"action": "save"}
+    if re.search(
+        r"\b(?:check|what\s+is|status\s+of|do\s+i\s+have)\s+(?:the\s+|my\s+)?(?:free\s+)?(?:llm\s+|ai\s+)?api\s*key\b|"
+        r"^api\s*key\s+status$",
+        low,
+    ):
+        return Kind.API_KEY, {"action": "status"}
     # settings pages ("open bluetooth settings", "display settings", "go to sound settings")
     m = re.match(
         r"^(?:open|show|go to|launch)?\s*(?:the\s+|my\s+)?(.+?)\s+settings?$|"
@@ -939,8 +953,10 @@ def parse(utterance: str) -> Intent:
 
     # ---- information about the screen ----
     if re.search(
-        r"\b(what(?:'s| is)? (on|happening)|describe|what am i looking at|"
-        r"what(?:'s| is) in front of me)\b",
+        r"\b(what(?:'s| is)? (?:on|happening)|describe|what am i looking at|"
+        r"what(?:'s| is) in front of me|what (?:do you|can you) see|"
+        r"tell me what (?:you see|is on (?:my |the )?screen)|"
+        r"(?:read|explain) (?:my |the )?screen)\b",
         low,
     ):
         return I(Kind.DESCRIBE_SCREEN)
