@@ -42,14 +42,20 @@ class Verifier:
     def window_present(self, title_substr: str, timeout: float = 3.0) -> bool:
         t = title_substr.lower().replace(".exe", "").strip()
         snap = self.worker.observe(timeout)
+        
+        def match(name: str) -> bool:
+            if not name: return False
+            n = name.lower()
+            return t == n or n.startswith(t) or (f" {t} " in f" {n} ") or (t in n and len(t) >= 4)
+            
         if snap and (
-            t in (snap.foreground_title or "").lower()
-            or any(t in (e.window_title or "").lower() for e in snap.elements)
+            match(snap.foreground_title) or match(snap.foreground_app)
+            or any(match(e.window_title) or match(e.app) for e in snap.elements)
         ):
             return True
         # also check ALL top-level windows — the app may be open but not foreground
         for wd in self.worker.list_windows():
-            if t and (t in wd.get("title", "").lower() or t in wd.get("app", "").lower()):
+            if t and (match(wd.get("title", "")) or match(wd.get("app", ""))):
                 return True
         return False
 

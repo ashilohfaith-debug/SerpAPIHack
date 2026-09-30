@@ -323,7 +323,7 @@ class TransparentRunner:
             time.sleep(0.4)
             txt = p["text"].strip()
             check_txt = txt if len(txt) <= 20 else txt[:20]
-            seen = self.vf.focus_value_contains(check_txt) or self.vf.page_contains(check_txt)
+            seen = self.vf.focus_value_contains(check_txt)
             return self.vf.verify(
                 o, seen, "the text is there" if seen else "couldn't confirm the text"
             ), ""

@@ -341,7 +341,15 @@ def activate_window(hwnd: int) -> bool:
 def find_and_activate(app_or_title: str) -> bool:
     """Find a top-level window whose app/title matches and bring it forward."""
     t = app_or_title.lower().replace(".exe", "").strip()
-    for wd in list_top_windows():
+    windows = list_top_windows()
+    for wd in windows:
+        if t == wd["app"].lower() or t == wd["title"].lower():
+            return activate_window(wd["hwnd"])
+    for wd in windows:
+        a, ti = wd["app"].lower(), wd["title"].lower()
+        if a.startswith(t) or ti.startswith(t) or (f" {t} " in f" {a} ") or (f" {t} " in f" {ti} "):
+            return activate_window(wd["hwnd"])
+    for wd in windows:
         if t and (t in wd["app"].lower() or t in wd["title"].lower()):
             return activate_window(wd["hwnd"])
     return False
