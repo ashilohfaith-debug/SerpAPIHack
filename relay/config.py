@@ -37,7 +37,7 @@ def models_dir() -> Path:
     override = os.environ.get("RELAY_MODELS_DIR")
     if override:
         d = Path(override)
-    elif getattr(sys, "frozen", False):          # packaged build: models/ beside relay.exe
+    elif getattr(sys, "frozen", False):  # packaged build: models/ beside relay.exe
         d = Path(sys.executable).resolve().parent / "models"
     else:
         d = Path(__file__).resolve().parent.parent / "models"
@@ -52,10 +52,10 @@ class Config:
     # voice
     wake_word: str = "relay"
     wake_word_enabled: bool = True
-    push_to_talk_hotkey: str = "ctrl+alt+space"   # talk (also interrupts RELAY)
-    stop_hotkey: str = "ctrl+alt+period"          # silence RELAY / pause reading
+    push_to_talk_hotkey: str = "ctrl+alt+space"  # talk (also interrupts RELAY)
+    stop_hotkey: str = "ctrl+alt+period"  # silence RELAY / pause reading
     emergency_hotkey: str = "ctrl+alt+backspace"  # halt everything
-    launch_hotkey: str = "ctrl+alt+r"             # desktop shortcut (relay --install)
+    launch_hotkey: str = "ctrl+alt+r"  # desktop shortcut (relay --install)
     speech_rate: float = 1.0
     voice: str = "default"
     language: str = "en"
@@ -68,8 +68,8 @@ class Config:
     # optional conversational AI via an OpenAI-compatible router (e.g. FreeLLMAPI) or
     # the developer's gateway in front of it. Users never bring their own key. Empty
     # URL = off; offline commands always work either way.
-    llm_url: str = ""                      # e.g. http://localhost:3001/v1
-    llm_key: str = ""                      # the router's/gateway's key (dev-owned)
+    llm_url: str = ""  # e.g. http://localhost:3001/v1
+    llm_key: str = ""  # the router's/gateway's key (dev-owned)
     llm_models: list[str] = field(default_factory=lambda: ["auto:fast", "auto"])
     llm_timeout: float = 20.0
 

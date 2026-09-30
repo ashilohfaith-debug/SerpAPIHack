@@ -31,9 +31,11 @@ class SingleInstance:
         try:
             if os.name == "nt":
                 import msvcrt
+
                 msvcrt.locking(self._fh.fileno(), msvcrt.LK_NBLCK, 1)
             else:
                 import fcntl
+
                 fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             return True
         except OSError:
@@ -49,10 +51,12 @@ class SingleInstance:
         try:
             if os.name == "nt":
                 import msvcrt
+
                 self._fh.seek(0)
                 msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
             else:
                 import fcntl
+
                 fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
         except OSError:
             pass
@@ -73,6 +77,7 @@ class SingleInstance:
 def _kernel32():
     import ctypes
     from ctypes import wintypes
+
     k = ctypes.WinDLL("kernel32", use_last_error=True)
     k.CreateEventW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
     k.CreateEventW.restype = wintypes.HANDLE
@@ -102,7 +107,7 @@ class QuitSignal:
         if os.name != "nt":
             return False
         k = _kernel32()
-        self._handle = k.CreateEventW(None, False, False, self.name)   # auto-reset
+        self._handle = k.CreateEventW(None, False, False, self.name)  # auto-reset
         if not self._handle:
             return False
 
@@ -111,16 +116,17 @@ class QuitSignal:
         def wait() -> None:
             try:
                 while not self._stop.is_set():
-                    if k.WaitForSingleObject(handle, 500) == 0:       # WAIT_OBJECT_0
+                    if k.WaitForSingleObject(handle, 500) == 0:  # WAIT_OBJECT_0
                         if not self._stop.is_set():
                             on_quit()
             finally:
-                k.CloseHandle(handle)          # closed here, never under a waiting call
+                k.CloseHandle(handle)  # closed here, never under a waiting call
+
         threading.Thread(target=wait, name="quit-signal", daemon=True).start()
         return True
 
     def stop(self) -> None:
-        self._stop.set()                        # the waiting thread closes the handle
+        self._stop.set()  # the waiting thread closes the handle
         self._handle = None
 
     @staticmethod
@@ -129,7 +135,7 @@ class QuitSignal:
         if os.name != "nt":
             return False
         k = _kernel32()
-        h = k.OpenEventW(0x0002, False, name)                         # EVENT_MODIFY_STATE
+        h = k.OpenEventW(0x0002, False, name)  # EVENT_MODIFY_STATE
         if not h:
             return False
         try:

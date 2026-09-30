@@ -28,8 +28,9 @@ def mark_onboarded() -> None:
         pass
 
 
-def onboarding_script(wake_word: str = "relay", first_run: bool = True,
-                      talk_key: str = "Control Alt Space") -> list[str]:
+def onboarding_script(
+    wake_word: str = "relay", first_run: bool = True, talk_key: str = "Control Alt Space"
+) -> list[str]:
     """The lines RELAY speaks to introduce itself. Kept short and concrete: a first
     run explains everything once; later starts are a one-line 'ready'."""
     running, name = screen_reader_running()

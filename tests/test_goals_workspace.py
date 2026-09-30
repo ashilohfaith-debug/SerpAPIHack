@@ -54,6 +54,7 @@ class TestRelayStateMachine:
 
     def test_valid_transitions(self) -> None:
         from relay.core.bus import EventBus
+
         bus = EventBus()
         sm = relay_state_machine("test_machine", bus=bus)
         assert sm.state == RelayState.BOOTING
@@ -94,6 +95,7 @@ class TestRelayStateMachine:
 
     def test_invalid_transition_rejected(self) -> None:
         from relay.core.state import InvalidTransition
+
         sm = relay_state_machine("test_invalid")
         # BOOTING to ACTING is not allowed directly
         assert sm.can(RelayState.ACTING) is False
@@ -115,6 +117,7 @@ class TestRelayStateMachine:
 
     def test_event_bus_emission(self) -> None:
         from relay.core.bus import EventBus
+
         bus = EventBus()
         events = []
         bus.subscribe("relay.state", lambda evt: events.append(evt.data))
@@ -342,8 +345,7 @@ class TestAssignmentWorkflow:
         sub_file = Path("Operating_Systems_Assignment.pdf")
         prompt = wf.prepare_submission_confirmation(assignment, sub_file)
         expected_prompt = (
-            "Submit Operating_Systems_Assignment.pdf to "
-            "Operating Systems Assignment 3 now?"
+            "Submit Operating_Systems_Assignment.pdf to Operating Systems Assignment 3 now?"
         )
         assert prompt == expected_prompt
 

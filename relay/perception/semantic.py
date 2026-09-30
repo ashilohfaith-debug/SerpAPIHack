@@ -19,21 +19,21 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class UIElement:
-    uid: int                    # stable index within THIS snapshot only
+    uid: int  # stable index within THIS snapshot only
     name: str
-    role: str                   # UIA ControlTypeName without the "Control" suffix
+    role: str  # UIA ControlTypeName without the "Control" suffix
     bbox: tuple[int, int, int, int]  # (left, top, right, bottom), physical px
-    value: str = ""             # ValuePattern/TextPattern value, if any (never a secret)
-    actions: tuple[str, ...] = ()    # available high-level actions: invoke/set_value/toggle/…
+    value: str = ""  # ValuePattern/TextPattern value, if any (never a secret)
+    actions: tuple[str, ...] = ()  # available high-level actions: invoke/set_value/toggle/…
     states: dict = field(default_factory=dict)  # enabled/offscreen/focused/selected/toggled
     window_title: str = ""
-    provenance: str = "uia"     # "uia" | "ocr" (ocr is inferred, lower trust)
-    description: str = ""       # accessible description / HelpText
+    provenance: str = "uia"  # "uia" | "ocr" (ocr is inferred, lower trust)
+    description: str = ""  # accessible description / HelpText
     ancestry: tuple[str, ...] = ()  # hierarchy of container roles
-    confidence: float = 1.0     # observation confidence score
-    timestamp: float = 0.0      # observation monotonic timestamp
-    stable_id: str = ""         # AutomationId or runtime fingerprint
-    app: str = ""               # process / application name
+    confidence: float = 1.0  # observation confidence score
+    timestamp: float = 0.0  # observation monotonic timestamp
+    stable_id: str = ""  # AutomationId or runtime fingerprint
+    app: str = ""  # process / application name
 
     @property
     def center(self) -> tuple[int, int]:
@@ -42,13 +42,21 @@ class UIElement:
 
     def to_dict(self) -> dict:
         return {
-            "uid": self.uid, "name": self.name, "role": self.role,
-            "bbox": list(self.bbox), "value": self.value,
-            "actions": list(self.actions), "states": self.states,
-            "window_title": self.window_title, "provenance": self.provenance,
-            "description": self.description, "ancestry": list(self.ancestry),
-            "confidence": self.confidence, "timestamp": self.timestamp,
-            "stable_id": self.stable_id, "app": self.app,
+            "uid": self.uid,
+            "name": self.name,
+            "role": self.role,
+            "bbox": list(self.bbox),
+            "value": self.value,
+            "actions": list(self.actions),
+            "states": self.states,
+            "window_title": self.window_title,
+            "provenance": self.provenance,
+            "description": self.description,
+            "ancestry": list(self.ancestry),
+            "confidence": self.confidence,
+            "timestamp": self.timestamp,
+            "stable_id": self.stable_id,
+            "app": self.app,
         }
 
 
@@ -77,8 +85,11 @@ class ScreenSnapshot:
         foreground), independent of observation_version, for change detection."""
         stable = {
             "fg": self.foreground_title,
-            "focus": (self.focus.name, self.focus.role) if self.focus else None,
-            "els": sorted((e.name, e.role, e.bbox) for e in self.elements),
+            "focus": (self.focus.name, self.focus.role, self.focus.value) if self.focus else None,
+            "els": sorted(
+                (e.name, e.role, e.bbox, e.value, tuple(sorted(e.states.items())))
+                for e in self.elements
+            ),
             "dlg": sorted(d.title for d in self.dialogs),
         }
         return hashlib.md5(json.dumps(stable, default=str).encode()).hexdigest()

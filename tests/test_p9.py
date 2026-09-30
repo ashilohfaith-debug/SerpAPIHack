@@ -16,8 +16,8 @@ def _el(name, role="Button"):
 # ---- capability matrix ----
 def test_capability_lookup_and_text():
     assert capability_for("notepad.exe").level == "full"
-    assert capability_for("calc").level == "keyboard"          # UWP -> keyboard
-    assert capability_for("brave").level == "partial"          # chromium partial
+    assert capability_for("calc").level == "keyboard"  # UWP -> keyboard
+    assert capability_for("brave").level == "partial"  # chromium partial
     assert capability_for("some_unknown_app") is None
     assert "Notepad" in matrix_text() and "keyboard" in matrix_text()
     assert "reliably operate" in spoken_summary()
@@ -26,7 +26,7 @@ def test_capability_lookup_and_text():
 def test_capabilities_intent_parses():
     assert parse("what apps do you support").kind == Kind.CAPABILITIES
     assert parse("what can you control").kind == Kind.CAPABILITIES
-    assert parse("what can you do").kind == Kind.HELP           # still help, not caps
+    assert parse("what can you do").kind == Kind.HELP  # still help, not caps
 
 
 # ---- verifier finds an app that opened but isn't foreground ----
@@ -42,7 +42,7 @@ def test_window_present_checks_all_top_level_windows():
             return [{"title": "Calculator", "app": "ApplicationFrameHost.exe", "hwnd": 1}]
 
     vf = Verifier(FakeWorker())
-    assert vf.window_present("calculator") is True   # found among top-level windows
+    assert vf.window_present("calculator") is True  # found among top-level windows
     assert vf.window_present("nonesuch") is False
 
 
@@ -77,15 +77,20 @@ class FakeWorker2:
 
 def test_runner_surfaces_unexpected_dialog():
     before = ScreenSnapshot(1, foreground_title="Editor", elements=[_el("Body", "Edit")])
-    after = ScreenSnapshot(2, foreground_title="Editor", elements=[_el("Body", "Edit")],
-                           dialogs=[Dialog("Unsaved changes", ("Save", "Don't Save", "Cancel"))])
+    after = ScreenSnapshot(
+        2,
+        foreground_title="Editor",
+        elements=[_el("Body", "Edit")],
+        dialogs=[Dialog("Unsaved changes", ("Save", "Don't Save", "Cancel"))],
+    )
     ctx = TaskContext("t")
     ctx.last_narrated = before
     spoken = []
-    runner = TransparentRunner(FakeExec(), FakeWorker2(after), FakeVerifier(), ctx,
-                               speak=spoken.append)
-    steps, _ = plan(parse("type hello"))   # a non-save step that unexpectedly pops a dialog
+    runner = TransparentRunner(
+        FakeExec(), FakeWorker2(after), FakeVerifier(), ctx, speak=spoken.append
+    )
+    steps, _ = plan(parse("type hello"))  # a non-save step that unexpectedly pops a dialog
     runner.run(steps)
     joined = " | ".join(spoken).lower()
-    assert "dialog opened" in joined            # the change was reported
+    assert "dialog opened" in joined  # the change was reported
     assert "how would you like to proceed" in joined  # recovery guidance offered

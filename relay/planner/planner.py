@@ -15,8 +15,8 @@ from relay.intent.grammar import Intent, Kind
 
 @dataclass
 class Step:
-    kind: str            # answer | open | switch | activate | type | save | press | scroll
-    description: str     # spoken as "I'm going to <description>"
+    kind: str  # answer | open | switch | activate | type | save | press | scroll
+    description: str  # spoken as "I'm going to <description>"
     payload: dict = field(default_factory=dict)
 
 
@@ -24,8 +24,14 @@ def plan(intent: Intent) -> tuple[list[Step], str | None]:
     """Return (steps, clarification). If clarification is not None, RELAY should ask
     it instead of acting."""
     k, s = intent.kind, intent.slots
-    if k in (Kind.DESCRIBE_SCREEN, Kind.WHERE_AM_I, Kind.WHAT_CHANGED,
-             Kind.LIST_OPTIONS, Kind.READ_FOCUS, Kind.HELP):
+    if k in (
+        Kind.DESCRIBE_SCREEN,
+        Kind.WHERE_AM_I,
+        Kind.WHAT_CHANGED,
+        Kind.LIST_OPTIONS,
+        Kind.READ_FOCUS,
+        Kind.HELP,
+    ):
         return [Step("answer", k, {"answer_kind": k})], None
     if k == Kind.OPEN_APP:
         app = s["app"]
@@ -49,5 +55,7 @@ def plan(intent: Intent) -> tuple[list[Step], str | None]:
         return [Step("scroll", f"scroll {s.get('direction', 'down')}", {"key": key})], None
     if k == Kind.CONTROL:
         return [], None  # control commands are handled by the session, not planned
-    return [], (f"I didn't understand \"{intent.raw}\". You can say things like "
-                "'open Notepad', 'what's on my screen', or 'click the second option'.")
+    return [], (
+        f'I didn\'t understand "{intent.raw}". You can say things like '
+        "'open Notepad', 'what's on my screen', or 'click the second option'."
+    )

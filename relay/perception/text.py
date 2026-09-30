@@ -20,12 +20,20 @@ MAX_TEXT = 60000
 
 def _ua():
     from uiautomation.uiautomation import _AutomationClient
+
     return _AutomationClient.instance().IUIAutomation
 
 
 def _fg():
     import uiautomation as auto
-    return auto.GetForegroundControl()
+
+    ctrl = auto.GetForegroundControl()
+    if ctrl is None:
+        try:
+            ctrl = auto.GetRootControl()
+        except Exception:
+            ctrl = None
+    return ctrl
 
 
 def _find_all(elem, prop, value, scope=TS_DESCENDANTS):
@@ -51,30 +59,39 @@ def _bbox(e) -> tuple[int, int, int, int]:
 
 
 def active_document():
-    """The largest visible Document in the foreground window (the web page / the
+    """The largest visible Document or multi-line Edit in the foreground window (the web page / the
     document being edited), or None."""
     import uiautomation as auto
+
     fg = _fg()
     if fg is None:
         return None
     docs = []
-    for e in _find_all(fg.Element, auto.PropertyId.ControlTypeProperty,
-                       auto.ControlType.DocumentControl):
-        try:
-            if not e.CurrentIsOffscreen and _area(e) > 0:
-                docs.append(e)
-        except Exception:
-            continue
+    for ct in (auto.ControlType.DocumentControl, auto.ControlType.EditControl):
+        for e in _find_all(fg.Element, auto.PropertyId.ControlTypeProperty, ct):
+            try:
+                if not e.CurrentIsOffscreen and _area(e) > 0:
+                    docs.append(e)
+            except Exception:
+                continue
     return max(docs, key=_area) if docs else None
 
 
 def _text_of(elem, max_chars: int) -> str:
     import uiautomation as auto
+
     try:
         ctrl = auto.Control.CreateControlFromElement(elem)
         tp = ctrl.GetTextPattern()
         if tp is not None:
-            return (tp.DocumentRange.GetText(max_chars) or "").strip()
+            txt = (tp.DocumentRange.GetText(max_chars) or "").strip()
+            if txt:
+                return txt
+        vp = ctrl.GetValuePattern()
+        if vp is not None:
+            txt = (vp.Value or "").strip()
+            if txt:
+                return txt[:max_chars]
     except Exception:
         pass
     return ""
@@ -86,6 +103,7 @@ def document_text(max_chars: int = MAX_TEXT) -> tuple[str, str]:
     import uiautomation as auto
 
     from relay.safety import is_protected_field
+
     fg = _fg()
     title = ""
     try:
@@ -120,13 +138,15 @@ def visible_text(max_items: int = 300) -> str:
     """Fallback reading for apps without a document: the names of the visible text
     labels in tree (reading) order, de-duplicated."""
     import uiautomation as auto
+
     fg = _fg()
     if fg is None:
         return ""
     out: list[str] = []
     seen: set[str] = set()
-    for e in _find_all(fg.Element, auto.PropertyId.ControlTypeProperty,
-                       auto.ControlType.TextControl)[: max_items * 2]:
+    for e in _find_all(
+        fg.Element, auto.PropertyId.ControlTypeProperty, auto.ControlType.TextControl
+    )[: max_items * 2]:
         try:
             if e.CurrentIsOffscreen:
                 continue
@@ -144,19 +164,21 @@ def visible_text(max_items: int = 300) -> str:
 @dataclass(frozen=True)
 class Item:
     name: str
-    role: str                     # "link" | "heading" | "button" | ...
+    role: str  # "link" | "heading" | "button" | ...
     bbox: tuple[int, int, int, int]
-    level: int = 0                # heading level when known
+    level: int = 0  # heading level when known
 
 
 def links(limit: int = 400) -> list[Item]:
     import uiautomation as auto
+
     root = active_document() or (_fg().Element if _fg() is not None else None)
     if root is None:
         return []
     out: list[Item] = []
-    for e in _find_all(root, auto.PropertyId.ControlTypeProperty,
-                       auto.ControlType.HyperlinkControl):
+    for e in _find_all(
+        root, auto.PropertyId.ControlTypeProperty, auto.ControlType.HyperlinkControl
+    ):
         try:
             name = " ".join((e.CurrentName or "").split())
         except Exception:
@@ -170,12 +192,12 @@ def links(limit: int = 400) -> list[Item]:
 
 def headings(limit: int = 200) -> list[Item]:
     import uiautomation as auto
+
     root = active_document() or (_fg().Element if _fg() is not None else None)
     if root is None:
         return []
     out: list[Item] = []
-    for e in _find_all(root, auto.PropertyId.ControlTypeProperty,
-                       auto.ControlType.TextControl):
+    for e in _find_all(root, auto.PropertyId.ControlTypeProperty, auto.ControlType.TextControl):
         try:
             lct = (e.CurrentLocalizedControlType or "").lower()
             if not lct.startswith("heading"):
@@ -191,9 +213,19 @@ def headings(limit: int = 200) -> list[Item]:
     return out
 
 
-_ROLE_TYPES = ("ButtonControl", "HyperlinkControl", "MenuItemControl", "ListItemControl",
-               "TabItemControl", "CheckBoxControl", "RadioButtonControl", "TreeItemControl",
-               "SplitButtonControl", "EditControl", "ComboBoxControl")
+_ROLE_TYPES = (
+    "ButtonControl",
+    "HyperlinkControl",
+    "MenuItemControl",
+    "ListItemControl",
+    "TabItemControl",
+    "CheckBoxControl",
+    "RadioButtonControl",
+    "TreeItemControl",
+    "SplitButtonControl",
+    "EditControl",
+    "ComboBoxControl",
+)
 
 
 def find_named(target: str, limit: int = 12) -> list[Item]:
@@ -201,6 +233,7 @@ def find_named(target: str, limit: int = 12) -> list[Item]:
     contains ``target`` (exact matches first). Used when a control isn't in the
     shallow snapshot — typically a link or button deep inside a web page."""
     import uiautomation as auto
+
     fg = _fg()
     if fg is None:
         return []

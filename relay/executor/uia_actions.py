@@ -19,12 +19,19 @@ TS_DESCENDANTS = 4
 
 def _ua():
     from uiautomation.uiautomation import _AutomationClient
+
     return _AutomationClient.instance().IUIAutomation
 
 
 def _walk_find(name: str, role: str, bbox: tuple[int, int, int, int] | None):
     import uiautomation as auto
+
     fg = auto.GetForegroundControl()
+    if fg is None:
+        try:
+            fg = auto.GetRootControl()
+        except Exception:
+            fg = None
     if fg is None:
         return None
     want_name = " ".join((name or "").split()).lower()
@@ -53,8 +60,11 @@ def _walk_find(name: str, role: str, bbox: tuple[int, int, int, int] | None):
             r = e.CurrentBoundingRectangle
             if r.right - r.left <= 0 or r.bottom - r.top <= 0:
                 continue
-            dist = 0 if tx is None else abs((r.left + r.right) // 2 - tx) \
-                + abs((r.top + r.bottom) // 2 - ty)
+            dist = (
+                0
+                if tx is None
+                else abs((r.left + r.right) // 2 - tx) + abs((r.top + r.bottom) // 2 - ty)
+            )
         except Exception:
             continue
         if best is None or dist < best_dist:
@@ -111,7 +121,17 @@ def focus(name: str, role: str, bbox) -> bool:
         return False
     try:
         ctrl.SetFocus()
-        return True
+        import time
+
+        time.sleep(0.1)
+        import uiautomation as auto
+
+        fc = auto.GetFocusedControl()
+        if fc is not None and (
+            fc.Element == ctrl.Element or getattr(ctrl, "HasKeyboardFocus", False)
+        ):
+            return True
+        return bool(getattr(ctrl, "HasKeyboardFocus", False))
     except Exception:
         return False
 

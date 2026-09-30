@@ -58,6 +58,7 @@ def speak_once(text: str) -> None:
     """Say one thing without the full app (used when another instance is running)."""
     try:
         import sounddevice as sd
+
         tts = make_tts(prefer_piper=True)
         audio, sr = tts.synth_to_array(text)
         sd.play(audio, sr)
@@ -65,53 +66,71 @@ def speak_once(text: str) -> None:
     except Exception:
         try:
             from relay.audio import SapiTTS
+
             SapiTTS().speak_blocking(text)
         except Exception:
             print(text)
 
 
 class RelayApp:
-    def __init__(self, panel: bool = False, wake_required: bool | None = None,
-                 config: Config | None = None) -> None:
+    def __init__(
+        self, panel: bool = False, wake_required: bool | None = None, config: Config | None = None
+    ) -> None:
         self.cfg = config or Config.load()
         self.panel = panel
         self.instance = SingleInstance()
         self.bus = EventBus()
         self._quit = threading.Event()
-        use_windows_defaults()          # follow the default device: headphones just work
+        use_windows_defaults()  # follow the default device: headphones just work
         self.devices = DeviceWatch(self._on_audio_change)
         self.quit_signal = QuitSignal()
         self._announce_timer: threading.Timer | None = None
         self._paused_for_privacy = ""
         self._announced_out = None
-        self.tts = make_tts(prefer_piper=True)            # offline voice, always present
+        self.tts = make_tts(prefer_piper=True)  # offline voice, always present
         self.speech = SpeechQueue(self.tts)
         self.apps = AppCatalog()
-        self.stt = WhisperSTT()                             # offline recogniser
+        self.stt = WhisperSTT()  # offline recogniser
         # Sarvam voice / recognition from the .env file (offline engines as fallback)
         self.sarvam = None
         self.sarvam_stt = None
         from relay.sarvam import SarvamClient, SarvamSTT, SarvamTTS, settings
+
         sv = settings()
         if sv["key"]:
-            self.sarvam = SarvamTTS(SarvamClient(sv["key"], base=sv["base"]), self.tts,
-                                    language=sv["language"], speaker=sv["speaker"],
-                                    model=sv["tts_model"], on_fallback=self._cloud_fallback)
+            self.sarvam = SarvamTTS(
+                SarvamClient(sv["key"], base=sv["base"]),
+                self.tts,
+                language=sv["language"],
+                speaker=sv["speaker"],
+                model=sv["tts_model"],
+                on_fallback=self._cloud_fallback,
+            )
             self.speech.set_tts(self.sarvam)
             if sv["stt"]:
-                self.sarvam_stt = SarvamSTT(SarvamClient(sv["key"], base=sv["base"]), self.stt,
-                                            model=sv["stt_model"],
-                                            on_fallback=self._cloud_fallback)
+                self.sarvam_stt = SarvamSTT(
+                    SarvamClient(sv["key"], base=sv["base"]),
+                    self.stt,
+                    model=sv["stt_model"],
+                    on_fallback=self._cloud_fallback,
+                )
         from relay.llm import Assistant, Router, routes_from_config
+
         routes = routes_from_config(self.cfg)
         self.router = Router(routes) if routes else None
         self.assistant = Assistant(self.router) if self.router else None
-        self.session = Session(speak=self.speech.say, bus=self.bus,
-                               db_path=str(default_db_path()), speech=self.speech,
-                               apps=self.apps, on_quit=self.request_quit,
-                               on_wake_word=self._set_wake,
-                               talk_key=self.cfg.push_to_talk_hotkey,
-                               assistant=self.assistant, audio=self)
+        self.session = Session(
+            speak=self.speech.say,
+            bus=self.bus,
+            db_path=str(default_db_path()),
+            speech=self.speech,
+            apps=self.apps,
+            on_quit=self.request_quit,
+            on_wake_word=self._set_wake,
+            talk_key=self.cfg.push_to_talk_hotkey,
+            assistant=self.assistant,
+            audio=self,
+        )
         # emergency stop flushes queued speech immediately
         self.session.emergency.register_flush(self.speech.interrupt)
         self.dispatcher = Dispatcher(self.session)
@@ -119,31 +138,43 @@ class RelayApp:
         if wake is None:
             pref = self.session.store.get_pref("wake_word_enabled", default="")
             wake = self.cfg.wake_word_enabled if pref == "" else pref == "1"
-        self.loop = VoiceLoop(self.dispatcher.submit, stt=self.sarvam_stt or self.stt,
-                              speech=self.speech,
-                              wake_required=wake, bus=self.bus, play_earcon=self.earcon,
-                              say=lambda t: self.session.say(t, pol.Priority.REQUESTED),
-                              open_mic=lambda: self.session.dictation,
-                              interrupt=self.session.stop_speaking)
+        self.loop = VoiceLoop(
+            self.dispatcher.submit,
+            stt=self.sarvam_stt or self.stt,
+            speech=self.speech,
+            wake_required=wake,
+            bus=self.bus,
+            play_earcon=self.earcon,
+            say=lambda t: self.session.say(t, pol.Priority.REQUESTED),
+            open_mic=lambda: self.session.dictation,
+            interrupt=self.session.stop_speaking,
+        )
         if self.sarvam_stt is not None:
-            self.loop.wake_stt = self.stt   # wake word checked on this PC before any upload
+            self.loop.wake_stt = self.stt  # wake word checked on this PC before any upload
         # the on-screen palette: status light, "You: …" / "Relay: …", On/Off, Talk, ✕
         self._voice_state = "idle"
         self.palette = None
-        if (os.environ.get("RELAY_PALETTE", "1") != "0"
-                and self.session.store.get_pref("palette", default="1") == "1"):
+        if (
+            os.environ.get("RELAY_PALETTE", "1") != "0"
+            and self.session.store.get_pref("palette", default="1") == "1"
+        ):
             from relay.ui.palette import Palette
-            self.palette = Palette(status=self._palette_status,
-                                   on_toggle=lambda: self._palette_say(
-                                       self.set_listening(not self.loop.enabled)),
-                                   on_talk=self.loop.push_to_talk,
-                                   on_quit=self._quit_requested)
-        self.bus.subscribe("voice.state",
-                           lambda e: setattr(self, "_voice_state", e.data.get("to", "idle")))
-        self.bus.subscribe("voice.heard", lambda e: self.palette and self.palette.heard(
-            e.data.get("text", "")))
-        self.bus.subscribe("narration.say", lambda e: self.palette and self.palette.said(
-            e.data.get("text", "")))
+
+            self.palette = Palette(
+                status=self._palette_status,
+                on_toggle=lambda: self._palette_say(self.set_listening(not self.loop.enabled)),
+                on_talk=self.loop.push_to_talk,
+                on_quit=self._quit_requested,
+            )
+        self.bus.subscribe(
+            "voice.state", lambda e: setattr(self, "_voice_state", e.data.get("to", "idle"))
+        )
+        self.bus.subscribe(
+            "voice.heard", lambda e: self.palette and self.palette.heard(e.data.get("text", ""))
+        )
+        self.bus.subscribe(
+            "narration.say", lambda e: self.palette and self.palette.said(e.data.get("text", ""))
+        )
         self.hotkeys = HotkeyManager()
         self.hotkeys.add(self.cfg.push_to_talk_hotkey, self.loop.push_to_talk)
         self.hotkeys.add(self.cfg.stop_hotkey, self.session.stop_speaking)
@@ -151,6 +182,7 @@ class RelayApp:
         self.ipc = None
         if panel:
             from relay.ipc import IpcServer
+
             self.ipc = IpcServer(_PanelBridge(self.dispatcher, self.session), self.bus)
 
     # ---- callbacks ----
@@ -164,7 +196,7 @@ class RelayApp:
     def _cloud_fallback(self, message: str) -> None:
         try:
             self.session.say(message, pol.Priority.CRITICAL)
-        except AttributeError:          # during start-up, before the session exists
+        except AttributeError:  # during start-up, before the session exists
             pass
 
     def _set_wake(self, on: bool) -> None:
@@ -178,10 +210,14 @@ class RelayApp:
             return
         from relay.llm import routes_from_config
         from relay.llm.tune import needs_tuning, tune_in_background
+
         url, key = routes[0].base_url, routes[0].api_key
         if needs_tuning(url):
-            tune_in_background(url, key, on_done=lambda _r: self.router.replace_routes(
-                routes_from_config(self.cfg)))
+            tune_in_background(
+                url,
+                key,
+                on_done=lambda _r: self.router.replace_routes(routes_from_config(self.cfg)),
+            )
 
     # ---- on-screen palette and listening on/off ----
     def _palette_status(self) -> str:
@@ -205,24 +241,32 @@ class RelayApp:
         ignored except right after the talk key."""
         self.loop.enabled = on
         key = spoken_combo(self.cfg.push_to_talk_hotkey)
-        return ("I'm listening again. Say Relay, or press " + key + "." if on else
-                "Okay, I've stopped listening. Press " + key + " when you need me, and say "
-                "start listening to turn me back on.")
+        return (
+            "I'm listening again. Say Relay, or press " + key + "."
+            if on
+            else "Okay, I've stopped listening. Press " + key + " when you need me, and say "
+            "start listening to turn me back on."
+        )
 
     def set_palette(self, visible: bool) -> str:
         self.session.store.set_pref("palette", "1" if visible else "0")
         if self.palette is None and visible:
             from relay.ui.palette import Palette
-            self.palette = Palette(status=self._palette_status,
-                                   on_toggle=lambda: self._palette_say(
-                                       self.set_listening(not self.loop.enabled)),
-                                   on_talk=self.loop.push_to_talk,
-                                   on_quit=self._quit_requested)
+
+            self.palette = Palette(
+                status=self._palette_status,
+                on_toggle=lambda: self._palette_say(self.set_listening(not self.loop.enabled)),
+                on_talk=self.loop.push_to_talk,
+                on_quit=self._quit_requested,
+            )
             self.palette.start()
         elif self.palette is not None:
             self.palette.show(visible)
-        return "The palette is showing at the top of the screen." if visible else \
-            "The palette is hidden. Say show the palette to bring it back."
+        return (
+            "The palette is showing at the top of the screen."
+            if visible
+            else "The palette is hidden. Say show the palette to bring it back."
+        )
 
     def _quit_requested(self) -> None:
         """The launch key (Ctrl+Alt+R) pressed while RELAY runs: close, like 'quit Relay'."""
@@ -234,6 +278,7 @@ class RelayApp:
     def _marks(self) -> dict:
         """What the user told us per device: {endpoint id: True (headphones) / False}."""
         import json
+
         try:
             marks = json.loads(self.session.store.get_pref("headphone_devices", default="{}"))
             return marks if isinstance(marks, dict) else {}
@@ -241,7 +286,7 @@ class RelayApp:
             return {}
 
     def _is_headphones(self, ep) -> bool:
-        if ep is None:                     # devices unknown: the user's general choice
+        if ep is None:  # devices unknown: the user's general choice
             return self.session.store.get_pref("headphone_mode", default="auto") == "on"
         marks = self._marks()
         return bool(marks[ep.id]) if ep.id in marks else ep.is_headphones
@@ -254,6 +299,7 @@ class RelayApp:
         ("I'm using headphones" once for USB-C earphones Windows calls speakers; the
         laptop's own speakers are not affected). Returns what to say."""
         import json
+
         mode = mode if mode in ("on", "off", "auto") else "auto"
         out = self.devices.output
         if out is None:
@@ -269,29 +315,42 @@ class RelayApp:
             name = spoken_name(out.name) or "this device"
         self._apply_headphone_mode()
         if mode == "on":
-            return (f"Headphone mode on for {name}, and I'll remember it. I'll keep listening "
-                    "while I talk, so you can interrupt me just by speaking.")
+            return (
+                f"Headphone mode on for {name}, and I'll remember it. I'll keep listening "
+                "while I talk, so you can interrupt me just by speaking."
+            )
         if mode == "off":
-            return (f"Headphone mode off for {name}. While I'm talking I won't listen; press "
-                    f"{spoken_combo(self.cfg.push_to_talk_hotkey)} to interrupt me.")
-        return (f"Okay, for {name} I'll go by what Windows says. Headphone mode is "
-                + ("on." if self.loop.headphones else "off."))
+            return (
+                f"Headphone mode off for {name}. While I'm talking I won't listen; press "
+                f"{spoken_combo(self.cfg.push_to_talk_hotkey)} to interrupt me."
+            )
+        return f"Okay, for {name} I'll go by what Windows says. Headphone mode is " + (
+            "on." if self.loop.headphones else "off."
+        )
 
     def describe_audio(self) -> str:
         """Where RELAY's voice goes and where it listens ("where is the sound going")."""
         out, inp = self.devices.output, self.devices.input
         if out is None and inp is None:
             out, inp = default_endpoints()
-        said = (f"I'm speaking through {spoken_name(out.name)}" if out and out.name
-                else "I'm speaking through the default speakers")
+        said = (
+            f"I'm speaking through {spoken_name(out.name)}"
+            if out and out.name
+            else "I'm speaking through the default speakers"
+        )
         if inp is not None and inp.is_hands_free and laptop_mic() is not None:
-            said += (", and listening through the laptop's own microphone, so your headset "
-                     "keeps its full sound quality")
+            said += (
+                ", and listening through the laptop's own microphone, so your headset "
+                "keeps its full sound quality"
+            )
         elif inp is not None and inp.name:
             said += f", and listening through {spoken_name(inp.name)}"
         told = out is not None and out.id in self._marks()
-        return (said + f". Headphone mode is {'on' if self.loop.headphones else 'off'}"
-                + (", as you told me for this device." if told else "."))
+        return (
+            said
+            + f". Headphone mode is {'on' if self.loop.headphones else 'off'}"
+            + (", as you told me for this device." if told else ".")
+        )
 
     def _on_audio_change(self, old_out, new_out, old_in, new_in) -> None:
         """Windows' default device changed: headphones plugged in or out, a headset's
@@ -304,8 +363,11 @@ class RelayApp:
         if same(old_out, new_out):
             return
         self._apply_headphone_mode()
-        if (old_out is not None and self._is_headphones(old_out)
-                and not (new_out is not None and self._is_headphones(new_out))):
+        if (
+            old_out is not None
+            and self._is_headphones(old_out)
+            and not (new_out is not None and self._is_headphones(new_out))
+        ):
             # headphones removed: never carry on reading private text out loud
             reading = self.session.reader.reading
             if reading or self.speech.is_speaking:
@@ -320,9 +382,11 @@ class RelayApp:
 
     @staticmethod
     def _guess_line(out) -> str:
-        return (f"{device_name(out.name) or 'This device'} has its own microphone, so I think "
-                "it's headphones or earphones: you can interrupt me just by talking. If it's "
-                "a speaker, say headphone mode off.")
+        return (
+            f"{device_name(out.name) or 'This device'} has its own microphone, so I think "
+            "it's headphones or earphones: you can interrupt me just by talking. If it's "
+            "a speaker, say headphone mode off."
+        )
 
     def _announce_audio(self) -> None:
         out, before = self.devices.output, self._announced_out
@@ -339,9 +403,11 @@ class RelayApp:
             if paused == "reading":
                 line += " I paused the reading; say continue to carry on."
         elif paused:
-            line = ("Headphones disconnected, so I've paused. Say continue to carry on."
-                    if paused == "reading" else
-                    "Headphones disconnected, so I stopped talking.")
+            line = (
+                "Headphones disconnected, so I've paused. Say continue to carry on."
+                if paused == "reading"
+                else "Headphones disconnected, so I stopped talking."
+            )
         elif before is not None and self._is_headphones(before):
             line = f"Headphones disconnected. I'll talk through the {name or 'speakers'}."
         elif out is not None and not same(before, out):
@@ -356,21 +422,26 @@ class RelayApp:
         registered = self.hotkeys.start()
         talk = self.cfg.push_to_talk_hotkey
         if not registered.get(talk, False):
-            problems.append(f"Another program is using {spoken_combo(talk)}, so the talk key "
-                            "won't work. You can still say Relay to get my attention.")
+            problems.append(
+                f"Another program is using {spoken_combo(talk)}, so the talk key "
+                "won't work. You can still say Relay to get my attention."
+            )
         try:
             self.loop.run(device=mic_device_for(self.devices.input))
         except Exception as e:
             log.error("microphone failed: %s", e)
-            problems.append("I can't use the microphone. Please check that one is connected "
-                            "and allowed in Windows privacy settings. You can still use my "
-                            "panel, and I'll keep speaking.")
+            problems.append(
+                "I can't use the microphone. Please check that one is connected "
+                "and allowed in Windows privacy settings. You can still use my "
+                "panel, and I'll keep speaking."
+            )
         return problems
 
     def _warm_up(self) -> None:
         """Load the speech model in the background so the first command is quick."""
         try:
             import numpy as np
+
             self.stt.transcribe(np.zeros(8000, dtype=np.float32))
         except Exception as e:
             log.warning("STT warm-up failed: %s", e)
@@ -378,46 +449,52 @@ class RelayApp:
     def run(self) -> int:
         setup_logging("INFO")
         if not self.instance.acquire():
-            speak_once("Relay is already running. Press "
-                       f"{spoken_combo(self.cfg.push_to_talk_hotkey)} to talk to it.")
+            speak_once(
+                "Relay is already running. Press "
+                f"{spoken_combo(self.cfg.push_to_talk_hotkey)} to talk to it."
+            )
             return 1
         try:
             threading.Thread(target=self._warm_up, name="stt-warmup", daemon=True).start()
             if self.router is not None:
-                self.router.warm()              # DNS + TCP + TLS before the first question
-                self._tune_routes_if_needed()   # find the fastest models (cached for days)
+                self.router.warm()  # DNS + TCP + TLS before the first question
+                self._tune_routes_if_needed()  # find the fastest models (cached for days)
             for cloud in (self.sarvam, self.sarvam_stt):
                 if cloud is not None:
                     threading.Thread(target=cloud.client.warm, daemon=True).start()
             self.apps.start()
-            self.devices.start()                   # which speaker / mic / headphones now
+            self.devices.start()  # which speaker / mic / headphones now
             self._announced_out = self.devices.output
             self._apply_headphone_mode()
-            self.quit_signal.listen(self._quit_requested)   # Ctrl+Alt+R again = close
+            self.quit_signal.listen(self._quit_requested)  # Ctrl+Alt+R again = close
             if self.palette is not None:
-                self.palette.start()                        # the bar at the top
+                self.palette.start()  # the bar at the top
             problems = self._startup_checks()
             self.session.onboard()
             if self.loop.headphones:
                 out = self.devices.output
-                self.session.say(self._guess_line(out) if out is not None and out.guessed
-                                 and out.id not in self._marks() else
-                                 "You're on headphones, so you can interrupt me just by "
-                                 "talking.", pol.Priority.REQUESTED)
+                self.session.say(
+                    self._guess_line(out)
+                    if out is not None and out.guessed and out.id not in self._marks()
+                    else "You're on headphones, so you can interrupt me just by talking.",
+                    pol.Priority.REQUESTED,
+                )
             for p in problems:
                 self.session.say(p, pol.Priority.CRITICAL)
-            self.session.reminders.check_now()     # announce any missed while closed
+            self.session.reminders.check_now()  # announce any missed while closed
             self.session.reminders.start()
             if self.ipc is not None:
                 print("panel:", self.ipc.start())
-            print(f"RELAY is running. Talk key: {self.cfg.push_to_talk_hotkey}. "
-                  "Say 'quit relay' or press Ctrl+C here to stop.")
+            print(
+                f"RELAY is running. Talk key: {self.cfg.push_to_talk_hotkey}. "
+                "Say 'quit relay' or press Ctrl+C here to stop."
+            )
             try:
                 while not self._quit.wait(0.5):
                     pass
             except KeyboardInterrupt:
                 print("\nstopping…")
-            self.speech.wait_idle(6.0)             # let "Goodbye" finish
+            self.speech.wait_idle(6.0)  # let "Goodbye" finish
         finally:
             self.shutdown()
         return 0
@@ -427,8 +504,14 @@ class RelayApp:
             self._announce_timer.cancel()
         if self.palette is not None:
             self.palette.stop()
-        for fn in (self.devices.stop, self.quit_signal.stop, self.loop.stop, self.hotkeys.stop,
-                   self.dispatcher.stop, self.speech.shutdown):
+        for fn in (
+            self.devices.stop,
+            self.quit_signal.stop,
+            self.loop.stop,
+            self.hotkeys.stop,
+            self.dispatcher.stop,
+            self.speech.shutdown,
+        ):
             try:
                 fn()
             except Exception:

@@ -12,6 +12,7 @@ import pytest
 # ---- wake word + control commands (pure string logic) ----
 def test_detect_wake_variants_and_command_split():
     from relay.audio.wake import detect_wake
+
     assert detect_wake("relay open notepad") == (True, "open notepad")
     assert detect_wake("hey relay, what's on my screen") == (True, "what's on my screen")
     assert detect_wake("relay") == (True, "")
@@ -20,6 +21,7 @@ def test_detect_wake_variants_and_command_split():
 
 def test_match_control_commands():
     from relay.audio.wake import Command, match_command
+
     assert match_command("stop") == Command.STOP_TALKING
     assert match_command("emergency stop") == Command.EMERGENCY_STOP
     assert match_command("cancel task") == Command.CANCEL_TASK
@@ -35,6 +37,7 @@ def test_speech_segmenter_start_and_end():
     class FakeVAD:
         def __init__(self, script):
             self.script = list(script)
+
         def is_speech(self, _frame):
             return self.script.pop(0)
 
@@ -121,8 +124,9 @@ def test_offline_tts_to_stt_roundtrip():
     assert len(audio) > 0
     if sr != 16000:
         n = int(len(audio) * 16000 / sr)
-        audio = np.interp(np.linspace(0, len(audio), n, endpoint=False),
-                          np.arange(len(audio)), audio).astype(np.float32)
+        audio = np.interp(
+            np.linspace(0, len(audio), n, endpoint=False), np.arange(len(audio)), audio
+        ).astype(np.float32)
     text = WhisperSTT().transcribe(audio).lower()
     want = set(phrase.split())
     heard = set(text.replace(".", "").replace(",", "").split())

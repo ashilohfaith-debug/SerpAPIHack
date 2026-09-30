@@ -32,21 +32,47 @@ _KNOWN = {
     "videos": "{18989B1D-99B5-455B-841C-AB7C74E4DDFC}",
 }
 FOLDER_WORDS = {
-    "desktop": "desktop", "documents": "documents", "document folder": "documents",
-    "my documents": "documents", "downloads": "downloads", "download folder": "downloads",
-    "downloads folder": "downloads", "pictures": "pictures", "photos folder": "pictures",
-    "music folder": "music", "my music": "music", "videos": "videos",
-    "video folder": "videos", "home folder": "home", "user folder": "home",
+    "desktop": "desktop",
+    "documents": "documents",
+    "document folder": "documents",
+    "my documents": "documents",
+    "downloads": "downloads",
+    "download folder": "downloads",
+    "downloads folder": "downloads",
+    "pictures": "pictures",
+    "photos folder": "pictures",
+    "music folder": "music",
+    "my music": "music",
+    "videos": "videos",
+    "video folder": "videos",
+    "home folder": "home",
+    "user folder": "home",
 }
-_SKIP_DIRS = {"node_modules", ".git", "__pycache__", "appdata", "$recycle.bin", ".venv",
-              "venv", "site-packages", ".cache", "windows", "program files",
-              "program files (x86)", "programdata"}
+_SKIP_DIRS = {
+    "node_modules",
+    ".git",
+    "__pycache__",
+    "appdata",
+    "$recycle.bin",
+    ".venv",
+    "venv",
+    "site-packages",
+    ".cache",
+    "windows",
+    "program files",
+    "program files (x86)",
+    "programdata",
+}
 READABLE = {".txt", ".md", ".csv", ".log", ".json", ".docx", ".pdf", ".rtf", ".html", ".htm"}
 
 
 class _GUID(ctypes.Structure):
-    _fields_ = [("Data1", ctypes.c_ulong), ("Data2", ctypes.c_ushort),
-                ("Data3", ctypes.c_ushort), ("Data4", ctypes.c_ubyte * 8)]
+    _fields_ = [
+        ("Data1", ctypes.c_ulong),
+        ("Data2", ctypes.c_ushort),
+        ("Data3", ctypes.c_ushort),
+        ("Data4", ctypes.c_ubyte * 8),
+    ]
 
     def __init__(self, s: str) -> None:
         u = uuid.UUID(s)
@@ -65,8 +91,9 @@ def known_folder(name: str) -> Path | None:
         return None
     try:
         ptr = ctypes.c_wchar_p()
-        hr = ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(_GUID(guid)), 0, None,
-                                                        ctypes.byref(ptr))
+        hr = ctypes.windll.shell32.SHGetKnownFolderPath(
+            ctypes.byref(_GUID(guid)), 0, None, ctypes.byref(ptr)
+        )
         if hr == 0 and ptr.value:
             p = Path(ptr.value)
             ctypes.windll.ole32.CoTaskMemFree(ptr)
@@ -124,9 +151,14 @@ def search_roots() -> list[Path]:
     return roots
 
 
-def find_files(query: str, roots: list[Path] | None = None, limit: int = 5,
-               max_depth: int = 5, max_entries: int = 40000,
-               time_budget: float = 4.0) -> list[FileHit]:
+def find_files(
+    query: str,
+    roots: list[Path] | None = None,
+    limit: int = 5,
+    max_depth: int = 5,
+    max_entries: int = 40000,
+    time_budget: float = 4.0,
+) -> list[FileHit]:
     """Bounded name search across the user's folders. Newest first among equals."""
     q = re.sub(r"\b(?:the|my|a|file|document|called|named|folder)\b", " ", query.lower())
     q = q.replace(" dot ", ".")
@@ -155,7 +187,7 @@ def find_files(query: str, roots: list[Path] | None = None, limit: int = 5,
                         except OSError:
                             continue
                         s = _score(tokens, name)
-                        if s >= 1.0:                 # every spoken word is in the name
+                        if s >= 1.0:  # every spoken word is in the name
                             hits.append(FileHit(Path(entry.path), s))
                         if is_dir and depth < max_depth and name.lower() not in _SKIP_DIRS:
                             stack.append((Path(entry.path), depth + 1))
@@ -211,6 +243,7 @@ def _docx_text(path: Path) -> str:
 
 def _pdf_text(path: Path, max_chars: int) -> str | None:
     from pypdf import PdfReader
+
     reader = PdfReader(str(path))
     if reader.is_encrypted:
         try:

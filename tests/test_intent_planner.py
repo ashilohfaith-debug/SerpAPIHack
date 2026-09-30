@@ -33,14 +33,20 @@ def test_intent_parsing():
 
 # ---- change delta ----
 def test_delta_reports_changes():
-    a = ScreenSnapshot(1, foreground_app="notepad.exe", foreground_title="Untitled",
-                       elements=[_el("Save")])
-    b = ScreenSnapshot(2, foreground_app="notepad.exe", foreground_title="Untitled",
-                       elements=[_el("Save")], dialogs=[Dialog("Save As", ("Save", "Cancel"))])
+    a = ScreenSnapshot(
+        1, foreground_app="notepad.exe", foreground_title="Untitled", elements=[_el("Save")]
+    )
+    b = ScreenSnapshot(
+        2,
+        foreground_app="notepad.exe",
+        foreground_title="Untitled",
+        elements=[_el("Save")],
+        dialogs=[Dialog("Save As", ("Save", "Cancel"))],
+    )
     changes = diff(a, b)
     assert any("dialog opened" in c.lower() for c in changes)
-    assert diff(None, a) == []                      # first observation
-    assert diff(a, a) == []                          # no change
+    assert diff(None, a) == []  # first observation
+    assert diff(a, a) == []  # no change
 
 
 def test_delta_focus_and_app_change():
@@ -142,29 +148,36 @@ class FakeWorker:
 def test_runner_announces_before_and_reports_change():
     ctx = TaskContext("t")
     spoken = []
-    before = ScreenSnapshot(1, foreground_app="notepad.exe", foreground_title="Untitled",
-                            elements=[_el("Save")])
-    after = ScreenSnapshot(2, foreground_app="notepad.exe", foreground_title="Untitled",
-                           elements=[_el("Save")], dialogs=[Dialog("Save As", ("Save",))])
+    before = ScreenSnapshot(
+        1, foreground_app="notepad.exe", foreground_title="Untitled", elements=[_el("Save")]
+    )
+    after = ScreenSnapshot(
+        2,
+        foreground_app="notepad.exe",
+        foreground_title="Untitled",
+        elements=[_el("Save")],
+        dialogs=[Dialog("Save As", ("Save",))],
+    )
     ctx.last_narrated = before
     worker = FakeWorker([after, after, after])
-    runner = TransparentRunner(FakeExecutor(), worker, FakeVerifier(), ctx,
-                               speak=spoken.append)
+    runner = TransparentRunner(FakeExecutor(), worker, FakeVerifier(), ctx, speak=spoken.append)
     steps, _ = plan(parse("save"))
     runner.run(steps)
     joined = " | ".join(spoken)
-    assert "going to" in joined.lower()                  # announced BEFORE acting
-    assert "done" in joined.lower()                       # result reported
+    assert "going to" in joined.lower()  # announced BEFORE acting
+    assert "done" in joined.lower()  # result reported
     assert any("dialog opened" in s.lower() for s in spoken)  # change reported
 
 
 def test_runner_answer_describe_uses_summary():
     ctx = TaskContext("t")
     spoken = []
-    snap = ScreenSnapshot(1, foreground_app="brave.exe", foreground_title="Docs",
-                          elements=[_el("Home"), _el("Back")])
-    runner = TransparentRunner(FakeExecutor(), FakeWorker([snap]), FakeVerifier(),
-                               ctx, speak=spoken.append)
+    snap = ScreenSnapshot(
+        1, foreground_app="brave.exe", foreground_title="Docs", elements=[_el("Home"), _el("Back")]
+    )
+    runner = TransparentRunner(
+        FakeExecutor(), FakeWorker([snap]), FakeVerifier(), ctx, speak=spoken.append
+    )
     steps, _ = plan(parse("what's on my screen"))
     runner.run(steps)
     assert any("brave.exe" in s for s in spoken)
@@ -172,13 +185,15 @@ def test_runner_answer_describe_uses_summary():
 
 def test_runner_stops_on_cancel():
     import threading
+
     ctx = TaskContext("t")
     spoken = []
     cancel = threading.Event()
     cancel.set()
     snap = ScreenSnapshot(1, foreground_title="X")
-    runner = TransparentRunner(FakeExecutor(), FakeWorker([snap, snap]), FakeVerifier(),
-                               ctx, speak=spoken.append)
+    runner = TransparentRunner(
+        FakeExecutor(), FakeWorker([snap, snap]), FakeVerifier(), ctx, speak=spoken.append
+    )
     steps, _ = plan(parse("open notepad"))
     results = runner.run(steps, cancel=cancel)
     assert results and results[0].state == "cancelled"

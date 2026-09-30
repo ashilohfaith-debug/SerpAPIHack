@@ -21,14 +21,37 @@ from relay.diagnostics import get_logger
 log = get_logger("reminders")
 
 _NUM_WORDS = {
-    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
-    "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
-    "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
-    "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
     "ninety": 90,
 }
-_TENS_UNITS = re.compile(r"\b(twenty|thirty|forty|fifty)[\s-]+"
-                         r"(one|two|three|four|five|six|seven|eight|nine)\b")
+_TENS_UNITS = re.compile(
+    r"\b(twenty|thirty|forty|fifty)[\s-]+"
+    r"(one|two|three|four|five|six|seven|eight|nine)\b"
+)
 _ONE_WORD = re.compile(r"\b(" + "|".join(_NUM_WORDS) + r")\b")
 
 
@@ -37,14 +60,21 @@ def _numwords(t: str) -> str:
     t = _TENS_UNITS.sub(lambda m: str(_NUM_WORDS[m.group(1)] + _NUM_WORDS[m.group(2)]), t)
     return _ONE_WORD.sub(lambda m: str(_NUM_WORDS[m.group(1)]), t)
 
+
 _UNIT_SECONDS = {"h": 3600, "m": 60, "s": 1}
-_DUR = re.compile(r"(\d+(?:\.\d+)?|an?|half an?|half)\s*"
-                  r"(hours?|hrs?|minutes?|mins?|seconds?|secs?)\b")
-_DUR_BLOCK = re.compile(r"\b(?:in|for|after)\s+((?:(?:\d+(?:\.\d+)?|an?|half an?|half)\s*"
-                        r"(?:hours?|hrs?|minutes?|mins?|seconds?|secs?)\s*(?:and\s*)?)+)")
-_AT = re.compile(r"\bat\s+(\d{1,2})(?:\s*[:.]\s*(\d{2})|\s+(\d{2})(?!\s*(?:hours?|minutes?)))?"
-                 r"\s*(a\s?m|p\s?m|in the morning|in the afternoon|in the evening|at night|"
-                 r"tonight)?\b")
+_DUR = re.compile(
+    r"(\d+(?:\.\d+)?|an?|half an?|half)\s*"
+    r"(hours?|hrs?|minutes?|mins?|seconds?|secs?)\b"
+)
+_DUR_BLOCK = re.compile(
+    r"\b(?:in|for|after)\s+((?:(?:\d+(?:\.\d+)?|an?|half an?|half)\s*"
+    r"(?:hours?|hrs?|minutes?|mins?|seconds?|secs?)\s*(?:and\s*)?)+)"
+)
+_AT = re.compile(
+    r"\bat\s+(\d{1,2})(?:\s*[:.]\s*(\d{2})|\s+(\d{2})(?!\s*(?:hours?|minutes?)))?"
+    r"\s*(a\s?m|p\s?m|in the morning|in the afternoon|in the evening|at night|"
+    r"tonight)?\b"
+)
 
 
 def _duration_seconds(block: str) -> float:
@@ -60,8 +90,9 @@ def _duration_seconds(block: str) -> float:
     return total
 
 
-def parse_reminder(text: str, now: _dt.datetime | None = None
-                   ) -> tuple[_dt.datetime, str, bool] | None:
+def parse_reminder(
+    text: str, now: _dt.datetime | None = None
+) -> tuple[_dt.datetime, str, bool] | None:
     """Return (due, message, is_timer) or None if no time could be understood."""
     now = now or _dt.datetime.now()
     t = text.lower().strip().rstrip(".!?")
@@ -80,7 +111,7 @@ def parse_reminder(text: str, now: _dt.datetime | None = None
         secs = _duration_seconds(m.group(1))
         if secs > 0:
             due = now + _dt.timedelta(seconds=secs)
-            t = t[:m.start()] + " " + t[m.end():]
+            t = t[: m.start()] + " " + t[m.end() :]
     if due is None:
         m = _AT.search(t)
         if m:
@@ -89,8 +120,7 @@ def parse_reminder(text: str, now: _dt.datetime | None = None
             mer = (m.group(4) or "").replace(" ", "")
             if hour > 23 or minute > 59:
                 return None
-            if mer in ("pm", "intheafternoon", "intheevening", "atnight", "tonight") \
-                    and hour < 12:
+            if mer in ("pm", "intheafternoon", "intheevening", "atnight", "tonight") and hour < 12:
                 hour += 12
             elif mer in ("am", "inthemorning") and hour == 12:
                 hour = 0
@@ -103,18 +133,27 @@ def parse_reminder(text: str, now: _dt.datetime | None = None
             # an alarm / "wake me up at 7" with no am/pm means the morning
             if due <= now:
                 due += _dt.timedelta(days=1)
-            t = t[:m.start()] + " " + t[m.end():]
+            t = t[: m.start()] + " " + t[m.end() :]
     if due is None:
         return None
-    msg = re.sub(r"^(?:please\s+)?(?:remind me|set (?:a |an )?(?:reminder|timer|alarm)|"
-                 r"start (?:a )?timer|timer|reminder|wake me up|wake me)\b", " ", t.strip())
+    msg = re.sub(
+        r"^(?:please\s+)?(?:remind me|set (?:a |an )?(?:reminder|timer|alarm)|"
+        r"start (?:a )?timer|timer|reminder|wake me up|wake me)\b",
+        " ",
+        t.strip(),
+    )
     msg = re.sub(r"\btomorrow\b", " ", msg)
     msg = re.sub(r"\s+", " ", msg).strip()
     msg = re.sub(r"^(?:for|to|about|that|of)\s+", "", msg)
     msg = re.sub(r"\s+(?:to|for)$", "", msg).strip()
     if not msg:
-        msg = ("your timer is done" if is_timer else "this is your alarm" if alarm
-               else "this is your reminder")
+        msg = (
+            "your timer is done"
+            if is_timer
+            else "this is your alarm"
+            if alarm
+            else "this is your reminder"
+        )
     return due, msg, is_timer
 
 
@@ -124,16 +163,23 @@ def when_text(due: _dt.datetime, now: _dt.datetime | None = None) -> str:
     clock = due.strftime("%I:%M %p").lstrip("0")
     if secs < 3600:
         mins, s = divmod(max(secs, 0), 60)
-        rel = (f"in {mins} minute{'s' if mins != 1 else ''}" if mins
-               else f"in {s} second{'s' if s != 1 else ''}")
+        rel = (
+            f"in {mins} minute{'s' if mins != 1 else ''}"
+            if mins
+            else f"in {s} second{'s' if s != 1 else ''}"
+        )
         return f"{rel}, at {clock}"
     day = "tomorrow " if due.date() > now.date() else ""
     return f"{day}at {clock}"
 
 
 class ReminderScheduler:
-    def __init__(self, conn: sqlite3.Connection, on_due: Callable[[str, float], None],
-                 clock: Callable[[], float] = time.time) -> None:
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        on_due: Callable[[str, float], None],
+        clock: Callable[[], float] = time.time,
+    ) -> None:
         self.conn = conn
         self.on_due = on_due
         self.clock = clock
@@ -146,13 +192,15 @@ class ReminderScheduler:
         with self._lock:
             cur = self.conn.execute(
                 "INSERT INTO reminders (text, due, created) VALUES (?,?,?)",
-                (text, due_ts, self.clock()))
+                (text, due_ts, self.clock()),
+            )
         self._wake.set()
         return int(cur.lastrowid)
 
     def pending(self) -> list[dict]:
         rows = self.conn.execute(
-            "SELECT id, text, due FROM reminders WHERE done=0 ORDER BY due").fetchall()
+            "SELECT id, text, due FROM reminders WHERE done=0 ORDER BY due"
+        ).fetchall()
         return [dict(r) for r in rows]
 
     def cancel_all(self) -> int:
@@ -166,8 +214,8 @@ class ReminderScheduler:
         now = self.clock() if now is None else now
         with self._lock:
             rows = self.conn.execute(
-                "SELECT id, text, due FROM reminders WHERE done=0 AND due<=? ORDER BY due",
-                (now,)).fetchall()
+                "SELECT id, text, due FROM reminders WHERE done=0 AND due<=? ORDER BY due", (now,)
+            ).fetchall()
             for r in rows:
                 self.conn.execute("UPDATE reminders SET done=1 WHERE id=?", (r["id"],))
         fired = [(r["text"], now - r["due"]) for r in rows]
@@ -179,8 +227,7 @@ class ReminderScheduler:
         return fired
 
     def _next_due(self) -> float | None:
-        row = self.conn.execute(
-            "SELECT MIN(due) d FROM reminders WHERE done=0").fetchone()
+        row = self.conn.execute("SELECT MIN(due) d FROM reminders WHERE done=0").fetchone()
         return row["d"] if row and row["d"] is not None else None
 
     def _loop(self) -> None:
@@ -205,7 +252,9 @@ class ReminderScheduler:
         if not items:
             return "You have no reminders set."
         now = _dt.datetime.now()
-        parts = [f"{r['text']}, {when_text(_dt.datetime.fromtimestamp(r['due']), now)}"
-                 for r in items[:8]]
+        parts = [
+            f"{r['text']}, {when_text(_dt.datetime.fromtimestamp(r['due']), now)}"
+            for r in items[:8]
+        ]
         n = len(items)
         return f"You have {n} reminder{'s' if n != 1 else ''}: " + "; ".join(parts) + "."

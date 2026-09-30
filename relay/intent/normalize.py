@@ -12,16 +12,23 @@ from __future__ import annotations
 import re
 
 _FILLER = r"(?:um+|uh+|er+|erm|hmm+|ah+|oh|so|well|okay|ok|hey|hi|hello|yo|now|just|please|kindly)"
-_VERBS = (r"open|switch|type|read|find|search|write|close|play|go|click|save|set|take|"
-          r"remind|turn|check|start|launch|show|tell|select|copy|paste|press|minimize|"
-          r"maximize|mute|unmute|increase|decrease|call|send|look")
-_ASK = (r"(?:can|could|would|will|won't) (?:you|u)(?: please)?|"
-        r"i (?:want|need|would like|'d like|wanna) (?:you )?(?:to )?|"
-        rf"i'd like (?:you )?to|help me(?: to)?(?= (?:{_VERBS})\b)|let's|lets|go ahead and|"
-        r"try to|please")
+_VERBS = (
+    r"open|switch|type|read|find|search|write|close|play|go|click|save|set|take|"
+    r"remind|turn|check|start|launch|show|tell|select|copy|paste|press|minimize|"
+    r"maximize|mute|unmute|increase|decrease|call|send|look"
+)
+_ASK = (
+    r"(?:can|could|would|will|won't) (?:you|u)(?: please)?|"
+    r"i (?:want|need|would like|'d like|wanna) (?:you )?(?:to )?|"
+    rf"i'd like (?:you )?to|help me(?: to)?(?= (?:{_VERBS})\b)|let's|lets|go ahead and|"
+    r"try to|please"
+)
 _LEADING = re.compile(rf"^(?:(?:{_FILLER})\b[\s,]*|(?:{_ASK})\b[\s,]*)+", re.IGNORECASE)
-_TRAILING = re.compile(r"(?:[\s,]+(?:please|for me|right now|now|thanks|thank you|okay|ok|"
-                       r"quickly|real quick))+$", re.IGNORECASE)
+_TRAILING = re.compile(
+    r"(?:[\s,]+(?:please|for me|right now|now|thanks|thank you|okay|ok|"
+    r"quickly|real quick))+$",
+    re.IGNORECASE,
+)
 _EDGE_PUNCT = re.compile(r"^[\s\"'“”‘’.,!?;:()-]+|[\s\"'“”‘’.,!?;:()]+$")
 
 
@@ -40,7 +47,7 @@ def normalize(text: str, strip_trailing: bool = True) -> str:
     t = re.sub(r"\s*(?:(?<!\d),|,(?!\d)|;)\s*", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     prev = None
-    while prev != t:            # strip stacked fillers: "um so can you please ..."
+    while prev != t:  # strip stacked fillers: "um so can you please ..."
         prev = t
         t = _LEADING.sub("", t).strip()
         if strip_trailing:

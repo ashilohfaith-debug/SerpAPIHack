@@ -28,14 +28,10 @@ class ReconcileReport:
 
 
 def latest_task_id(conn: sqlite3.Connection) -> str | None:
-    row = conn.execute(
-        "SELECT task_id FROM action_journal ORDER BY ts DESC LIMIT 1"
-    ).fetchone()
+    row = conn.execute("SELECT task_id FROM action_journal ORDER BY ts DESC LIMIT 1").fetchone()
     if row:
         return row["task_id"]
-    row = conn.execute(
-        "SELECT task_id FROM task_checkpoints ORDER BY ts DESC LIMIT 1"
-    ).fetchone()
+    row = conn.execute("SELECT task_id FROM task_checkpoints ORDER BY ts DESC LIMIT 1").fetchone()
     return row["task_id"] if row else None
 
 
@@ -58,8 +54,9 @@ def reconcile(journal: ActionJournal, task_id: str) -> ReconcileReport:
 
     completed = names(ExecState.VERIFIED)
     uncertain = names(ExecState.UNCERTAIN)
-    pending = [labels.get(a, a) for a in order
-               if latest[a] in (ExecState.PROPOSED, ExecState.EXECUTED)]
+    pending = [
+        labels.get(a, a) for a in order if latest[a] in (ExecState.PROPOSED, ExecState.EXECUTED)
+    ]
     failed = names(ExecState.FAILED)
 
     bits = []
@@ -68,8 +65,10 @@ def reconcile(journal: ActionJournal, task_id: str) -> ReconcileReport:
     if completed:
         bits.append(f"I completed and verified {len(completed)} step(s).")
     if uncertain:
-        bits.append(f"{len(uncertain)} step(s) were uncertain — I won't repeat those "
-                    "on my own; I'll check the current state first.")
+        bits.append(
+            f"{len(uncertain)} step(s) were uncertain — I won't repeat those "
+            "on my own; I'll check the current state first."
+        )
     if pending:
         bits.append(f"{len(pending)} step(s) were still pending.")
     if failed:

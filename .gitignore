@@ -27,3 +27,5 @@ review-receipts/
 *.pfx
 # local settings with keys (see .env.example)
 .env
+@AutomationLog.txt
+*.log

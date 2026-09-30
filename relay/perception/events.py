@@ -32,13 +32,13 @@ WINEVENT_SKIPOWNPROCESS = 0x0002
 
 WinEventProc = ctypes.WINFUNCTYPE(
     None,
-    wintypes.HANDLE,   # hWinEventHook
-    wintypes.DWORD,    # event
-    wintypes.HWND,     # hwnd
-    wintypes.LONG,     # idObject
-    wintypes.LONG,     # idChild
-    wintypes.DWORD,    # idEventThread
-    wintypes.DWORD,    # dwmsEventTime
+    wintypes.HANDLE,  # hWinEventHook
+    wintypes.DWORD,  # event
+    wintypes.HWND,  # hwnd
+    wintypes.LONG,  # idObject
+    wintypes.LONG,  # idChild
+    wintypes.DWORD,  # idEventThread
+    wintypes.DWORD,  # dwmsEventTime
 )
 
 

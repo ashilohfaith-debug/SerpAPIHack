@@ -19,8 +19,8 @@ from enum import Enum
 
 class ExecState(str, Enum):
     PROPOSED = "proposed"
-    EXECUTED = "executed"    # input sent — NOT proof of success
-    VERIFIED = "verified"    # re-observed and confirmed
+    EXECUTED = "executed"  # input sent — NOT proof of success
+    VERIFIED = "verified"  # re-observed and confirmed
     UNCERTAIN = "uncertain"  # outcome could not be confirmed
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -50,9 +50,16 @@ class ActionJournal:
                (task_id, action_id, target_identity, proposed_action,
                 permission_decision, execution_state, verification_result, ts)
                VALUES (?,?,?,?,?,?,?,?)""",
-            (rec.task_id, rec.action_id, rec.target_identity, rec.proposed_action,
-             rec.permission_decision, rec.execution_state.value,
-             rec.verification_result, ts),
+            (
+                rec.task_id,
+                rec.action_id,
+                rec.target_identity,
+                rec.proposed_action,
+                rec.permission_decision,
+                rec.execution_state.value,
+                rec.verification_result,
+                ts,
+            ),
         )
         return int(cur.lastrowid)
 
@@ -84,15 +91,23 @@ class ActionJournal:
         ).fetchone()
         if row is None:
             return None
-        return {"task_id": row["task_id"], "goal": row["goal"], "state": row["state"],
-                "data": json.loads(row["data_json"]), "ts": row["ts"]}
+        return {
+            "task_id": row["task_id"],
+            "goal": row["goal"],
+            "state": row["state"],
+            "data": json.loads(row["data_json"]),
+            "ts": row["ts"],
+        }
 
     @staticmethod
     def _row(r: sqlite3.Row) -> ActionRecord:
         return ActionRecord(
-            task_id=r["task_id"], action_id=r["action_id"],
+            task_id=r["task_id"],
+            action_id=r["action_id"],
             execution_state=ExecState(r["execution_state"]),
-            target_identity=r["target_identity"], proposed_action=r["proposed_action"],
+            target_identity=r["target_identity"],
+            proposed_action=r["proposed_action"],
             permission_decision=r["permission_decision"],
-            verification_result=r["verification_result"], ts=r["ts"],
+            verification_result=r["verification_result"],
+            ts=r["ts"],
         )

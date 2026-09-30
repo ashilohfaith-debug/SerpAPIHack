@@ -39,57 +39,148 @@ class Risk(str, Enum):
 
 
 class ConfirmationStrength(str, Enum):
-    NONE = "none"          # run
-    NARRATE = "narrate"    # announce, then run (no undo)
-    SIMPLE = "simple"      # spoken yes/no is acceptable
-    PHRASE = "phrase"      # action-specific spoken phrase required (not a bare "yes")
+    NONE = "none"  # run
+    NARRATE = "narrate"  # announce, then run (no undo)
+    SIMPLE = "simple"  # spoken yes/no is acceptable
+    PHRASE = "phrase"  # action-specific spoken phrase required (not a bare "yes")
     KEYBOARD = "keyboard"  # trusted keyboard confirmation / Windows auth flow
 
 
 # Read-only / navigational action kinds — no state change.
-READONLY_KINDS = frozenset({
-    "screenshot", "observe", "read", "read_element", "read_screen", "focus",
-    "cursor_position", "mouse_move", "move", "scroll", "hover", "wait",
-    "narrate", "say", "point", "list_elements", "get_value",
-})
+READONLY_KINDS = frozenset(
+    {
+        "screenshot",
+        "observe",
+        "read",
+        "read_element",
+        "read_screen",
+        "focus",
+        "cursor_position",
+        "mouse_move",
+        "move",
+        "scroll",
+        "hover",
+        "wait",
+        "narrate",
+        "say",
+        "point",
+        "list_elements",
+        "get_value",
+    }
+)
 
 # Mutating actions that act at/through a specific target element.
-TARGETED_KINDS = frozenset({
-    "click", "left_click", "double_click", "right_click", "invoke", "toggle",
-    "select", "set_value", "type", "key", "expand", "collapse", "drag",
-})
+TARGETED_KINDS = frozenset(
+    {
+        "click",
+        "left_click",
+        "double_click",
+        "right_click",
+        "invoke",
+        "toggle",
+        "select",
+        "set_value",
+        "type",
+        "key",
+        "expand",
+        "collapse",
+        "drag",
+    }
+)
 
 # Kinds that are always high-stakes regardless of the target label.
-ELEVATED_KINDS = frozenset({
-    "delete_file", "send_message", "send_email", "purchase", "pay", "transfer",
-    "install", "uninstall", "run_downloaded", "share_personal", "change_security_setting",
-})
+ELEVATED_KINDS = frozenset(
+    {
+        "delete_file",
+        "send_message",
+        "send_email",
+        "purchase",
+        "pay",
+        "transfer",
+        "install",
+        "uninstall",
+        "run_downloaded",
+        "share_personal",
+        "change_security_setting",
+    }
+)
 
 # The most sensitive kinds require a keyboard / Windows auth confirmation, not voice.
-KEYBOARD_CONFIRM_KINDS = frozenset({
-    "purchase", "pay", "transfer", "install", "run_downloaded", "change_security_setting",
-})
+KEYBOARD_CONFIRM_KINDS = frozenset(
+    {
+        "purchase",
+        "pay",
+        "transfer",
+        "install",
+        "run_downloaded",
+        "change_security_setting",
+    }
+)
 
 # Kinds RELAY refuses outright.
-BLOCKED_KINDS = frozenset({
-    "bypass_captcha", "solve_captcha", "disable_security", "bypass_uac",
-    "secure_desktop_input",
-})
+BLOCKED_KINDS = frozenset(
+    {
+        "bypass_captcha",
+        "solve_captcha",
+        "disable_security",
+        "bypass_uac",
+        "secure_desktop_input",
+    }
+)
 
 # Substrings in a target control's name/role marking an irreversible, high-stakes
 # control. Case-insensitive. Conservative + additive: a false ELEVATED costs one
 # confirmation; a false SAFE could send an email or delete a file.
 DANGER_LABELS = (
-    "send", "delete", "remove", "discard", "trash", "erase", "wipe", "empty",
-    "buy", "purchase", "pay", "checkout", "place order", "order now", "subscribe",
-    "submit", "confirm", "publish", "post", "share", "uninstall", "install",
-    "format", "permanent", "delete forever", "unsubscribe", "deactivate",
-    "close account", "delete account", "transfer", "withdraw", "sign out", "log out",
+    "send",
+    "delete",
+    "remove",
+    "discard",
+    "trash",
+    "erase",
+    "wipe",
+    "empty",
+    "buy",
+    "purchase",
+    "pay",
+    "checkout",
+    "place order",
+    "order now",
+    "subscribe",
+    "submit",
+    "confirm",
+    "publish",
+    "post",
+    "share",
+    "uninstall",
+    "install",
+    "format",
+    "permanent",
+    "delete forever",
+    "unsubscribe",
+    "deactivate",
+    "close account",
+    "delete account",
+    "transfer",
+    "withdraw",
+    "sign out",
+    "log out",
 )
 
 # Field-name / role hints for protected (never-read, never-store) content.
-_PROTECTED_HINTS = ("password", "passwd", "pwd", "otp", "one-time", "pin", "cvv",
-                    "security code", "secret", "token", "passcode")
+_PROTECTED_HINTS = (
+    "password",
+    "passwd",
+    "pwd",
+    "otp",
+    "one-time",
+    "pin",
+    "cvv",
+    "security code",
+    "secret",
+    "token",
+    "passcode",
+)
 
 
 @dataclass(frozen=True)
@@ -102,9 +193,9 @@ class Action:
     target_app: str = ""
     target_label: str = ""
     target_role: str = ""
-    text: str = ""                       # payload for type/set_value (NOT danger-scanned)
-    is_password_field: bool = False      # from UIA IsPassword, when known
-    reversible: bool = False             # e.g. a journaled file move
+    text: str = ""  # payload for type/set_value (NOT danger-scanned)
+    is_password_field: bool = False  # from UIA IsPassword, when known
+    reversible: bool = False  # e.g. a journaled file move
     params: dict = field(default_factory=dict)
 
 
@@ -113,8 +204,8 @@ class Decision:
     risk: Risk
     confirmation: ConfirmationStrength
     reason: str
-    allowed: bool                        # False only for BLOCKED
-    spoken_summary: str = ""             # what to announce for confirmation
+    allowed: bool  # False only for BLOCKED
+    spoken_summary: str = ""  # what to announce for confirmation
 
     @property
     def requires_confirmation(self) -> bool:
@@ -141,13 +232,16 @@ class PermissionEngine:
         kind = action.kind.strip().lower()
 
         if kind in BLOCKED_KINDS:
-            return Decision(Risk.BLOCKED, ConfirmationStrength.NONE,
-                            f"'{kind}' is not permitted", allowed=False,
-                            spoken_summary="")
+            return Decision(
+                Risk.BLOCKED,
+                ConfirmationStrength.NONE,
+                f"'{kind}' is not permitted",
+                allowed=False,
+                spoken_summary="",
+            )
 
         if kind in READONLY_KINDS:
-            return Decision(Risk.SAFE, ConfirmationStrength.NONE,
-                            "read-only", allowed=True)
+            return Decision(Risk.SAFE, ConfirmationStrength.NONE, "read-only", allowed=True)
 
         label = (action.target_label or "").lower()
         role = (action.target_role or "").lower()
@@ -157,47 +251,63 @@ class PermissionEngine:
 
         # Always-high-stakes kinds.
         if kind in ELEVATED_KINDS:
-            strength = (ConfirmationStrength.KEYBOARD if kind in KEYBOARD_CONFIRM_KINDS
-                        else ConfirmationStrength.PHRASE)
+            strength = (
+                ConfirmationStrength.KEYBOARD
+                if kind in KEYBOARD_CONFIRM_KINDS
+                else ConfirmationStrength.PHRASE
+            )
             return Decision(
-                Risk.ELEVATED, strength,
-                f"'{kind}' is irreversible/high-stakes", allowed=True,
+                Risk.ELEVATED,
+                strength,
+                f"'{kind}' is irreversible/high-stakes",
+                allowed=True,
                 spoken_summary=self._summary(kind, target_desc, app, high=True),
             )
 
         # Danger-labelled target control -> elevated.
         if any(p in haystack for p in DANGER_LABELS):
             return Decision(
-                Risk.ELEVATED, ConfirmationStrength.PHRASE,
-                f"target control looks high-stakes: {target_desc!r}", allowed=True,
+                Risk.ELEVATED,
+                ConfirmationStrength.PHRASE,
+                f"target control looks high-stakes: {target_desc!r}",
+                allowed=True,
                 spoken_summary=self._summary(kind, target_desc, app, high=True),
             )
 
         # Journaled reversible mutation.
         if action.reversible:
-            return Decision(Risk.REVERSIBLE, ConfirmationStrength.NONE,
-                            "reversible (journaled)", allowed=True)
+            return Decision(
+                Risk.REVERSIBLE, ConfirmationStrength.NONE, "reversible (journaled)", allowed=True
+            )
 
         # Targeted action with no identified target -> default-deny (confirm).
         if kind in TARGETED_KINDS and not label and kind not in ("type", "key"):
             return Decision(
-                Risk.CONFIRM, ConfirmationStrength.SIMPLE,
-                "target could not be identified", allowed=True,
+                Risk.CONFIRM,
+                ConfirmationStrength.SIMPLE,
+                "target could not be identified",
+                allowed=True,
                 spoken_summary=self._summary(kind, target_desc, app, high=False),
             )
 
         # Routine, identified GUI mutation (or typing/keys) -> run, narrate first.
         return Decision(
-            Risk.CAUTION, ConfirmationStrength.NARRATE,
-            "routine identified mutation", allowed=True,
+            Risk.CAUTION,
+            ConfirmationStrength.NARRATE,
+            "routine identified mutation",
+            allowed=True,
             spoken_summary=self._summary(kind, target_desc, app, high=False),
         )
 
     @staticmethod
     def _summary(kind: str, target: str, app: str, high: bool) -> str:
-        verb = {"invoke": "click", "set_value": "change", "key": "press",
-                "delete_file": "delete", "launch_app": "open"}.get(kind, kind.replace("_", " "))
+        verb = {
+            "invoke": "click",
+            "set_value": "change",
+            "key": "press",
+            "delete_file": "delete",
+            "launch_app": "open",
+        }.get(kind, kind.replace("_", " "))
         if high:
-            return (f"I am about to {verb} {target} in {app}. "
-                    f"This can't be undone.")
+            return f"I am about to {verb} {target} in {app}. This can't be undone."
         return f"{verb} {target} in {app}."

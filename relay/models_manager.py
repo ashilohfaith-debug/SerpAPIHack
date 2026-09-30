@@ -37,7 +37,7 @@ VOICES = {
     },
 }
 DEFAULT_VOICE = "en_US-ljspeech-medium"
-PIPER_VOICE = DEFAULT_VOICE          # kept for older callers
+PIPER_VOICE = DEFAULT_VOICE  # kept for older callers
 
 
 def _piper_dir() -> Path:
@@ -48,8 +48,11 @@ def installed_voices() -> list[str]:
     d = _piper_dir()
     if not d.exists():
         return []
-    return sorted(p.stem for p in d.glob("*.onnx")
-                  if Path(f"{p}.json").exists() and p.stat().st_size > 1_000_000)
+    return sorted(
+        p.stem
+        for p in d.glob("*.onnx")
+        if Path(f"{p}.json").exists() and p.stat().st_size > 1_000_000
+    )
 
 
 def active_voice(preferred: str | None = None) -> str | None:
@@ -70,8 +73,9 @@ def voice_path(preferred: str | None = None) -> Path | None:
 
 def voice_licence(name: str | None) -> tuple[str, bool]:
     info = VOICES.get(name or "", {})
-    return info.get("licence", "unknown licence — check its model card"), \
-        bool(info.get("release_ok", False))
+    return info.get("licence", "unknown licence — check its model card"), bool(
+        info.get("release_ok", False)
+    )
 
 
 def _piper_onnx():
@@ -89,38 +93,46 @@ def status() -> list[dict]:
     voice = active_voice()
     p = voice_path()
     licence, ok = voice_licence(voice)
-    out.append({
-        "name": f"Voice {voice or DEFAULT_VOICE} ({licence})",
-        "present": p is not None,
-        "size_mb": round(p.stat().st_size / 1e6, 1) if p else 0.0,
-        "how": "relay --setup-models",
-        "release_ok": ok,
-    })
-    out.append({
-        "name": "faster-whisper tiny.en (STT)",
-        "present": _whisper_present(),
-        "size_mb": None,
-        "how": "relay --setup-models (downloaded once into models/whisper)",
-    })
-    out.append({
-        "name": "RapidOCR ONNX (OCR)",
-        "present": _rapidocr_installed(),
-        "size_mb": None,
-        "how": "ships inside the rapidocr-onnxruntime package (no separate file)",
-    })
+    out.append(
+        {
+            "name": f"Voice {voice or DEFAULT_VOICE} ({licence})",
+            "present": p is not None,
+            "size_mb": round(p.stat().st_size / 1e6, 1) if p else 0.0,
+            "how": "relay --setup-models",
+            "release_ok": ok,
+        }
+    )
+    out.append(
+        {
+            "name": "faster-whisper tiny.en (STT)",
+            "present": _whisper_present(),
+            "size_mb": None,
+            "how": "relay --setup-models (downloaded once into models/whisper)",
+        }
+    )
+    out.append(
+        {
+            "name": "RapidOCR ONNX (OCR)",
+            "present": _rapidocr_installed(),
+            "size_mb": None,
+            "how": "ships inside the rapidocr-onnxruntime package (no separate file)",
+        }
+    )
     return out
 
 
 def _rapidocr_installed() -> bool:
     try:
         import rapidocr_onnxruntime  # noqa: F401
+
         return True
     except Exception:
         return False
 
 
-def download(url: str, dest: Path, attempts: int = 30, timeout: float = 30.0,
-             progress=None) -> bool:
+def download(
+    url: str, dest: Path, attempts: int = 30, timeout: float = 30.0, progress=None
+) -> bool:
     """Resumable, size-verified download to ``dest`` (via ``dest.part``)."""
     part = Path(f"{dest}.part")
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -137,7 +149,7 @@ def download(url: str, dest: Path, attempts: int = 30, timeout: float = 30.0,
                     rng = resp.headers.get("Content-Range", "")
                     total = int(rng.rsplit("/", 1)[-1]) if "/" in rng else None
                 else:
-                    have = 0                      # server ignored Range: start over
+                    have = 0  # server ignored Range: start over
                     total = int(length) if length else None
                 with open(part, "ab" if have else "wb") as f:
                     while True:
@@ -169,7 +181,7 @@ def download_voice(name: str = DEFAULT_VOICE, progress=None) -> bool:
 
 def ensure(download_missing: bool = True, download: bool | None = None) -> bool:
     """Make the models present offline: the release voice and the speech model."""
-    if download is not None:                       # older keyword
+    if download is not None:  # older keyword
         download_missing = download
     ok = True
     if DEFAULT_VOICE not in installed_voices():
@@ -181,6 +193,7 @@ def ensure(download_missing: bool = True, download: bool | None = None) -> bool:
                     print(f"  connection problem ({error[:60]}); retrying …")
                 elif total:
                     print(f"\r  {done / 1e6:5.1f} / {total / 1e6:.1f} MB", end="", flush=True)
+
             if not download_voice(DEFAULT_VOICE, progress=show):
                 print("\n  voice download did not finish")
                 ok = False
@@ -193,6 +206,7 @@ def ensure(download_missing: bool = True, download: bool | None = None) -> bool:
             print("downloading the speech-recognition model (whisper tiny.en) …")
             try:
                 from relay.audio import WhisperSTT
+
                 WhisperSTT()._ensure()  # triggers the model download into models/whisper
             except Exception as e:
                 print("  whisper download failed:", str(e)[:200])
@@ -211,6 +225,8 @@ def status_text() -> str:
         if not m["present"]:
             lines.append(f"         get: {m['how']}")
         elif m.get("release_ok") is False:
-            lines.append("         note: fine for testing; for public release run "
-                         "relay --setup-models to get the public-domain voice")
+            lines.append(
+                "         note: fine for testing; for public release run "
+                "relay --setup-models to get the public-domain voice"
+            )
     return "\n".join(lines)

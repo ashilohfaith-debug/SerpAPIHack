@@ -16,14 +16,26 @@ import re
 
 WAKE_WORD = "relay"
 _WAKE_VARIANTS = (
-    "relay", "relai", "relee", "rely", "re lay", "re-lay", "raley", "rilay",
-    "hey relay", "ok relay", "hi relay",
+    "relay",
+    "relai",
+    "relee",
+    "rely",
+    "re lay",
+    "re-lay",
+    "raley",
+    "rilay",
+    "hey relay",
+    "ok relay",
+    "hi relay",
 )
 
 _LEAD = re.compile(r"^(?:(?:hey|ok|okay|hi|yo|um+|uh+|so|oh)[\s,.!]+)+", re.IGNORECASE)
 _WAKE_RE = re.compile(
-    r"^(?:" + "|".join(re.escape(v) for v in sorted(_WAKE_VARIANTS, key=len, reverse=True))
-    + r")(?=$|[\s,.!?:;])[\s,.!?:;]*", re.IGNORECASE)
+    r"^(?:"
+    + "|".join(re.escape(v) for v in sorted(_WAKE_VARIANTS, key=len, reverse=True))
+    + r")(?=$|[\s,.!?:;])[\s,.!?:;]*",
+    re.IGNORECASE,
+)
 
 
 def detect_wake(text: str) -> tuple[bool, str]:
@@ -36,13 +48,16 @@ def detect_wake(text: str) -> tuple[bool, str]:
     m = _WAKE_RE.match(t)
     if not m:
         return False, ""
-    rest = t[m.end():].strip()
+    rest = t[m.end() :].strip()
     rest = re.sub(r"^[,.!?:;\s]+", "", rest).strip()
     return True, rest
 
 
-_NEAR_MISS_RE = re.compile(r"^(?:really|rally|relays|realy|reli|rilly)(?=$|[\s,.!?:;])"
-                           r"[\s,.!?:;]*", re.IGNORECASE)
+_NEAR_MISS_RE = re.compile(
+    r"^(?:really|rally|relays|realy|reli|rilly)(?=$|[\s,.!?:;])"
+    r"[\s,.!?:;]*",
+    re.IGNORECASE,
+)
 
 
 def detect_wake_near_miss(text: str) -> tuple[bool, str]:
@@ -54,7 +69,7 @@ def detect_wake_near_miss(text: str) -> tuple[bool, str]:
     m = _NEAR_MISS_RE.match(t)
     if not m:
         return False, ""
-    return True, re.sub(r"^[,.!?:;\s]+", "", t[m.end():]).strip()
+    return True, re.sub(r"^[,.!?:;\s]+", "", t[m.end() :]).strip()
 
 
 # Control commands -> canonical action. Order matters (emergency first).

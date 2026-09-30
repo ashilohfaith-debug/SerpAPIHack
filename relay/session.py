@@ -33,8 +33,11 @@ from relay.accessibility import (
 )
 from relay.audio.wake import Command
 from relay.core import EmergencyStop, new_task_id
+from relay.core.state import relay_state_machine
 from relay.diagnostics import get_logger
 from relay.executor import Executor
+from relay.goals.assignment import AssignmentWorkflow
+from relay.goals.goal import GoalManager
 from relay.intent import Kind, parse
 from relay.intent.normalize import normalize
 from relay.memory.db import connect
@@ -52,50 +55,96 @@ from relay.reminders import ReminderScheduler
 from relay.safety import ConfirmationStrength, PermissionEngine
 from relay.skills import Skills
 from relay.verifier import Verifier
+from relay.workspace.agent import WorkspaceAgent
 
 _MEMORY_KINDS = {
-    Kind.REMEMBER, Kind.WHAT_REMEMBER, Kind.WHY_REMEMBER, Kind.FORGET,
-    Kind.CLEAR_HISTORY, Kind.EXPORT_PREFS, Kind.WHAT_DOING,
+    Kind.REMEMBER,
+    Kind.WHAT_REMEMBER,
+    Kind.WHY_REMEMBER,
+    Kind.FORGET,
+    Kind.CLEAR_HISTORY,
+    Kind.EXPORT_PREFS,
+    Kind.WHAT_DOING,
 }
 _ACCESS_KINDS = {
-    Kind.SET_MODE, Kind.READ_DIALOG, Kind.NEXT_ELEMENT, Kind.PREV_ELEMENT, Kind.SPELL,
+    Kind.SET_MODE,
+    Kind.READ_DIALOG,
+    Kind.NEXT_ELEMENT,
+    Kind.PREV_ELEMENT,
+    Kind.SPELL,
     Kind.CAPABILITIES,
+}
+_GOAL_KINDS = {
+    Kind.GOAL_START,
+    Kind.GOAL_STATUS,
+    Kind.GOAL_PAUSE,
+    Kind.GOAL_RESUME,
+    Kind.GOAL_CANCEL,
+    Kind.GOAL_NEXT,
+}
+_ASSIGNMENT_KINDS = {
+    Kind.ASSIGNMENT_START,
+    Kind.ASSIGNMENT_STATUS,
+    Kind.ASSIGNMENT_CHECKLIST,
+    Kind.ASSIGNMENT_SUBMIT,
+}
+_WORKSPACE_KINDS = {
+    Kind.WORKSPACE_TEST,
+    Kind.WORKSPACE_STATUS,
+    Kind.WORKSPACE_DIFF,
 }
 log = get_logger("session")
 _REQ = pol.Priority.REQUESTED
 _CONF = pol.Priority.CONFIRMATION
-_YES = re.compile(r"^(?:yes|yeah|yep|yup|sure|ok|okay|please do|do it|go ahead|haan|ha|"
-                  r"yes please|of course|alright|all right)\b", re.I)
+_YES = re.compile(
+    r"^(?:yes|yeah|yep|yup|sure|ok|okay|please do|do it|go ahead|haan|ha|"
+    r"yes please|of course|alright|all right)\b",
+    re.I,
+)
 _NO = re.compile(r"^(?:no|nope|nah|don't|do not|not now|cancel|never mind|nahi)\b", re.I)
 
 
 class Session:
-    def __init__(self, speak=None, bus=None, db_path: str = ":memory:", speech=None,
-                 apps=None, on_quit: Callable[[], None] | None = None,
-                 on_wake_word: Callable[[bool], None] | None = None,
-                 talk_key: str = "ctrl+alt+space", assistant=None, audio=None) -> None:
+    def __init__(
+        self,
+        speak=None,
+        bus=None,
+        db_path: str = ":memory:",
+        speech=None,
+        apps=None,
+        on_quit: Callable[[], None] | None = None,
+        on_wake_word: Callable[[bool], None] | None = None,
+        talk_key: str = "ctrl+alt+space",
+        assistant=None,
+        audio=None,
+    ) -> None:
         self.emergency = EmergencyStop()
         self.cancel = threading.Event()
         self._speak = speak
         self.bus = bus
-        self.speech = speech                # SpeechQueue (live app) or None (tests/CLI)
+        self.speech = speech  # SpeechQueue (live app) or None (tests/CLI)
         self.on_quit = on_quit
         self.on_wake_word = on_wake_word
-        self.assistant = assistant          # optional conversational AI (relay.llm)
-        self.audio = audio                  # headphone mode / audio devices (the live app)
-        self._step_failed = False           # a skill couldn't do its part (multi-step runs)
+        self.assistant = assistant  # optional conversational AI (relay.llm)
+        self.audio = audio  # headphone mode / audio devices (the live app)
+        self._step_failed = False  # a skill couldn't do its part (multi-step runs)
         self._in_steps = False
         self._answer_cancel = threading.Event()
         self._from_assistant = False
         self.talk_key = talk_key
         self.worker = UIAWorker(bus=bus)
         self.worker.start()
+        self.worker.start_change_monitor()
         self.engine = PermissionEngine()
         self.conn = connect(db_path)
         self.journal = ActionJournal(self.conn)
         self.store = MemoryStore(self.conn)
         self.notes = NotesStore(self.conn)
         self.reminders = ReminderScheduler(self.conn, on_due=self._on_reminder)
+        self.goals = GoalManager(self.conn, bus=bus)
+        self.assignment = AssignmentWorkflow(bus=bus, goals=self.goals, session=self)
+        self.workspace = WorkspaceAgent(self.store.get_pref("workspace_dir", default="."), bus=bus)
+        self.state_machine = relay_state_machine(machine_id="session", bus=bus)
         self.task_id = new_task_id()
         self.ctx = TaskContext(self.task_id)
         self._last_pref: tuple[str, str] | None = None
@@ -107,26 +156,47 @@ class Session:
         self.last_activity = ""
         if apps is None:
             from relay.system.apps import AppCatalog
+
             apps = AppCatalog(entries=[])
         self.apps = apps
         self.ocr = OCR()
-        self.executor = Executor(self.engine, self.worker, self.journal, self.task_id,
-                                 emergency=self.emergency, confirm=lambda d: False)
+        self.executor = Executor(
+            self.engine,
+            self.worker,
+            self.journal,
+            self.task_id,
+            emergency=self.emergency,
+            confirm=lambda d: False,
+        )
         self.verifier = Verifier(self.worker, self.journal)
         self.narration_mode = self.store.get_pref("narration_mode", default="quick")
         self.runner = TransparentRunner(
-            self.executor, self.worker, self.verifier, self.ctx, speak=speak,
-            emergency=self.emergency, bus=bus, engine=self.engine,
-            on_confirm_needed=self._on_confirm_needed, mode=self.narration_mode)
-        self.reader = Reader(speak_part=self._speak_part, say=lambda t: self.say(t, _REQ),
-                             interrupt=self._interrupt_speech, on_event=self._emit)
+            self.executor,
+            self.worker,
+            self.verifier,
+            self.ctx,
+            speak=speak,
+            emergency=self.emergency,
+            bus=bus,
+            engine=self.engine,
+            on_confirm_needed=self._on_confirm_needed,
+            mode=self.narration_mode,
+        )
+        self.reader = Reader(
+            speak_part=self._speak_part,
+            say=lambda t: self.say(t, _REQ),
+            interrupt=self._interrupt_speech,
+            on_event=self._emit,
+        )
         from relay.accessibility.coexist import ScreenReaderWatch
+
         self.screen_reader = ScreenReaderWatch()
         self.skills = Skills(self)
         self.speech_rate = 1.0
         try:
-            self.set_speech_rate(float(self.store.get_pref("speech_rate", default="1.0")),
-                                 persist=False)
+            self.set_speech_rate(
+                float(self.store.get_pref("speech_rate", default="1.0")), persist=False
+            )
         except ValueError:
             pass
 
@@ -178,8 +248,10 @@ class Session:
     def onboard(self) -> None:
         wake = self.store.get_pref("wake_word", default="relay")
         from relay.audio.hotkeys import spoken_combo
-        for line in onboarding_script(wake_word=wake, first_run=is_first_run(),
-                                      talk_key=spoken_combo(self.talk_key)):
+
+        for line in onboarding_script(
+            wake_word=wake, first_run=is_first_run(), talk_key=spoken_combo(self.talk_key)
+        ):
             self.say(line, _REQ)
         mark_onboarded()
         self._rearm_voice()
@@ -204,8 +276,7 @@ class Session:
     def set_dictation(self, on: bool) -> None:
         self.dictation = on
 
-    _EDITORS = ("notepad", "wordpad", "winword", "word", "notepad++", "code", "writer",
-                "soffice")
+    _EDITORS = ("notepad", "wordpad", "winword", "word", "notepad++", "code", "writer", "soffice")
     _BLANK = re.compile(r"^\*?\s*(?:untitled|document\s*\d*|new \d+|new tab|word)\b", re.I)
 
     def _fresh_document(self) -> bool:
@@ -214,33 +285,50 @@ class Session:
         Returns False if no blank page could be made (then nothing is typed)."""
         from relay.planner.planner import Step
         from relay.system import windows
+
         w = windows.foreground()
         if w is None:
             return True
         app = (w.app or "").lower().removesuffix(".exe")
         if app not in self._EDITORS or self._BLANK.match(w.title or ""):
             return True
-        self.say("That opened an existing document, so I'm starting a new blank page to "
-                 "keep it safe.", _REQ)
-        self.runner.run([Step("hotkey", "open a new blank page", {
-            "keys": ["ctrl", "n"], "announce": "", "done_text": ""})])
+        self.say(
+            "That opened an existing document, so I'm starting a new blank page to keep it safe.",
+            _REQ,
+        )
+        self.runner.run(
+            [
+                Step(
+                    "hotkey",
+                    "open a new blank page",
+                    {"keys": ["ctrl", "n"], "announce": "", "done_text": ""},
+                )
+            ]
+        )
         time.sleep(0.8)
         now = windows.foreground()
         if now is None or not self._BLANK.match(now.title or ""):
             self.say("I couldn't get a blank page, so I won't type there.", _REQ)
-            return False                        # never type into the old document
+            return False  # never type into the old document
         return True
 
     def _open_then_unknown(self, utterance: str) -> tuple[str, str] | None:
         """'open <an app I can find> and <something I can't do>' -> (open part, rest)."""
-        m = re.match(r"^\s*(?:please\s+)?(open|launch|start)\s+(.+?)\s*,?\s+and\s+(.+?)[.!?]*$",
-                     utterance, re.I)
+        m = re.match(
+            r"^\s*(?:please\s+)?(open|launch|start)\s+(.+?)\s*,?\s+and\s+(.+?)[.!?]*$",
+            utterance,
+            re.I,
+        )
         if not m:
             return None
         target = m.group(2)
         from relay.system import files, web
-        if (self.apps.find(target) is None and web.site_url(target) is None
-                and files.folder_for_phrase(target) is None):
+
+        if (
+            self.apps.find(target) is None
+            and web.site_url(target) is None
+            and files.folder_for_phrase(target) is None
+        ):
             return None
         return f"{m.group(1)} {target}", m.group(3)
 
@@ -261,8 +349,11 @@ class Session:
         self._in_steps = True
         try:
             for k, step in enumerate(steps, 1):
-                if self.emergency.is_engaged or self.cancel.is_set() or \
-                        self._answer_cancel.is_set():
+                if (
+                    self.emergency.is_engaged
+                    or self.cancel.is_set()
+                    or self._answer_cancel.is_set()
+                ):
                     self.say(f"Stopped before step {k}.", _REQ)
                     break
                 self._step_failed = False
@@ -270,25 +361,40 @@ class Session:
                 results.extend(out)
                 states = [getattr(r, "state", "") for r in out]
                 opening = re.match(r"^(?:open|launch|start|switch to|go to)\b", step, re.I)
-                bad = self._step_failed or any(s in self._STOP_STATES for s in states) or (
-                    opening and "uncertain" in states)
+                bad = (
+                    self._step_failed
+                    or any(s in self._STOP_STATES for s in states)
+                    or (opening and "uncertain" in states)
+                )
                 waiting = self._pending is not None or self._offer is not None
                 if bad and (self._step_failed or not waiting):
-                    rest = steps[k:]            # a failure is always reported first
-                    self.say(f"I stopped at step {k}, {step}, because it didn't work."
-                             + (" I didn't do: " + "; ".join(rest) + "." if rest else ""), _REQ)
+                    rest = steps[k:]  # a failure is always reported first
+                    self.say(
+                        f"I stopped at step {k}, {step}, because it didn't work."
+                        + (" I didn't do: " + "; ".join(rest) + "." if rest else ""),
+                        _REQ,
+                    )
                     break
-                if waiting:                     # a yes/no or a confirmation phrase is due
+                if waiting:  # a yes/no or a confirmation phrase is due
                     if k < n:
-                        self.say("When that's done, say the rest again: "
-                                 + "; then ".join(steps[k:]) + ".", _REQ)
+                        self.say(
+                            "When that's done, say the rest again: "
+                            + "; then ".join(steps[k:])
+                            + ".",
+                            _REQ,
+                        )
                     break
                 if k < n:
-                    time.sleep(0.4)             # let the screen settle before the next step
-                    if opening and parse(steps[k]).kind in (Kind.TYPE, Kind.DICTATION) \
-                            and not self._fresh_document():
-                        self.say("I stopped before typing. I didn't do: "
-                                 + "; ".join(steps[k:]) + ".", _REQ)
+                    time.sleep(0.4)  # let the screen settle before the next step
+                    if (
+                        opening
+                        and parse(steps[k]).kind in (Kind.TYPE, Kind.DICTATION)
+                        and not self._fresh_document()
+                    ):
+                        self.say(
+                            "I stopped before typing. I didn't do: " + "; ".join(steps[k:]) + ".",
+                            _REQ,
+                        )
                         break
             else:
                 if n > 1:
@@ -318,30 +424,43 @@ class Session:
             return consumer(utterance.strip()) or []
         if not self.dictation and not self._in_steps:
             from relay.intent.compound import split_steps
-            steps = split_steps(utterance)          # "open Notepad and type hello"
+
+            steps = split_steps(utterance)  # "open Notepad and type hello"
             if steps is not None:
                 if len(steps) == 1:
                     return self.handle(steps[0])
                 log.info("command: %d steps", len(steps))
                 return self.run_steps(steps)
             part = self._open_then_unknown(utterance)
-            if part is not None:                    # "open WhatsApp and send hi to Mom"
+            if part is not None:  # "open WhatsApp and send hi to Mom"
                 if self.assistant is not None and not self._from_assistant:
-                    return self.ask(utterance)      # the AI plans the whole thing
+                    return self.ask(utterance)  # the AI plans the whole thing
                 self._step_failed = False
                 opened = self.handle(part[0])
                 if not self._step_failed:
-                    self.say(f"I've done the first part. I can't do \"{part[1]}\" by "
-                             "myself yet; tell me the next step, like click, type, or press.",
-                             _REQ)
+                    self.say(
+                        f"I've done the first part. I can't do \"{part[1]}\" by "
+                        "myself yet; tell me the next step, like click, type, or press.",
+                        _REQ,
+                    )
                 return opened
         intent = parse(utterance)
         # the command TYPE only — never the words, which may be private (dictation, notes)
-        log.info("command: %s (%d words)%s", intent.kind, len(utterance.split()),
-                 " [dictation]" if self.dictation else "")
+        log.info(
+            "command: %s (%d words)%s",
+            intent.kind,
+            len(utterance.split()),
+            " [dictation]" if self.dictation else "",
+        )
         self.runner.screen_reader = self.screen_reader.current()[0]
-        if self.dictation and intent.kind not in (Kind.CONTROL, Kind.DICTATION, Kind.QUIT,
-                                                  Kind.SHORTCUT, Kind.PRESS_KEY, Kind.HOTKEY):
+        if self.dictation and intent.kind not in (
+            Kind.CONTROL,
+            Kind.DICTATION,
+            Kind.QUIT,
+            Kind.SHORTCUT,
+            Kind.PRESS_KEY,
+            Kind.HOTKEY,
+        ):
             return self.skills.dictate(utterance)
         if intent.kind == Kind.CONTROL:
             return self._handle_control(intent.slots.get("command"))
@@ -349,21 +468,36 @@ class Session:
             return self._handle_memory(intent)
         if intent.kind in _ACCESS_KINDS:
             return self._handle_access(intent)
+        if intent.kind in _GOAL_KINDS:
+            return self._handle_goal(intent)
+        if intent.kind in _ASSIGNMENT_KINDS:
+            return self._handle_assignment(intent)
+        if intent.kind in _WORKSPACE_KINDS:
+            return self._handle_workspace(intent)
         self.cancel.clear()
         handled = self.skills.handle(intent)
         if handled is not None:
-            if intent.kind not in (Kind.READ_ALL, Kind.READ_NOTES, Kind.LIST_LINKS,
-                                   Kind.LIST_HEADINGS, Kind.HELP, Kind.READ_NEXT,
-                                   Kind.READ_PREV, Kind.OCR_READ, Kind.READ_CLIPBOARD):
+            if intent.kind not in (
+                Kind.READ_ALL,
+                Kind.READ_NOTES,
+                Kind.LIST_LINKS,
+                Kind.LIST_HEADINGS,
+                Kind.HELP,
+                Kind.READ_NEXT,
+                Kind.READ_PREV,
+                Kind.OCR_READ,
+                Kind.READ_CLIPBOARD,
+            ):
                 self.last_activity = intent.kind
             return handled
         steps, clarification = plan(intent)
         if clarification:
             from relay.intent.fuzzy import closest
+
             near = closest(utterance)
             if near is not None:
                 phrase, safe, _score = near
-                if safe:                       # read-only: do it, and say how we heard it
+                if safe:  # read-only: do it, and say how we heard it
                     self.say(f"I think you meant: {phrase}.", _REQ)
                     return self.handle(phrase)
                 self.say(f"Did you mean: {phrase}? Say yes or no.", _REQ)
@@ -372,8 +506,11 @@ class Session:
             if self.assistant is not None and not self._from_assistant:
                 return self.ask(utterance)
             self.step_failed()
-            self.say(f"Sorry, I didn't understand \"{utterance.strip()}\". "
-                     "Say help to hear what I can do.", _REQ)
+            self.say(
+                f'Sorry, I didn\'t understand "{utterance.strip()}". '
+                "Say help to hear what I can do.",
+                _REQ,
+            )
             return []
         self.last_activity = intent.kind
         return self.runner.run(steps, cancel=self.cancel)
@@ -383,8 +520,11 @@ class Session:
         """Stream an AI answer, speaking each sentence the moment it's complete. A
         suggested command is announced and then run through the normal safety gate."""
         if self.assistant is None:
-            self.say("The AI assistant isn't set up on this computer, so I can only do "
-                     "my built-in commands. Say help to hear them.", _REQ)
+            self.say(
+                "The AI assistant isn't set up on this computer, so I can only do "
+                "my built-in commands. Say help to hear them.",
+                _REQ,
+            )
             return []
         self._answer_cancel.clear()
         first = threading.Event()
@@ -397,19 +537,36 @@ class Session:
 
         done = threading.Event()
 
-        def thinking_cue() -> None:            # soft ticks while the answer is slow to start
+        def thinking_cue() -> None:  # soft ticks while the answer is slow to start
             from relay.audio.earcons import earcon
+
             wait = 1.2
             while not done.wait(wait) and not first.is_set():
                 if self.speech is not None:
                     self.speech.play(*earcon("heard"))
                 self._emit("assistant.thinking", {})
                 wait = 2.5
+
         threading.Thread(target=thinking_cue, name="thinking-cue", daemon=True).start()
         try:
-            kind, payload = self.assistant.respond(
-                question, speak, context=self._assistant_context(), page_text=page_text,
-                cancel=self._answer_cancel)
+            mode = getattr(self, "mode", "general")
+            try:
+                kind, payload = self.assistant.respond(
+                    question,
+                    speak,
+                    context=self._assistant_context(),
+                    page_text=page_text,
+                    task_mode=mode,
+                    cancel=self._answer_cancel,
+                )
+            except TypeError:
+                kind, payload = self.assistant.respond(
+                    question,
+                    speak,
+                    context=self._assistant_context(),
+                    page_text=page_text,
+                    cancel=self._answer_cancel,
+                )
         finally:
             done.set()
         if kind == "command" and payload:
@@ -419,17 +576,20 @@ class Session:
                 return self.handle(payload)
             finally:
                 self._from_assistant = False
-        if kind == "plan" and payload:                 # several steps, each a safe command
+        if kind == "plan" and payload:  # several steps, each a safe command
             self._from_assistant = True
             try:
                 return self.run_steps(list(payload))
             finally:
                 self._from_assistant = False
         if kind == "offline":
-            self.say("I can't reach the AI assistant right now, so I can only do my "
-                     "built-in commands. Say help to hear them.", _REQ)
+            self.say(
+                "I can't reach the AI assistant right now, so I can only do my "
+                "built-in commands. Say help to hear them.",
+                _REQ,
+            )
         elif payload:
-            self.runner.last_said = payload     # so "repeat" repeats the answer
+            self.runner.last_said = payload  # so "repeat" repeats the answer
         self.last_activity = "answer"
         return []
 
@@ -437,6 +597,7 @@ class Session:
     def _assistant_context() -> str:
         try:
             from relay.system.windows import _friendly_app, foreground
+
             fg = foreground()
             return f"The user is currently in {_friendly_app(fg.app)}." if fg else ""
         except Exception:
@@ -446,12 +607,16 @@ class Session:
     def _on_confirm_needed(self, decision, target_label, retry) -> None:
         self.say(decision.spoken_summary, _CONF)
         if decision.confirmation is ConfirmationStrength.KEYBOARD:
-            self.say("This one is especially sensitive. Please confirm with your keyboard "
-                     "or Windows sign-in — I won't do it by voice alone.", _CONF)
+            self.say(
+                "This one is especially sensitive. Please confirm with your keyboard "
+                "or Windows sign-in — I won't do it by voice alone.",
+                _CONF,
+            )
             return  # not voice-confirmable
         phrase = confirmation_phrase(target_label, decision.risk.value)
-        self._pending = PendingConfirmation(phrase=phrase, summary=decision.spoken_summary,
-                                            retry=retry)
+        self._pending = PendingConfirmation(
+            phrase=phrase, summary=decision.spoken_summary, retry=retry
+        )
         self.say(f"To confirm, say: {phrase}. Or say cancel.", _CONF)
         self._rearm_voice()
 
@@ -493,6 +658,7 @@ class Session:
             self.bus.emit("reminder.due", text=text)
         if self.speech is not None:
             from relay.audio.earcons import earcon
+
             audio, sr = earcon("alert")
             self.speech.play(audio, sr)
         when = ""
@@ -508,6 +674,7 @@ class Session:
         k, s = intent.kind, intent.slots
         if k == Kind.CAPABILITIES:
             from relay.workflows import spoken_summary
+
             self.say(spoken_summary(), _REQ)
         elif k == Kind.SET_MODE:
             mode = s["mode"]
@@ -529,6 +696,7 @@ class Session:
                 return []
             snap = self.worker.observe(3.0)
             from relay.memory.task_context import reading_order
+
             els = reading_order([e for e in (snap.elements if snap else []) if e.name])
             if not els:
                 self.say("There's nothing to move through here.", _REQ)
@@ -568,8 +736,11 @@ class Session:
                 if ok:
                     self.notes.add(fact)
                 self._last_pref = ("", f"note:{fact[:40]}") if ok else None
-                self.say("I've noted that." if ok else
-                         "I won't store that — it looks sensitive, so I'm keeping it out.")
+                self.say(
+                    "I've noted that."
+                    if ok
+                    else "I won't store that — it looks sensitive, so I'm keeping it out."
+                )
         elif k == Kind.WHAT_REMEMBER:
             summary = self.store.remember_summary()
             n = self.notes.count()
@@ -579,8 +750,11 @@ class Session:
         elif k == Kind.WHY_REMEMBER:
             if self._last_pref:
                 why = self.store.why(self._last_pref[1], self._last_pref[0])
-                self.say(f"I remember that because you told me — provenance: {why}." if why
-                         else "I'm not sure which memory you mean.")
+                self.say(
+                    f"I remember that because you told me — provenance: {why}."
+                    if why
+                    else "I'm not sure which memory you mean."
+                )
             else:
                 self.say("I'm not sure which memory you mean.")
         elif k == Kind.FORGET:
@@ -594,17 +768,161 @@ class Session:
             self.say("I've cleared your task history and saved summaries.")
         elif k == Kind.EXPORT_PREFS:
             data = self.store.export_prefs()
-            self.say(f"You have {len(data['preferences'])} saved preference(s). "
-                     "I can write them to a file you choose.")
+            self.say(
+                f"You have {len(data['preferences'])} saved preference(s). "
+                "I can write them to a file you choose."
+            )
         elif k == Kind.WHAT_DOING:
             tid = latest_task_id(self.conn)
-            self.say(reconcile(self.journal, tid).spoken if tid
-                     else "I don't have a record of a task in progress.")
+            self.say(
+                reconcile(self.journal, tid).spoken
+                if tid
+                else "I don't have a record of a task in progress."
+            )
+        return []
+
+    # ---- goal management (Gap 1) ----
+    def _handle_goal(self, intent):
+        k = intent.kind
+        if k == Kind.GOAL_STATUS:
+            g = self.goals.active_goal
+            if not g:
+                self.say(
+                    "You don't have an active goal right now. Say start goal followed by what you want to achieve.",
+                    _REQ,
+                )
+                return []
+            curr = g.current_step.description if g.current_step else "all steps completed"
+            self.say(
+                f"Goal: {g.title}. Mode: {g.mode}. Step {g.current_step_index + 1} of {len(g.steps)}: {curr}. Status: {g.status}.",
+                _REQ,
+            )
+            return []
+        if k == Kind.GOAL_START:
+            title = intent.slots.get("title") or "New Goal"
+            steps = ["Analyze task requirements", "Execute primary work", "Verify results"]
+            g = self.goals.start_goal(title=title, steps=steps)
+            self.say(
+                f"Started goal: {title}. I've set up 3 steps: {', '.join(s.description for s in g.steps)}. First step: {g.steps[0].description}.",
+                _REQ,
+            )
+            return []
+        if k == Kind.GOAL_PAUSE:
+            g = self.goals.pause_goal()
+            self.say(f"Paused goal: {g.title}." if g else "No active goal to pause.", _REQ)
+            return []
+        if k == Kind.GOAL_RESUME:
+            g = self.goals.resume_goal()
+            curr = g.current_step.description if g and g.current_step else "ready"
+            self.say(
+                f"Resumed goal: {g.title}. Current step: {curr}."
+                if g
+                else "No paused goal to resume.",
+                _REQ,
+            )
+            return []
+        if k == Kind.GOAL_CANCEL:
+            if self.goals.active_goal:
+                title = self.goals.active_goal.title
+                self.goals.active_goal.status = "cancelled"
+                self.goals.store.save_goal(self.goals.active_goal)
+                self.goals.active_goal = None
+                self.say(f"Cancelled goal: {title}.", _REQ)
+            else:
+                self.say("No active goal to cancel.", _REQ)
+            return []
+        if k == Kind.GOAL_NEXT:
+            if self.goals.active_goal:
+                g = self.goals.advance_step(evidence="advanced by voice")
+                if g.status == "completed":
+                    self.say(f"Goal completed: {g.title}! All steps finished.", _REQ)
+                else:
+                    curr = g.current_step.description if g.current_step else "done"
+                    self.say(f"Advanced step. Next: {curr}.", _REQ)
+            else:
+                self.say("No active goal to advance.", _REQ)
+            return []
+        return []
+
+    # ---- assignment workflow (Gap 1, 2, 3) ----
+    def _handle_assignment(self, intent):
+        k = intent.kind
+        if k == Kind.ASSIGNMENT_START:
+            summary = self.assignment.start_assignment_from_session(self)
+            self.say(summary, _REQ)
+            return []
+        if k == Kind.ASSIGNMENT_CHECKLIST:
+            summary = self.assignment.get_status_summary()
+            self.say(summary, _REQ)
+            return []
+        if k == Kind.ASSIGNMENT_STATUS:
+            if not self.assignment.active_assignment:
+                self.say("No active assignment. Say help me complete my assignment to begin.", _REQ)
+            else:
+                a = self.assignment.active_assignment
+                self.say(
+                    f"Assignment: {a.course} {a.title}. Status: {a.status}. Deadline: {a.deadline or 'not specified'}.",
+                    _REQ,
+                )
+            return []
+        if k == Kind.ASSIGNMENT_SUBMIT:
+            if not self.assignment.active_assignment:
+                self.say(
+                    "No active assignment to submit. Say help me complete my assignment first.",
+                    _REQ,
+                )
+                return []
+            a = self.assignment.active_assignment
+            missing = self.assignment.verify_checklist(a)
+            if missing:
+                self.say(
+                    f"Warning: {len(missing)} rubric criteria are not yet marked complete: {missing[0]}. "
+                    "Are you sure you want to proceed to submission?",
+                    _CONF,
+                )
+            file_name = f"{a.title.replace(' ', '_')}.pdf"
+            readback = f"Submit {file_name} to {a.course} {a.title} now?"
+
+            def do_submit():
+                snap = self.worker.live or self.worker.observe(2.0)
+                screen_text = " ".join(e.name for e in snap.elements) if snap else ""
+                receipt = self.assignment.verify_submission_receipt(screen_text, file_name)
+                if receipt["verified"]:
+                    self.say(f"Assignment submitted! Confirmed receipt for {file_name}.", _REQ)
+                else:
+                    self.say(
+                        f"Submission recorded, but receipt verification was uncertain: {receipt['status']}.",
+                        _REQ,
+                    )
+
+            self.ask_phrase("confirm submit assignment", readback, do_submit)
+            return []
+        return []
+
+    # ---- workspace agent (Gap 1, 4) ----
+    def _handle_workspace(self, intent):
+        k = intent.kind
+        if k == Kind.WORKSPACE_TEST:
+            self.say("Running workspace tests.", _REQ)
+            ok, summary = self.workspace.run_tests(["uv", "run", "pytest", "-q"])
+            self.say(f"Test results: {summary}", _REQ)
+            return []
+        if k == Kind.WORKSPACE_STATUS:
+            files = self.workspace.list_files()
+            self.say(
+                f"Workspace contains {len(files)} files. Root is {self.workspace.root.name}.", _REQ
+            )
+            return []
+        if k == Kind.WORKSPACE_DIFF:
+            diff_text = self.workspace.get_recent_diff_summary()
+            self.say(diff_text, _REQ)
+            return []
         return []
 
     @staticmethod
     def _app_key(app: str) -> str:
         from relay.planner.runner import _APP_EXE
+
         a = app.lower().strip()
         return _APP_EXE.get(a, a if a.endswith(".exe") else (f"{a}.exe" if a else ""))
 
@@ -627,8 +945,11 @@ class Session:
             self._pending = None
             self.reader.stop()
             self.set_dictation(False)
-            self.say("Emergency stop. I've stopped everything. Say continue when you want me "
-                     "to work again.", pol.Priority.CRITICAL)
+            self.say(
+                "Emergency stop. I've stopped everything. Say continue when you want me "
+                "to work again.",
+                pol.Priority.CRITICAL,
+            )
         elif command == Command.CANCEL_TASK:
             self.cancel.set()
             self._answer_cancel.set()
@@ -642,15 +963,22 @@ class Session:
         elif command == Command.PAUSE:
             self.cancel.set()
             was = self.reader.stop()
-            self.say("Paused. Say continue when you're ready." if not was else
-                     "Paused. Say continue to keep reading.", _CONF)
+            self.say(
+                "Paused. Say continue when you're ready."
+                if not was
+                else "Paused. Say continue to keep reading.",
+                _CONF,
+            )
         elif command == Command.CONTINUE:
             if self.emergency.is_engaged:
                 self.emergency.reset()
                 self.cancel.clear()
                 self.say("Emergency stop cleared. I'm ready.", _CONF)
-            elif self.reader.has_content and not self.reader.reading \
-                    and self.last_activity == "reading":
+            elif (
+                self.reader.has_content
+                and not self.reader.reading
+                and self.last_activity == "reading"
+            ):
                 self.reader.resume()
             else:
                 self.cancel.clear()

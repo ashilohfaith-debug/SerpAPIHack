@@ -29,12 +29,13 @@ SR = 16000
 def to_frames(audio: np.ndarray, sr: int, pad_s: float = 0.6) -> list[bytes]:
     if sr != SR:
         n = int(len(audio) * SR / sr)
-        audio = np.interp(np.linspace(0, len(audio), n, endpoint=False),
-                          np.arange(len(audio)), audio)
+        audio = np.interp(
+            np.linspace(0, len(audio), n, endpoint=False), np.arange(len(audio)), audio
+        )
     pad = np.zeros(int(SR * pad_s))
     pcm = (np.clip(np.concatenate([pad, audio, pad, pad]), -1, 1) * 32767).astype(np.int16)
     raw = pcm.tobytes()
-    return [raw[i:i + FRAME_BYTES] for i in range(0, len(raw) - FRAME_BYTES, FRAME_BYTES)]
+    return [raw[i : i + FRAME_BYTES] for i in range(0, len(raw) - FRAME_BYTES, FRAME_BYTES)]
 
 
 def main() -> int:
@@ -51,14 +52,15 @@ def main() -> int:
     from relay.config import Config
     from relay.envfile import load_env
     from relay.llm import Assistant, Router, routes_from_config
+
     load_env()
-    routes = routes_from_config(Config.load())         # AI answers too, if a router is set
+    routes = routes_from_config(Config.load())  # AI answers too, if a router is set
     assistant = Assistant(Router(routes)) if routes else None
-    s = Session(speak=lambda t: (spoken.append(t), speech.say(t)), db_path=":memory:",
-                assistant=assistant)
+    s = Session(
+        speak=lambda t: (spoken.append(t), speech.say(t)), db_path=":memory:", assistant=assistant
+    )
     d = Dispatcher(s)
-    loop = VoiceLoop(d.submit, stt=WhisperSTT(), speech=speech, wake_required=True,
-                     threaded=False)
+    loop = VoiceLoop(d.submit, stt=WhisperSTT(), speech=speech, wake_required=True, threaded=False)
 
     def feed(text: str, ptt: bool = False) -> list[str]:
         spoken.clear()
@@ -69,23 +71,23 @@ def main() -> int:
         for f in to_frames(audio, sr):
             loop.on_frame(f)
         time.sleep(0.2)
-        for _ in range(200):                    # wait for the command to finish
+        for _ in range(200):  # wait for the command to finish
             if not d.busy and not speech.is_speaking:
                 break
             time.sleep(0.05)
-        time.sleep(0.4)                           # clear the half-duplex tail
+        time.sleep(0.4)  # clear the half-duplex tail
         return list(spoken)
 
     cases = [
         ("Relay, what time is it?", False, "It's"),
         ("Relay, what is twenty five times four?", False, "is 100"),
         ("Relay, take a note, buy milk.", False, "Noted"),
-        ("Relay, read my notes.", False, "milk"),     # "buy"/"by" sound alike to Whisper
+        ("Relay, read my notes.", False, "milk"),  # "buy"/"by" sound alike to Whisper
         ("Relay, how much battery do I have?", False, "Battery"),
-        ("What's the date today?", True, "Today is"),           # push-to-talk, no wake word
-        ("Open notepad and type something.", False, None),       # NOT addressed: ignored
+        ("What's the date today?", True, "Today is"),  # push-to-talk, no wake word
+        ("Open notepad and type something.", False, None),  # NOT addressed: ignored
     ]
-    if assistant is not None:        # not a built-in command: answered by the AI router
+    if assistant is not None:  # not a built-in command: answered by the AI router
         cases.insert(-1, ("Relay, what is the capital of Japan?", False, "Tokyo"))
     ok_all = True
     try:
@@ -108,6 +110,7 @@ def main() -> int:
 
         def slow_player(audio, sr_, stop):
             stop.wait(3.0)
+
         speech._player = slow_player
         speech.say("I am speaking a long sentence right now.")
         time.sleep(0.3)
@@ -116,8 +119,10 @@ def main() -> int:
         time.sleep(0.5)
         heard_self = any(o.startswith("It's") for o in spoken)
         speech.interrupt()
-        print(f"[{'PASS' if not heard_self else 'FAIL'}] half-duplex: mic ignored while "
-              f"RELAY speaks ({'no command captured' if not heard_self else 'captured!'})")
+        print(
+            f"[{'PASS' if not heard_self else 'FAIL'}] half-duplex: mic ignored while "
+            f"RELAY speaks ({'no command captured' if not heard_self else 'captured!'})"
+        )
         ok_all &= not heard_self
     finally:
         d.stop()

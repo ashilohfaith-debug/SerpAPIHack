@@ -14,8 +14,19 @@ from relay.perception.semantic import ScreenSnapshot
 
 _MAX_LISTED = 3
 # window-frame controls every window has — not worth a blind user's attention
-CHROME_NAMES = {"minimize", "maximize", "restore", "close", "system", "system menu bar",
-                "application", "title bar", "restore down", "minimise", "maximise"}
+CHROME_NAMES = {
+    "minimize",
+    "maximize",
+    "restore",
+    "close",
+    "system",
+    "system menu bar",
+    "application",
+    "title bar",
+    "restore down",
+    "minimise",
+    "maximise",
+}
 _GENERIC_ROLES = {"Pane", "Window", "Group", "Custom", "TitleBar", ""}
 
 
@@ -34,15 +45,18 @@ def diff(old: ScreenSnapshot | None, new: ScreenSnapshot | None) -> list[str]:
         return []
 
     changes: list[str] = []
-    switched = (old.foreground_app, old.foreground_title) != (new.foreground_app,
-                                                              new.foreground_title)
+    switched = (old.foreground_app, old.foreground_title) != (
+        new.foreground_app,
+        new.foreground_title,
+    )
 
     if switched:
         if new.foreground_title:
             changes.append(f"You're now in {new.foreground_title}.")
-        else:   # a background/system window took focus: don't read out a process name
-            changes.append("No window is in focus right now. Say what windows are open, "
-                           "or switch to one.")
+        else:  # a background/system window took focus: don't read out a process name
+            changes.append(
+                "No window is in focus right now. Say what windows are open, or switch to one."
+            )
 
     old_dlg = {d.title for d in old.dialogs}
     new_dlg = {d.title for d in new.dialogs}
@@ -62,7 +76,7 @@ def diff(old: ScreenSnapshot | None, new: ScreenSnapshot | None) -> list[str]:
         elif not name and role not in _GENERIC_ROLES:
             changes.append(f"Focus is now on a {role}.")
 
-    if not switched:   # a whole new window: its controls aren't "changes" to list
+    if not switched:  # a whole new window: its controls aren't "changes" to list
         old_named = {(e.name, e.role) for e in meaningful(old.elements) if e.name}
         new_named = {(e.name, e.role) for e in meaningful(new.elements) if e.name}
         appeared = [n for (n, _) in sorted(new_named - old_named)][:_MAX_LISTED]
@@ -73,8 +87,12 @@ def diff(old: ScreenSnapshot | None, new: ScreenSnapshot | None) -> list[str]:
             changes.append("No longer there: " + ", ".join(disappeared) + ".")
 
     # value change on the focused element (e.g. text field content)
-    if old.focus and new.focus and old.focus.name == new.focus.name \
-            and (old.focus.value or "") != (new.focus.value or ""):
+    if (
+        old.focus
+        and new.focus
+        and old.focus.name == new.focus.name
+        and (old.focus.value or "") != (new.focus.value or "")
+    ):
         changes.append("The text there changed.")
 
     return changes

@@ -26,8 +26,12 @@ WAKE_PROMPT = "Hey Relay."
 
 
 class WhisperSTT:
-    def __init__(self, model_name: str = "tiny.en", compute_type: str = "int8",
-                 prompt: str | None = WAKE_PROMPT) -> None:
+    def __init__(
+        self,
+        model_name: str = "tiny.en",
+        compute_type: str = "int8",
+        prompt: str | None = WAKE_PROMPT,
+    ) -> None:
         self.model_name = model_name
         self.compute_type = compute_type
         self.prompt = prompt
@@ -36,17 +40,26 @@ class WhisperSTT:
     def _ensure(self):
         if self._model is None:
             from faster_whisper import WhisperModel
+
             whisper_dir = models_dir() / "whisper"
             whisper_dir.mkdir(parents=True, exist_ok=True)
             # Once the model is on disk, never contact the model hub again: offline
             # mode must not make a network request (or wait on one) at every start.
             local = any(whisper_dir.rglob("model.bin"))
-            log.info("loading STT model %s (%s, %s)", self.model_name, self.compute_type,
-                     "local files only" if local else "may download")
+            log.info(
+                "loading STT model %s (%s, %s)",
+                self.model_name,
+                self.compute_type,
+                "local files only" if local else "may download",
+            )
             from relay import inference_threads
+
             self._model = WhisperModel(
-                self.model_name, device="cpu", compute_type=self.compute_type,
-                download_root=str(whisper_dir), local_files_only=local,
+                self.model_name,
+                device="cpu",
+                compute_type=self.compute_type,
+                download_root=str(whisper_dir),
+                local_files_only=local,
                 cpu_threads=inference_threads(),
             )
         return self._model
@@ -57,9 +70,13 @@ class WhisperSTT:
             return ""
         audio = np.asarray(audio, dtype=np.float32)
         model = self._ensure()
-        segments, _ = model.transcribe(audio, language=language, beam_size=1,
-                                       condition_on_previous_text=False,
-                                       initial_prompt=self.prompt)
+        segments, _ = model.transcribe(
+            audio,
+            language=language,
+            beam_size=1,
+            condition_on_previous_text=False,
+            initial_prompt=self.prompt,
+        )
         return " ".join(s.text for s in segments).strip()
 
     def unload(self) -> None:

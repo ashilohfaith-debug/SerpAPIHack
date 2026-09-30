@@ -29,16 +29,25 @@ from relay.diagnostics import get_logger
 
 log = get_logger("audio.devices")
 
-_FORM_FACTOR = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E} 0"   # PKEY_AudioEndpoint_FormFactor
-_BUS = "{A45C254E-DF1C-4EFD-8020-67D146A850E0} 24"          # PKEY_Device_EnumeratorName
-_PHYSICAL = "{B3F8FA53-0004-438E-9003-51A46E139BFC} 2"      # the physical device behind it
+_FORM_FACTOR = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E} 0"  # PKEY_AudioEndpoint_FormFactor
+_BUS = "{A45C254E-DF1C-4EFD-8020-67D146A850E0} 24"  # PKEY_Device_EnumeratorName
+_PHYSICAL = "{B3F8FA53-0004-438E-9003-51A46E139BFC} 2"  # the physical device behind it
 HEADPHONES, HEADSET, HANDSET = 3, 5, 6
-_HEAD_WORDS = ("headphone", "headset", "earphone", "earbud", "buds", "airpods", "hands-free",
-               "handsfree", "neckband")
+_HEAD_WORDS = (
+    "headphone",
+    "headset",
+    "earphone",
+    "earbud",
+    "buds",
+    "airpods",
+    "hands-free",
+    "handsfree",
+    "neckband",
+)
 _HANDS_FREE = ("hands-free", "handsfree", "hands free")
 MAPPER_OUT = "Microsoft Sound Mapper - Output"
 MAPPER_IN = "Microsoft Sound Mapper - Input"
-_RENDER, _CAPTURE, _CONSOLE = 0, 1, 0                        # EDataFlow / ERole
+_RENDER, _CAPTURE, _CONSOLE = 0, 1, 0  # EDataFlow / ERole
 
 
 @dataclass(frozen=True)
@@ -85,8 +94,7 @@ def spoken_name(name: str) -> str:
     if not m:
         return clean
     kind, device = m.group(1).strip(), m.group(2).strip()
-    device = re.sub(r"\s+(?:stereo|hands-?free(?:\s+ag\s+audio)?)$", "", device,
-                    flags=re.I).strip()
+    device = re.sub(r"\s+(?:stereo|hands-?free(?:\s+ag\s+audio)?)$", "", device, flags=re.I).strip()
     return f"{device} {kind.lower()}" if device else kind
 
 
@@ -104,11 +112,13 @@ class _Probe:
 
     def __init__(self) -> None:
         import comtypes
+
         try:
             comtypes.CoInitialize()
         except OSError:
             pass
         from pycaw.pycaw import AudioUtilities
+
         self._au = AudioUtilities
         self._enum = AudioUtilities.GetDeviceEnumerator()
         self._known: dict[str, Endpoint] = {}
@@ -121,9 +131,9 @@ class _Probe:
             dev = self._enum.GetDefaultAudioEndpoint(flow, _CONSOLE)
             dev_id = str(dev.GetId())
         except Exception:
-            return None                        # no device of this kind right now
+            return None  # no device of this kind right now
         ep = self._known.get(dev_id)
-        if ep is None:                         # a device we haven't seen: read its details
+        if ep is None:  # a device we haven't seen: read its details
             name, ff, with_mic = "", -1, False
             try:
                 name, props = self._details(dev)
@@ -138,7 +148,8 @@ class _Probe:
 
     def _details(self, dev) -> tuple[str, dict]:
         import warnings
-        with warnings.catch_warnings():        # pycaw warns about unreadable properties
+
+        with warnings.catch_warnings():  # pycaw warns about unreadable properties
             warnings.simplefilter("ignore")
             d = self._au.CreateDevice(dev)
         return str(d.FriendlyName or ""), dict(d.properties or {})
@@ -151,7 +162,7 @@ class _Probe:
         if not physical or not (bus == "USB" or bus.startswith("BTH")):
             return False
         try:
-            mics = self._enum.EnumAudioEndpoints(_CAPTURE, 1)       # DEVICE_STATE_ACTIVE
+            mics = self._enum.EnumAudioEndpoints(_CAPTURE, 1)  # DEVICE_STATE_ACTIVE
             for i in range(mics.GetCount()):
                 if self._details(mics.Item(i))[1].get(_PHYSICAL) == physical:
                     return True
@@ -172,6 +183,7 @@ def default_endpoints() -> tuple[Optional[Endpoint], Optional[Endpoint]]:
 
 def _mme_devices():
     import sounddevice as sd
+
     try:
         mme = next(i for i, h in enumerate(sd.query_hostapis()) if h["name"] == "MME")
     except StopIteration:
@@ -217,6 +229,7 @@ def use_windows_defaults() -> None:
     """Make every stream follow Windows' default devices (the Sound Mapper)."""
     try:
         import sounddevice as sd
+
         cur_in, cur_out = sd.default.device
         i, o = mapper_device("input"), mapper_device("output")
         sd.default.device = (cur_in if i is None else i, cur_out if o is None else o)
@@ -224,16 +237,21 @@ def use_windows_defaults() -> None:
         log.debug("could not select the Sound Mapper: %s", e)
 
 
-Change = Callable[[Optional[Endpoint], Optional[Endpoint], Optional[Endpoint],
-                   Optional[Endpoint]], None]
+Change = Callable[
+    [Optional[Endpoint], Optional[Endpoint], Optional[Endpoint], Optional[Endpoint]], None
+]
 
 
 class DeviceWatch:
     """Reports when Windows' default output or input device changes:
     ``on_change(old_output, new_output, old_input, new_input)``."""
 
-    def __init__(self, on_change: Change, probe_factory: Callable[[], Callable] = _Probe,
-                 interval: float = 0.5) -> None:
+    def __init__(
+        self,
+        on_change: Change,
+        probe_factory: Callable[[], Callable] = _Probe,
+        interval: float = 0.5,
+    ) -> None:
         self.on_change = on_change
         self._factory = probe_factory
         self.interval = interval
@@ -254,7 +272,7 @@ class DeviceWatch:
             return False
         out, inp = self._probe()
         if out is None and inp is None and (self.output or self.input):
-            return False                       # a Core Audio hiccup, not "no devices"
+            return False  # a Core Audio hiccup, not "no devices"
         if same(out, self.output) and same(inp, self.input):
             return False
         old_out, old_in = self.output, self.input
@@ -268,7 +286,7 @@ class DeviceWatch:
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="audio-devices", daemon=True)
         self._thread.start()
-        self._ready.wait(3.0)                  # initial devices known before start-up goes on
+        self._ready.wait(3.0)  # initial devices known before start-up goes on
 
     def _run(self) -> None:
         try:

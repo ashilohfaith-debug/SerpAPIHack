@@ -28,7 +28,7 @@ class NotesStore:
         rows = self.conn.execute(
             "SELECT id, text, created FROM notes ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
-        return [dict(r) for r in reversed(rows)]      # oldest first when read aloud
+        return [dict(r) for r in reversed(rows)]  # oldest first when read aloud
 
     def count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) c FROM notes").fetchone()["c"]

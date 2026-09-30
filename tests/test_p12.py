@@ -10,9 +10,9 @@ def test_single_instance_second_acquire_fails_then_succeeds_after_release():
     a, b = SingleInstance("p12test"), SingleInstance("p12test")
     try:
         assert a.acquire() is True
-        assert b.acquire() is False          # locked by a
+        assert b.acquire() is False  # locked by a
         a.release()
-        assert b.acquire() is True           # free again
+        assert b.acquire() is True  # free again
     finally:
         a.release()
         b.release()
@@ -28,6 +28,7 @@ def test_single_instance_context_manager():
 
 def test_models_status_shape_and_text():
     from relay import models_manager
+
     rows = models_manager.status()
     assert isinstance(rows, list) and rows
     for r in rows:
@@ -53,14 +54,20 @@ class _FakeSession:
 
 def _loop(session, wake_required, stt=None):
     # a sentinel stt so VoiceLoop does not construct a real WhisperSTT
-    return VoiceLoop(session.handle, stt=stt or object(), wake_required=wake_required,
-                     say=session.say, play_earcon=session.earcons.append, threaded=False)
+    return VoiceLoop(
+        session.handle,
+        stt=stt or object(),
+        wake_required=wake_required,
+        say=session.say,
+        play_earcon=session.earcons.append,
+        threaded=False,
+    )
 
 
 def test_wake_required_ignores_unaddressed_speech():
     s = _FakeSession()
     _loop(s, True).on_transcript("open notepad and delete everything")
-    assert s.handled == []                    # never acted without the wake word
+    assert s.handled == []  # never acted without the wake word
 
 
 def test_wake_required_dispatches_command_after_wake_word():
@@ -74,7 +81,7 @@ def test_bare_wake_word_arms_listening_and_does_not_act():
     loop = _loop(s, True)
     loop.on_transcript("relay")
     assert s.handled == []
-    assert "listen" in s.earcons and loop._armed      # chirps, then takes the next command
+    assert "listen" in s.earcons and loop._armed  # chirps, then takes the next command
 
 
 def test_wake_word_mid_sentence_is_not_a_command():
@@ -97,7 +104,7 @@ def test_prompted_speech_strips_a_spoken_wake_word():
 
 def test_wake_off_ignores_ambient_speech():
     s = _FakeSession()
-    _loop(s, False).on_transcript("relay open notepad")   # not prompted, wake word off
+    _loop(s, False).on_transcript("relay open notepad")  # not prompted, wake word off
     assert s.handled == []
 
 
@@ -116,7 +123,7 @@ def test_on_utterance_survives_stt_error():
 
     s = _FakeSession()
     loop = _loop(s, False, stt=BadSTT())
-    loop.on_utterance(b"\x00\x01" * 100, prompted=True)      # must not raise
+    loop.on_utterance(b"\x00\x01" * 100, prompted=True)  # must not raise
     assert s.handled == []
     assert any("couldn't process" in t for t in s.said)
 
@@ -138,4 +145,4 @@ def test_near_miss_wake_word_only_with_a_real_command():
     loop.on_transcript("Really? How much battery do I have?")
     assert s.handled == ["How much battery do I have?"]
     loop.on_transcript("Really, that's great, thanks for telling me")
-    assert s.handled == ["How much battery do I have?"]     # conversation: ignored
+    assert s.handled == ["How much battery do I have?"]  # conversation: ignored

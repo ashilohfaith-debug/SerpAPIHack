@@ -34,6 +34,7 @@ def inference_threads() -> int:
     and never more than the physical cores (more threads than cores only contend)."""
     try:
         import psutil
+
         usable = len(psutil.Process().cpu_affinity())
         physical = psutil.cpu_count(logical=False) or usable
     except Exception:

@@ -24,6 +24,7 @@ def screen_reader_running() -> tuple[bool, str]:
     """Return (running, name). Empty name when none detected."""
     try:
         import psutil
+
         for p in psutil.process_iter(["name"]):
             name = (p.info.get("name") or "").lower()
             if name in _READERS:
@@ -45,6 +46,7 @@ class ScreenReaderWatch:
 
     def current(self) -> tuple[bool, str]:
         import time
+
         now = time.monotonic()
         if now - self._at > self.ttl:
             self._value = self._probe()
@@ -55,9 +57,11 @@ class ScreenReaderWatch:
 def coexistence_advice(reader_name: str) -> str:
     if not reader_name:
         return ""
-    return (f"I can tell {reader_name} is running. I'll stay out of its way — "
-            "I won't repeat what it already reads, and I won't take its shortcuts. "
-            "Just talk to me for anything you want me to do or explain.")
+    return (
+        f"I can tell {reader_name} is running. I'll stay out of its way — "
+        "I won't repeat what it already reads, and I won't take its shortcuts. "
+        "Just talk to me for anything you want me to do or explain."
+    )
 
 
 # ---- the Windows "screen reader present" flag ----
@@ -71,10 +75,10 @@ _SPI_GETSCREENREADER, _SPI_SETSCREENREADER, _SPIF_SENDCHANGE = 0x0046, 0x0047, 0
 
 def screen_reader_flag() -> bool:
     import ctypes
+
     value = ctypes.c_int(0)
     try:
-        ctypes.windll.user32.SystemParametersInfoW(_SPI_GETSCREENREADER, 0,
-                                                   ctypes.byref(value), 0)
+        ctypes.windll.user32.SystemParametersInfoW(_SPI_GETSCREENREADER, 0, ctypes.byref(value), 0)
     except Exception:
         return False
     return bool(value.value)
@@ -83,10 +87,12 @@ def screen_reader_flag() -> bool:
 def set_screen_reader_flag(on: bool) -> bool:
     """Set the flag; returns the previous value (to restore later)."""
     import ctypes
+
     previous = screen_reader_flag()
     try:
-        ctypes.windll.user32.SystemParametersInfoW(_SPI_SETSCREENREADER, 1 if on else 0,
-                                                   None, _SPIF_SENDCHANGE)
+        ctypes.windll.user32.SystemParametersInfoW(
+            _SPI_SETSCREENREADER, 1 if on else 0, None, _SPIF_SENDCHANGE
+        )
     except Exception:
         pass
     return previous

@@ -11,8 +11,16 @@ from .assistant import Assistant, validate_command
 from .client import LLMClient, Route, RouteError
 from .router import NoRoute, Router
 
-__all__ = ["Assistant", "LLMClient", "NoRoute", "Route", "RouteError", "Router",
-           "routes_from_config", "validate_command"]
+__all__ = [
+    "Assistant",
+    "LLMClient",
+    "NoRoute",
+    "Route",
+    "RouteError",
+    "Router",
+    "routes_from_config",
+    "validate_command",
+]
 
 
 def routes_from_config(cfg) -> list[Route]:
@@ -20,6 +28,7 @@ def routes_from_config(cfg) -> list[Route]:
     the file. The key belongs to the developer's router or gateway — users never need
     one of their own. Empty URL = assistant off (offline commands only)."""
     from relay.envfile import offline_forced
+
     url = os.environ.get("RELAY_LLM_URL", "").strip() or (cfg.llm_url or "").strip()
     key = os.environ.get("RELAY_LLM_KEY", "").strip() or (cfg.llm_key or "").strip()
     if not url or offline_forced():
@@ -27,24 +36,35 @@ def routes_from_config(cfg) -> list[Route]:
     url = _local_router(url)
     models = [m for m in (cfg.llm_models or []) if m] or ["auto:fast"]
     hints: dict[str, float] = {}
-    if models == ["auto:fast", "auto"]:              # default: use the tuned ranking
+    if models == ["auto:fast", "auto"]:  # default: use the tuned ranking
         from relay.llm.tune import best_models
-        fastest = best_models(url, 3)                 # e.g. gemini-3.5-flash-lite 1.6 s
+
+        fastest = best_models(url, 3)  # e.g. gemini-3.5-flash-lite 1.6 s
         if fastest:
             hints = dict(fastest)
-            hints["auto:fast"] = max(hints.values()) + 1.0   # the router's own pick: last
+            hints["auto:fast"] = max(hints.values()) + 1.0  # the router's own pick: last
             models = [m for m, _t in fastest] + ["auto:fast"]
     headers = {"X-Relay-Device": _device_id()}
-    return [Route(name=f"{m}", base_url=url, api_key=key, model=m,
-                  timeout=float(cfg.llm_timeout), extra_headers=headers,
-                  ttft_hint=hints.get(m, 0.0)) for m in models]
+    return [
+        Route(
+            name=f"{m}",
+            base_url=url,
+            api_key=key,
+            model=m,
+            timeout=float(cfg.llm_timeout),
+            extra_headers=headers,
+            ttft_hint=hints.get(m, 0.0),
+        )
+        for m in models
+    ]
 
 
-_LOCAL_PORTS = (31415, 3001)        # FreeLLMAPI desktop app, then Docker / source
+_LOCAL_PORTS = (31415, 3001)  # FreeLLMAPI desktop app, then Docker / source
 
 
 def _listening(host: str, port: int) -> bool:
     import socket
+
     try:
         with socket.create_connection((host, port), timeout=0.3):
             return True
@@ -56,6 +76,7 @@ def _local_router(url: str) -> str:
     """A router on THIS computer at the wrong port (the FreeLLMAPI desktop app uses
     31415, Docker and source installs 3001): use the port that is actually open."""
     from urllib.parse import urlparse
+
     u = urlparse(url)
     host = u.hostname or ""
     if host not in ("localhost", "127.0.0.1", "::1") or not u.port:
@@ -74,6 +95,7 @@ def _device_id() -> str:
     import uuid
 
     from relay.config import user_data_dir
+
     p = user_data_dir() / "device_id"
     try:
         return p.read_text(encoding="utf-8").strip()

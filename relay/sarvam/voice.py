@@ -25,6 +25,7 @@ log = get_logger("sarvam")
 def settings() -> dict:
     """Sarvam settings from the environment (.env). Empty key = Sarvam off."""
     from relay.envfile import offline_forced
+
     return {
         "key": "" if offline_forced() else os.environ.get("SARVAM_API_KEY", "").strip(),
         "tts_model": os.environ.get("SARVAM_TTS_MODEL", "bulbul:v3").strip() or "bulbul:v3",
@@ -32,8 +33,8 @@ def settings() -> dict:
         "language": os.environ.get("SARVAM_LANGUAGE", "en-IN").strip() or "en-IN",
         # one key = both: Bulbul voice AND Saaras recognition (SARVAM_STT=off keeps only
         # the voice)
-        "stt": os.environ.get("SARVAM_STT", "on").strip().lower() not in ("0", "off", "false",
-                                                                          "no"),
+        "stt": os.environ.get("SARVAM_STT", "on").strip().lower()
+        not in ("0", "off", "false", "no"),
         "stt_model": os.environ.get("SARVAM_STT_MODEL", "saaras:v3").strip() or "saaras:v3",
         # your own proxy in front of Sarvam (it adds the real key), for public builds
         "base": os.environ.get("SARVAM_BASE_URL", "").strip() or API_BASE,
@@ -52,10 +53,11 @@ class _Fallback:
             if self._warned:
                 return
             self._warned = True
-        self._on_fallback("I can't reach the online voice right now, so I'm using my "
-                          "offline voice." if err.offline else
-                          "The online voice returned an error, so I'm using my offline "
-                          "voice.")
+        self._on_fallback(
+            "I can't reach the online voice right now, so I'm using my offline voice."
+            if err.offline
+            else "The online voice returned an error, so I'm using my offline voice."
+        )
 
     def recovered(self) -> None:
         self._warned = False
@@ -64,9 +66,15 @@ class _Fallback:
 class SarvamTTS:
     """Bulbul voice with the offline voice as a safety net."""
 
-    def __init__(self, client: SarvamClient, offline_tts, language: str = "en-IN",
-                 speaker: str = "", model: str = "bulbul:v3",
-                 on_fallback: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self,
+        client: SarvamClient,
+        offline_tts,
+        language: str = "en-IN",
+        speaker: str = "",
+        model: str = "bulbul:v3",
+        on_fallback: Callable[[str], None] | None = None,
+    ) -> None:
         self.client = client
         self.offline = offline_tts
         self.language = language
@@ -81,11 +89,12 @@ class SarvamTTS:
             self.offline.set_rate(rate)
 
     def synth_to_array(self, text: str):
-        if not text.strip() or looks_sensitive(text):   # secrets never leave the PC
+        if not text.strip() or looks_sensitive(text):  # secrets never leave the PC
             return self.offline.synth_to_array(text)
         try:
-            out = self.client.tts(text, self.language, speaker=self.speaker, pace=self.rate,
-                                  model=self.model)
+            out = self.client.tts(
+                text, self.language, speaker=self.speaker, pace=self.rate, model=self.model
+            )
             self._fb.recovered()
             return out
         except SarvamError as e:
@@ -96,8 +105,13 @@ class SarvamTTS:
 class SarvamSTT:
     """Saaras speech recognition with offline Whisper as the fallback."""
 
-    def __init__(self, client: SarvamClient, offline_stt, model: str = "saaras:v3",
-                 on_fallback: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self,
+        client: SarvamClient,
+        offline_stt,
+        model: str = "saaras:v3",
+        on_fallback: Callable[[str], None] | None = None,
+    ) -> None:
         self.client = client
         self.offline = offline_stt
         self.model = model
@@ -106,8 +120,7 @@ class SarvamSTT:
 
     def transcribe(self, audio) -> str:
         try:
-            text, lang = self.client.stt(float_to_wav(audio), mode="translate",
-                                         model=self.model)
+            text, lang = self.client.stt(float_to_wav(audio), mode="translate", model=self.model)
             self.last_language = lang
             self._fb.recovered()
             return text

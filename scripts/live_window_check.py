@@ -21,8 +21,9 @@ from relay.system import windows
 
 
 def main(ps1: str) -> int:
-    proc = subprocess.Popen(["powershell", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass",
-                             "-File", ps1], creationflags=0x08000000)
+    proc = subprocess.Popen(
+        ["powershell", "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", ps1]
+    )
     lines: list[str] = []
 
     def speak(t: str) -> None:
@@ -33,9 +34,11 @@ def main(ps1: str) -> int:
         if windows.find("relay test window"):
             break
         time.sleep(0.25)
+    time.sleep(0.5)
     s = Session(speak=speak, db_path=":memory:")
     results = {}
     try:
+
         def run(cmd: str) -> list[str]:
             print(f"\nUSER: {cmd}")
             start = len(lines)
@@ -43,6 +46,7 @@ def main(ps1: str) -> int:
             return lines[start:]
 
         out = run("switch to relay test window")
+        time.sleep(0.5)
         fg = windows.foreground()
         results["switch"] = bool(fg and "relay test window" in fg.title.lower())
         out = run("read the page")
@@ -52,24 +56,27 @@ def main(ps1: str) -> int:
         results["options"] = any("Say Hello" in o for o in out)
         out = run("click say hello")
         after = s.worker.observe(3.0)
-        label_changed = bool(after and any("hello clicked" in (e.name or "").lower()
-                                           for e in after.elements))
+        label_changed = bool(
+            after and any("hello clicked" in (e.name or "").lower() for e in after.elements)
+        )
         results["click_verified"] = label_changed and any("Done" in o for o in out)
         out = run("click delete everything")
         results["danger_needs_phrase"] = s._pending is not None and any(
-            "confirm delete" in o for o in out)
+            "confirm delete" in o for o in out
+        )
         run("cancel")
         after = s.worker.observe(3.0)
         results["danger_not_clicked"] = not any(
-            "delete was clicked" in (e.name or "").lower() for e in (after.elements if after
-                                                                      else []))
+            "delete was clicked" in (e.name or "").lower()
+            for e in (after.elements if after else [])
+        )
         run("close relay test window")
         time.sleep(0.5)
         results["closed"] = windows.find("relay test window") is None
     finally:
         s.close()
         if proc.poll() is None:
-            proc.terminate()      # our own test process only
+            proc.terminate()  # our own test process only
     print("\nResults:")
     for k, v in results.items():
         print(f"  [{'PASS' if v else 'FAIL'}] {k}")
@@ -80,5 +87,6 @@ def main(ps1: str) -> int:
 
 if __name__ == "__main__":
     from pathlib import Path
+
     default = Path(__file__).with_name("test_window.ps1")
     sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else str(default)))

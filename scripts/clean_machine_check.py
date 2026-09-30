@@ -31,8 +31,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SYSTEM32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
-VC_RUNTIME = ("msvcp140", "vcruntime140", "concrt140", "vcomp140", "msvcp140_1",
-              "msvcp140_2", "vcruntime140_1", "vccorlib140")
+VC_RUNTIME = (
+    "msvcp140",
+    "vcruntime140",
+    "concrt140",
+    "vcomp140",
+    "msvcp140_1",
+    "msvcp140_2",
+    "vcruntime140_1",
+    "vccorlib140",
+)
 
 
 def pe_imports(path: Path) -> list[str]:
@@ -41,20 +49,22 @@ def pe_imports(path: Path) -> list[str]:
     if data[:2] != b"MZ":
         return []
     pe = struct.unpack_from("<I", data, 0x3C)[0]
-    if data[pe:pe + 4] != b"PE\0\0":
+    if data[pe : pe + 4] != b"PE\0\0":
         return []
     nsec = struct.unpack_from("<H", data, pe + 6)[0]
     opt_size = struct.unpack_from("<H", data, pe + 20)[0]
     opt = pe + 24
     magic = struct.unpack_from("<H", data, opt)[0]
-    dd = opt + (112 if magic == 0x20B else 96)            # data directories
+    dd = opt + (112 if magic == 0x20B else 96)  # data directories
     sections = []
     sec = opt + opt_size
     for i in range(nsec):
-        va, vsize, raw_size, raw_ptr = (struct.unpack_from("<I", data, sec + 40 * i + 12)[0],
-                                        struct.unpack_from("<I", data, sec + 40 * i + 8)[0],
-                                        struct.unpack_from("<I", data, sec + 40 * i + 16)[0],
-                                        struct.unpack_from("<I", data, sec + 40 * i + 20)[0])
+        va, vsize, raw_size, raw_ptr = (
+            struct.unpack_from("<I", data, sec + 40 * i + 12)[0],
+            struct.unpack_from("<I", data, sec + 40 * i + 8)[0],
+            struct.unpack_from("<I", data, sec + 40 * i + 16)[0],
+            struct.unpack_from("<I", data, sec + 40 * i + 20)[0],
+        )
         sections.append((va, max(vsize, raw_size), raw_ptr))
 
     def off(rva):
@@ -68,7 +78,7 @@ def pe_imports(path: Path) -> list[str]:
         return data[o:end].decode("ascii", "replace")
 
     names = []
-    for index, entry_size, name_field in ((1, 20, 12), (13, 32, 4)):   # imports, delay
+    for index, entry_size, name_field in ((1, 20, 12), (13, 32, 4)):  # imports, delay
         rva = struct.unpack_from("<I", data, dd + 8 * index)[0]
         o = off(rva) if rva else None
         while o is not None and o + entry_size <= len(data):
@@ -83,8 +93,9 @@ def pe_imports(path: Path) -> list[str]:
 
 
 def dll_scan(bundle: Path) -> list[str]:
-    present = {p.name.lower() for p in bundle.rglob("*") if p.suffix.lower() in
-               (".dll", ".pyd", ".exe")}
+    present = {
+        p.name.lower() for p in bundle.rglob("*") if p.suffix.lower() in (".dll", ".pyd", ".exe")
+    }
     problems = []
     for f in bundle.rglob("*"):
         if f.suffix.lower() not in (".dll", ".pyd", ".exe"):
@@ -94,26 +105,48 @@ def dll_scan(bundle: Path) -> list[str]:
                 continue
             stem = dll.rsplit(".", 1)[0]
             if stem in VC_RUNTIME:
-                problems.append(f"{f.relative_to(bundle)} needs {dll} (Visual C++ runtime) "
-                                "— not bundled")
+                problems.append(
+                    f"{f.relative_to(bundle)} needs {dll} (Visual C++ runtime) — not bundled"
+                )
             elif not (SYSTEM32 / dll).exists():
-                problems.append(f"{f.relative_to(bundle)} needs {dll} — not bundled and not "
-                                "in Windows")
+                problems.append(
+                    f"{f.relative_to(bundle)} needs {dll} — not bundled and not in Windows"
+                )
     return sorted(set(problems))
 
 
 def clean_env(data_dir: Path, cache: Path) -> dict:
-    keep = {k: v for k, v in os.environ.items() if k.upper() in (
-        "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP", "USERPROFILE", "USERNAME",
-        "LOCALAPPDATA", "APPDATA", "HOMEDRIVE", "HOMEPATH", "PROGRAMDATA", "PATHEXT",
-        "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "SYSTEMDRIVE")}
+    keep = {
+        k: v
+        for k, v in os.environ.items()
+        if k.upper()
+        in (
+            "SYSTEMROOT",
+            "WINDIR",
+            "COMSPEC",
+            "TEMP",
+            "TMP",
+            "USERPROFILE",
+            "USERNAME",
+            "LOCALAPPDATA",
+            "APPDATA",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "PROGRAMDATA",
+            "PATHEXT",
+            "NUMBER_OF_PROCESSORS",
+            "PROCESSOR_ARCHITECTURE",
+            "OS",
+            "SYSTEMDRIVE",
+        )
+    }
     keep["PATH"] = f"{SYSTEM32};{SYSTEM32.parent};{SYSTEM32 / 'WindowsPowerShell' / 'v1.0'}"
     keep["RELAY_DATA_DIR"] = str(data_dir)
     keep["HF_HOME"] = str(cache)
     keep["HTTP_PROXY"] = keep["HTTPS_PROXY"] = "http://127.0.0.1:9"
     keep["NO_PROXY"] = ""
-    keep["RELAY_OFFLINE"] = "1"      # a bundled .env must not turn this offline proof online
-    keep["RELAY_PALETTE"] = "0"      # no on-screen palette from this background test
+    keep["RELAY_OFFLINE"] = "1"  # a bundled .env must not turn this offline proof online
+    keep["RELAY_PALETTE"] = "0"  # no on-screen palette from this background test
     return keep
 
 
@@ -122,7 +155,7 @@ def main() -> int:
     if not (src / "relay-cli.exe").exists():
         print("No packaged build found — run packaging/build.ps1 first.")
         return 2
-    (ROOT / "build").mkdir(exist_ok=True)       # same drive as dist; never fills up C:
+    (ROOT / "build").mkdir(exist_ok=True)  # same drive as dist; never fills up C:
     work = Path(tempfile.mkdtemp(prefix="relay_clean_", dir=str(ROOT / "build")))
     app = work / "Relay"
     shutil.copytree(src, app)
@@ -137,13 +170,20 @@ def main() -> int:
     for p in problems[:15]:
         print("   ", p)
 
-    r = subprocess.run([str(app / "relay-cli.exe"), "--check", "--quiet"], env=env,
-                       cwd=str(work), capture_output=True, text=True, timeout=600)
+    r = subprocess.run(
+        [str(app / "relay-cli.exe"), "--check", "--quiet"],
+        env=env,
+        cwd=str(work),
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
     print(r.stdout[-2500:])
     results["--check passes on a clean profile"] = r.returncode == 0
 
     import psutil
-    (data / ".onboarded").write_text("1", encoding="utf-8")    # short greeting only
+
+    (data / ".onboarded").write_text("1", encoding="utf-8")  # short greeting only
     proc = subprocess.Popen([str(app / "relay.exe"), "--start"], env=env, cwd=str(work))
     conns = []
     try:
@@ -151,29 +191,36 @@ def main() -> int:
         ready = False
         while time.time() < deadline and proc.poll() is None:
             log = data / "relay.log"
-            if log.exists() and "mic capture started" in log.read_text(encoding="utf-8",
-                                                                        errors="replace"):
+            if log.exists() and "mic capture started" in log.read_text(
+                encoding="utf-8", errors="replace"
+            ):
                 ready = True
                 break
             time.sleep(1)
         time.sleep(5)
         alive = proc.poll() is None
         try:
-            conns = [c for c in psutil.Process(proc.pid).net_connections(kind="inet")
-                     if c.raddr and not str(c.raddr.ip).startswith(("127.", "::1"))]
+            conns = [
+                c
+                for c in psutil.Process(proc.pid).net_connections(kind="inet")
+                if c.raddr and not str(c.raddr.ip).startswith(("127.", "::1"))
+            ]
         except psutil.Error:
             pass
         results["windowless relay.exe starts and stays up"] = ready and alive
         results["no internet connections while running"] = not conns
-        log_text = (data / "relay.log").read_text(encoding="utf-8", errors="replace") \
-            if (data / "relay.log").exists() else ""
+        log_text = (
+            (data / "relay.log").read_text(encoding="utf-8", errors="replace")
+            if (data / "relay.log").exists()
+            else ""
+        )
         errors = [ln for ln in log_text.splitlines() if " ERROR " in ln or "Traceback" in ln]
         results["start-up log has no errors"] = not errors
         for ln in errors[:5]:
             print("   ", ln[:160])
     finally:
         if proc.poll() is None:
-            proc.terminate()                       # our own test instance only
+            proc.terminate()  # our own test instance only
             try:
                 proc.wait(10)
             except subprocess.TimeoutExpired:
@@ -186,8 +233,8 @@ def main() -> int:
     if "--keep" in sys.argv:
         print("PASSED" if ok else "FAILED", f"(scratch copy kept: {work})")
     else:
-        time.sleep(1)                              # let the test instance release files
-        shutil.rmtree(work, ignore_errors=True)    # ~600 MB: never leave it behind
+        time.sleep(1)  # let the test instance release files
+        shutil.rmtree(work, ignore_errors=True)  # ~600 MB: never leave it behind
         print("PASSED" if ok else "FAILED", "(scratch copy removed; --keep to inspect)")
     return 0 if ok else 1
 

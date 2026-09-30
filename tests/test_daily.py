@@ -29,48 +29,52 @@ def test_normalize_strips_fillers_politeness_and_punctuation():
 
 
 def test_spoken_punctuation():
-    assert apply_spoken_punctuation("hello comma how are you question mark") == \
-        "hello, how are you?"
+    assert (
+        apply_spoken_punctuation("hello comma how are you question mark") == "hello, how are you?"
+    )
     assert apply_spoken_punctuation("first line new line second") == "first line\nsecond"
     assert apply_spoken_punctuation("done full stop") == "done."
 
 
 # ---------------------------------------------------------------- grammar table
-@pytest.mark.parametrize("utt,kind,slots", [
-    ("Um, can you open Chrome for me, please?", Kind.OPEN_APP, {"app": "chrome"}),
-    ("What's the time?", Kind.TIME, {}),
-    ("what is today's date", Kind.DATE, {}),
-    ("What's the day today?", Kind.DATE, {}),
-    ("what's the date today", Kind.DATE, {}),
-    ("what day is it today", Kind.DATE, {}),
-    ("How much battery do I have?", Kind.BATTERY, {}),
-    ("Am I connected to the internet?", Kind.INTERNET, {}),
-    ("what is 25 times 4", Kind.CALCULATE, {}),
-    ("search for bus stop near me", Kind.WEB_SEARCH, {"query": "bus stop near me"}),
-    ("Play Arijit Singh songs on YouTube.", Kind.YOUTUBE, {"query": "arijit singh songs"}),
-    ("what apps are open", Kind.LIST_WINDOWS, {}),
-    ("close notepad", Kind.WINDOW_OP, {"op": "close", "target": "notepad"}),
-    ("close tab", Kind.SHORTCUT, {"keys": ["ctrl", "w"]}),
-    ("press control s", Kind.HOTKEY, {"keys": ["ctrl", "s"]}),
-    ("press down arrow 3 times", Kind.PRESS_KEY, {"key": "down", "count": 3}),
-    ("read this page in Hindi", Kind.READ_ALL, {"language": "hindi"}),
-    ("next paragraph", Kind.READ_NEXT, {}),
-    ("stop reading", Kind.CONTROL, {"command": "stop_talking"}),
-    ("pause music", Kind.MEDIA, {"action": "play_pause"}),
-    ("set the volume to 40 percent", Kind.VOLUME, {"action": "set", "level": 40}),
-    ("take a note buy milk", Kind.TAKE_NOTE, {"text": "buy milk"}),
-    ("remind me in 10 minutes to call mom", Kind.SET_REMINDER, {}),
-    ("cancel my reminders", Kind.CANCEL_REMINDERS, {}),
-    ("stop dictation", Kind.DICTATION, {"on": False}),
-    ("speak in Telugu", Kind.LANGUAGE, {"language": "telugu"}),
-    ("find my resume", Kind.FIND_FILE, {"name": "resume"}),
-    ("read the pdf electricity bill", Kind.OPEN_FILE, {"name": "electricity bill"}),
-    ("click the second link", Kind.ACTIVATE, {"ordinal": 2, "role": "link"}),
-    ("open the second one", Kind.PICK, {"ordinal": 2}),
-    ("save as project report", Kind.SAVE, {"name": "project report"}),
-    ("quit relay", Kind.QUIT, {}),
-    ("help me with reading", Kind.HELP, {"topic": "reading"}),
-])
+@pytest.mark.parametrize(
+    "utt,kind,slots",
+    [
+        ("Um, can you open Chrome for me, please?", Kind.OPEN_APP, {"app": "chrome"}),
+        ("What's the time?", Kind.TIME, {}),
+        ("what is today's date", Kind.DATE, {}),
+        ("What's the day today?", Kind.DATE, {}),
+        ("what's the date today", Kind.DATE, {}),
+        ("what day is it today", Kind.DATE, {}),
+        ("How much battery do I have?", Kind.BATTERY, {}),
+        ("Am I connected to the internet?", Kind.INTERNET, {}),
+        ("what is 25 times 4", Kind.CALCULATE, {}),
+        ("search for bus stop near me", Kind.WEB_SEARCH, {"query": "bus stop near me"}),
+        ("Play Arijit Singh songs on YouTube.", Kind.YOUTUBE, {"query": "arijit singh songs"}),
+        ("what apps are open", Kind.LIST_WINDOWS, {}),
+        ("close notepad", Kind.WINDOW_OP, {"op": "close", "target": "notepad"}),
+        ("close tab", Kind.SHORTCUT, {"keys": ["ctrl", "w"]}),
+        ("press control s", Kind.HOTKEY, {"keys": ["ctrl", "s"]}),
+        ("press down arrow 3 times", Kind.PRESS_KEY, {"key": "down", "count": 3}),
+        ("read this page in Hindi", Kind.READ_ALL, {"language": "hindi"}),
+        ("next paragraph", Kind.READ_NEXT, {}),
+        ("stop reading", Kind.CONTROL, {"command": "stop_talking"}),
+        ("pause music", Kind.MEDIA, {"action": "play_pause"}),
+        ("set the volume to 40 percent", Kind.VOLUME, {"action": "set", "level": 40}),
+        ("take a note buy milk", Kind.TAKE_NOTE, {"text": "buy milk"}),
+        ("remind me in 10 minutes to call mom", Kind.SET_REMINDER, {}),
+        ("cancel my reminders", Kind.CANCEL_REMINDERS, {}),
+        ("stop dictation", Kind.DICTATION, {"on": False}),
+        ("speak in Telugu", Kind.LANGUAGE, {"language": "telugu"}),
+        ("find my resume", Kind.FIND_FILE, {"name": "resume"}),
+        ("read the pdf electricity bill", Kind.OPEN_FILE, {"name": "electricity bill"}),
+        ("click the second link", Kind.ACTIVATE, {"ordinal": 2, "role": "link"}),
+        ("open the second one", Kind.PICK, {"ordinal": 2}),
+        ("save as project report", Kind.SAVE, {"name": "project report"}),
+        ("quit relay", Kind.QUIT, {}),
+        ("help me with reading", Kind.HELP, {"topic": "reading"}),
+    ],
+)
 def test_grammar_routes_daily_commands(utt, kind, slots):
     i = parse(utt)
     assert i.kind == kind, (utt, i.kind, i.slots)
@@ -92,6 +96,7 @@ def test_type_keeps_dictated_words():
 
 def test_parse_keys():
     from relay.intent.grammar import parse_keys
+
     assert parse_keys("control shift t") == (["ctrl", "shift", "t"], 1)
     assert parse_keys("alt f 4") == (["alt", "f4"], 1)
     assert parse_keys("page down twice") == (["pagedown"], 2)
@@ -99,20 +104,30 @@ def test_parse_keys():
 
 
 # ---------------------------------------------------------------- calculator
-@pytest.mark.parametrize("q,expect", [
-    ("what is 25 times 4", "100"), ("what's 10 percent of 250", "25"),
-    ("5 into 3", "15"), ("square root of 144", "12"), ("twenty five plus five", "30"),
-    ("2 lakh by 12", "16666.6667"), ("one point five times two", "3"),
-    ("5 squared", "25"), ("1,200 minus 200", "1000"),
-])
+@pytest.mark.parametrize(
+    "q,expect",
+    [
+        ("what is 25 times 4", "100"),
+        ("what's 10 percent of 250", "25"),
+        ("5 into 3", "15"),
+        ("square root of 144", "12"),
+        ("twenty five plus five", "30"),
+        ("2 lakh by 12", "16666.6667"),
+        ("one point five times two", "3"),
+        ("5 squared", "25"),
+        ("1,200 minus 200", "1000"),
+    ],
+)
 def test_calculator(q, expect):
     from relay.system import calc
+
     ans = calc.answer(q)
     assert ans is not None and ans.endswith(f"is {expect}."), ans
 
 
 def test_calculator_rejects_non_maths_and_handles_zero():
     from relay.system import calc
+
     assert calc.answer("what is on my screen") is None
     assert calc.answer("open 2 notepads") is None
     assert "divide by zero" in calc.answer("5 divided by 0")
@@ -124,6 +139,7 @@ NOW = dt.datetime(2026, 9, 25, 15, 0, 0)
 
 def test_parse_reminder_relative_absolute_timer():
     from relay.reminders import parse_reminder
+
     due, msg, timer = parse_reminder("remind me in 10 minutes to call mom", NOW)
     assert due == NOW + dt.timedelta(minutes=10) and msg == "call mom" and not timer
     due, msg, _ = parse_reminder("remind me to take medicine at 5 pm", NOW)
@@ -140,16 +156,18 @@ def test_parse_reminder_relative_absolute_timer():
 def test_reminder_scheduler_fires_once_and_cancels():
     from relay.memory.db import connect
     from relay.reminders import ReminderScheduler
+
     fired = []
     clock = {"t": 1000.0}
-    sch = ReminderScheduler(connect(":memory:"), on_due=lambda t, late: fired.append(t),
-                            clock=lambda: clock["t"])
+    sch = ReminderScheduler(
+        connect(":memory:"), on_due=lambda t, late: fired.append(t), clock=lambda: clock["t"]
+    )
     sch.add("call mom", 1010.0)
     sch.add("later", 5000.0)
     assert sch.check_now() == [] and fired == []
     clock["t"] = 1011.0
     assert [t for t, _ in sch.check_now()] == ["call mom"]
-    assert sch.check_now() == []                     # never fires twice
+    assert sch.check_now() == []  # never fires twice
     assert sch.cancel_all() == 1 and sch.pending() == []
 
 
@@ -157,6 +175,7 @@ def test_reminder_scheduler_fires_once_and_cancels():
 def test_notes_add_list_refuse_secret_delete():
     from relay.memory.db import connect
     from relay.memory.notes import NotesStore
+
     n = NotesStore(connect(":memory:"))
     assert n.add("buy milk")
     assert not n.add("my password is hunter2")
@@ -167,6 +186,7 @@ def test_notes_add_list_refuse_secret_delete():
 # ---------------------------------------------------------------- reader
 def test_split_parts_merges_tiny_lines_and_splits_long_paragraphs():
     from relay.reading import split_parts
+
     long = " ".join(f"Sentence number {i} is here." for i in range(60))
     parts = split_parts("Home\nNews\nSports\n\n" + long)
     assert parts[0].startswith("Home") and "Sports" in parts[0]
@@ -192,9 +212,12 @@ class FakeSpeech:
 
 def _reader(fs, said):
     from relay.reading import Reader
-    return Reader(speak_part=fs.speak_part, say=said.append,
-                  interrupt=lambda: [cb(False) for cb in list(fs.pending)] and
-                  fs.pending.clear())
+
+    return Reader(
+        speak_part=fs.speak_part,
+        say=said.append,
+        interrupt=lambda: [cb(False) for cb in list(fs.pending)] and fs.pending.clear(),
+    )
 
 
 def test_reader_say_all_stop_resume_next_prev_repeat():
@@ -204,11 +227,11 @@ def test_reader_say_all_stop_resume_next_prev_repeat():
     assert r.load(text, title="Doc") == 4
     r.read_all()
     assert fs.spoken[-1].startswith("Paragraph 1")
-    fs.finish_one(True)                       # part 1 done -> part 2 starts
+    fs.finish_one(True)  # part 1 done -> part 2 starts
     assert fs.spoken[-1].startswith("Paragraph 2")
-    r.stop()                                  # user says stop during part 2
+    r.stop()  # user says stop during part 2
     assert r.pos == 1 and not r.reading
-    r.resume()                                # continue -> part 2 again, from the start
+    r.resume()  # continue -> part 2 again, from the start
     assert fs.spoken[-1].startswith("Paragraph 2")
     fs.finish_one(True)
     assert fs.spoken[-1].startswith("Paragraph 3")
@@ -218,7 +241,7 @@ def test_reader_say_all_stop_resume_next_prev_repeat():
     assert fs.spoken[-1].startswith("Paragraph 2")
     r.step(+1)
     r.step(+1)
-    r.step(+1)                                # past the end
+    r.step(+1)  # past the end
     assert any("last part" in s for s in said)
 
 
@@ -294,11 +317,13 @@ class FakeSpeechQ:
 
 def _frame():
     from relay.audio.vad import FRAME_BYTES
+
     return b"\x01\x00" * (FRAME_BYTES // 2)
 
 
 def test_push_to_talk_captures_preroll_and_dispatches_prompted():
     from relay.loop import VoiceLoop
+
     got, earcons = [], []
 
     class STT:
@@ -310,9 +335,16 @@ def test_push_to_talk_captures_preroll_and_dispatches_prompted():
     clock = {"t": 100.0}
     sq = FakeSpeechQ()
     dispatched = []
-    loop = VoiceLoop(dispatched.append, stt=STT(), speech=sq, wake_required=False,
-                     segmenter_factory=lambda: ScriptSeg(script),
-                     play_earcon=earcons.append, clock=lambda: clock["t"], threaded=False)
+    loop = VoiceLoop(
+        dispatched.append,
+        stt=STT(),
+        speech=sq,
+        wake_required=False,
+        segmenter_factory=lambda: ScriptSeg(script),
+        play_earcon=earcons.append,
+        clock=lambda: clock["t"],
+        threaded=False,
+    )
     loop.push_to_talk()
     assert sq.interrupted == 1 and earcons == ["listen"]
     for _ in range(len(script)):
@@ -324,12 +356,18 @@ def test_push_to_talk_captures_preroll_and_dispatches_prompted():
 
 def test_half_duplex_ignores_mic_while_relay_speaks():
     from relay.loop import VoiceLoop
+
     sq = FakeSpeechQ()
     sq.is_speaking = True
     dispatched = []
-    loop = VoiceLoop(dispatched.append, stt=object(), speech=sq, wake_required=True,
-                     segmenter_factory=lambda: ScriptSeg([True] * 10 + [False]),
-                     threaded=False)
+    loop = VoiceLoop(
+        dispatched.append,
+        stt=object(),
+        speech=sq,
+        wake_required=True,
+        segmenter_factory=lambda: ScriptSeg([True] * 10 + [False]),
+        threaded=False,
+    )
     for _ in range(11):
         loop.on_frame(_frame())
     assert dispatched == [] and not loop._in_utt
@@ -337,11 +375,19 @@ def test_half_duplex_ignores_mic_while_relay_speaks():
 
 def test_push_to_talk_times_out_with_earcon():
     from relay.loop import VoiceLoop
+
     clock = {"t": 0.0}
     earcons = []
-    loop = VoiceLoop(lambda t: None, stt=object(), speech=FakeSpeechQ(), wake_required=False,
-                     segmenter_factory=lambda: ScriptSeg([False] * 50),
-                     play_earcon=earcons.append, clock=lambda: clock["t"], threaded=False)
+    loop = VoiceLoop(
+        lambda t: None,
+        stt=object(),
+        speech=FakeSpeechQ(),
+        wake_required=False,
+        segmenter_factory=lambda: ScriptSeg([False] * 50),
+        play_earcon=earcons.append,
+        clock=lambda: clock["t"],
+        threaded=False,
+    )
     loop.push_to_talk()
     clock["t"] = 60.0
     loop.on_frame(_frame())
@@ -350,9 +396,10 @@ def test_push_to_talk_times_out_with_earcon():
 
 def test_immediate_control_and_dispatcher_order():
     from relay.loop import Dispatcher, immediate_control
+
     assert immediate_control("stop") == "stop_talking"
     assert immediate_control("emergency stop") == "emergency_stop"
-    assert immediate_control("stop dictation") == "stop_talking"   # still immediate
+    assert immediate_control("stop dictation") == "stop_talking"  # still immediate
     assert immediate_control("search for bus stop") is None
     assert immediate_control("open notepad") is None
 
@@ -371,7 +418,7 @@ def test_immediate_control_and_dispatcher_order():
     d.submit("slow")
     d.submit("second")
     time.sleep(0.1)
-    d.submit("stop")                 # jumps the queue while "slow" is still running
+    d.submit("stop")  # jumps the queue while "slow" is still running
     assert order == ["stop"]
     gate.set()
     for _ in range(50):
@@ -384,6 +431,7 @@ def test_immediate_control_and_dispatcher_order():
 
 def test_hallucination_filter():
     from relay.loop import is_hallucination
+
     assert is_hallucination("Thank you.") and is_hallucination("  ") and is_hallucination("♪")
     assert not is_hallucination("open notepad")
 
@@ -391,10 +439,18 @@ def test_hallucination_filter():
 # ---------------------------------------------------------------- apps / web / windows
 def test_app_catalog_matching():
     from relay.system.apps import AppCatalog, AppEntry
-    cat = AppCatalog(entries=[
-        AppEntry("Word", "w"), AppEntry("WordPad", "wp"), AppEntry("WhatsApp", "wa"),
-        AppEntry("Google Chrome", "c"), AppEntry("Uninstall Chrome", "u"),
-        AppEntry("File Explorer", "fe"), AppEntry("Calculator", "calc")])
+
+    cat = AppCatalog(
+        entries=[
+            AppEntry("Word", "w"),
+            AppEntry("WordPad", "wp"),
+            AppEntry("WhatsApp", "wa"),
+            AppEntry("Google Chrome", "c"),
+            AppEntry("Uninstall Chrome", "u"),
+            AppEntry("File Explorer", "fe"),
+            AppEntry("Calculator", "calc"),
+        ]
+    )
     assert cat.find("word").name == "Word"
     assert cat.find("whatsapp").name == "WhatsApp"
     assert cat.find("chrome").name == "Google Chrome"
@@ -405,6 +461,7 @@ def test_app_catalog_matching():
 
 def test_web_helpers():
     from relay.system import web
+
     assert web.site_url("youtube") == "https://www.youtube.com"
     assert web.site_url("flipkart dot com") == "https://flipkart.com"
     assert web.site_url("notepad") is None
@@ -414,9 +471,12 @@ def test_web_helpers():
 
 def test_window_find_and_spoken_list():
     from relay.system.windows import WindowInfo, find, spoken_list
-    wins = [WindowInfo(1, "Untitled - Notepad", "notepad.exe"),
-            WindowInfo(2, "Inbox - Gmail - Google Chrome", "chrome.exe"),
-            WindowInfo(3, "Document1 - Word", "WINWORD.EXE", True)]
+
+    wins = [
+        WindowInfo(1, "Untitled - Notepad", "notepad.exe"),
+        WindowInfo(2, "Inbox - Gmail - Google Chrome", "chrome.exe"),
+        WindowInfo(3, "Document1 - Word", "WINWORD.EXE", True),
+    ]
     assert find("notepad", wins).hwnd == 1
     assert find("chrome", wins).hwnd == 2
     assert find("gmail", wins).hwnd == 2
@@ -428,13 +488,16 @@ def test_window_find_and_spoken_list():
 
 def test_find_and_read_files(tmp_path):
     from relay.system import files
+
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "My_Resume_2026.txt").write_text("Resume body", encoding="utf-8")
     (tmp_path / "notes.txt").write_text("hello", encoding="utf-8")
     docx = tmp_path / "letter.docx"
-    xml = ('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-           '<w:body><w:p><w:r><w:t>Dear Sir,</w:t></w:r></w:p><w:p><w:r><w:t>Thanks.</w:t>'
-           '</w:r></w:p></w:body></w:document>')
+    xml = (
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        "<w:body><w:p><w:r><w:t>Dear Sir,</w:t></w:r></w:p><w:p><w:r><w:t>Thanks.</w:t>"
+        "</w:r></w:p></w:body></w:document>"
+    )
     with zipfile.ZipFile(docx, "w") as z:
         z.writestr("word/document.xml", xml)
     hits = files.find_files("my resume", roots=[tmp_path])
@@ -447,6 +510,7 @@ def test_find_and_read_files(tmp_path):
 # ---------------------------------------------------------------- hotkeys
 def test_parse_and_speak_combos():
     from relay.audio.hotkeys import MOD_ALT, MOD_CONTROL, parse_combo, spoken_combo
+
     assert parse_combo("ctrl+alt+space") == (MOD_CONTROL | MOD_ALT, 0x20)
     assert parse_combo("ctrl+alt+period")[1] == 0xBE
     assert spoken_combo("ctrl+alt+space") == "Control Alt Space"
@@ -460,6 +524,7 @@ def test_real_hotkey_registration_and_delivery():
 
     from relay.audio.hotkeys import HotkeyManager
     from relay.system.windows import foreground_blocks_input
+
     if foreground_blocks_input():
         pytest.skip("an elevated/system window is in front; Windows drops injected keys")
     fired = threading.Event()
@@ -486,6 +551,7 @@ def test_cancelled_action_is_never_verified():
     from relay.executor.executor import ActionOutcome
     from relay.memory.journal import ExecState
     from relay.verifier import Verifier
+
     vf = Verifier(worker=None)
     o = ActionOutcome("t.a1", ExecState.CANCELLED, "emergency stop engaged")
     assert vf.verify(o, True).state == ExecState.CANCELLED
@@ -523,16 +589,33 @@ def test_runner_system_step_speaks_verified_detail_and_silent_keypress():
     spoken = []
     ctx = TaskContext("t")
     r = TransparentRunner(Ex(), W(), Vf(), ctx, speak=spoken.append)
-    r.run([Step("system", "change the volume", {
-        "what": "volume", "do": lambda: True,
-        "check": lambda: (True, "Volume is now 60 percent."),
-        "announce": "Turning the volume up.", "speak_detail": True})])
+    r.run(
+        [
+            Step(
+                "system",
+                "change the volume",
+                {
+                    "what": "volume",
+                    "do": lambda: True,
+                    "check": lambda: (True, "Volume is now 60 percent."),
+                    "announce": "Turning the volume up.",
+                    "speak_detail": True,
+                },
+            )
+        ]
+    )
     assert spoken == ["Turning the volume up.", "Volume is now 60 percent."]
     spoken.clear()
-    r.run([Step("press", "press play/pause", {"key": "playpause",
-                                              "announce": "Pressing play/pause.",
-                                              "done_text": ""})])
-    assert spoken == ["Pressing play/pause."]         # honest: no fake "done"
+    r.run(
+        [
+            Step(
+                "press",
+                "press play/pause",
+                {"key": "playpause", "announce": "Pressing play/pause.", "done_text": ""},
+            )
+        ]
+    )
+    assert spoken == ["Pressing play/pause."]  # honest: no fake "done"
 
 
 # ---------------------------------------------------------------- session flows
@@ -542,6 +625,7 @@ def session(monkeypatch, tmp_path):
     monkeypatch.delenv("SARVAM_API_KEY", raising=False)
     from relay.executor.input_backend import RecordingBackend
     from relay.session import Session
+
     spoken: list[str] = []
     s = Session(speak=spoken.append, db_path=":memory:")
     s.executor.input = RecordingBackend()
@@ -567,7 +651,7 @@ def test_session_offer_yes_no_and_capture(session):
     session.offer(lambda: ran.append(1))
     session.handle("okay")
     assert ran == [1]
-    session.handle("take a note")                      # asks what to write
+    session.handle("take a note")  # asks what to write
     assert any("What should the note say" in t for t in session.spoken)
     session.handle("call the plumber")
     assert session.notes.count() == 1
@@ -603,8 +687,8 @@ def test_send_in_chat_app_reads_back_and_needs_phrase(session, monkeypatch):
     session.handle("press enter")
     assert session._pending is not None and session._pending.phrase == "confirm send"
     assert any("see you at 5" in t for t in session.spoken)
-    assert ("press", "enter") not in session.executor.input.calls     # not sent yet
-    session.handle("yeah")                                            # not the phrase
+    assert ("press", "enter") not in session.executor.input.calls  # not sent yet
+    session.handle("yeah")  # not the phrase
     assert ("press", "enter") not in session.executor.input.calls
 
 
@@ -619,11 +703,19 @@ def test_delete_key_in_file_explorer_needs_phrase(session, monkeypatch):
 
 def test_repeated_silent_talk_key_explains_microphone():
     from relay.loop import VoiceLoop
+
     clock = {"t": 0.0}
     said = []
-    loop = VoiceLoop(lambda t: None, stt=object(), speech=FakeSpeechQ(), wake_required=False,
-                     segmenter_factory=lambda: ScriptSeg([False] * 50),
-                     say=said.append, clock=lambda: clock["t"], threaded=False)
+    loop = VoiceLoop(
+        lambda t: None,
+        stt=object(),
+        speech=FakeSpeechQ(),
+        wake_required=False,
+        segmenter_factory=lambda: ScriptSeg([False] * 50),
+        say=said.append,
+        clock=lambda: clock["t"],
+        threaded=False,
+    )
     for _ in range(2):
         loop.push_to_talk()
         clock["t"] += 60.0
@@ -633,6 +725,7 @@ def test_repeated_silent_talk_key_explains_microphone():
 
 def test_confirmation_phrase_accepts_natural_word_forms_only():
     from relay.session import Session
+
     ok = Session._says_phrase
     assert ok("I confirm sending it", "confirm send")
     assert ok("Confirm send.", "confirm send")
@@ -654,13 +747,17 @@ def test_everyday_commands_work_with_networking_blocked(session, monkeypatch):
 
     def no_network(*a, **k):
         raise OSError("network disabled for this test")
+
     monkeypatch.setattr(socket, "getaddrinfo", no_network)
     monkeypatch.setattr(socket.socket, "connect", no_network)
-    for cmd, expect in [("what time is it", "It's"), ("what is 12 times 12", "144"),
-                        ("take a note water the plants", "Noted"),
-                        ("remind me in 5 minutes to stretch", "remind you"),
-                        ("how much battery do I have", "attery"),
-                        ("help with notes", "Notes and reminders")]:
+    for cmd, expect in [
+        ("what time is it", "It's"),
+        ("what is 12 times 12", "144"),
+        ("take a note water the plants", "Noted"),
+        ("remind me in 5 minutes to stretch", "remind you"),
+        ("how much battery do I have", "attery"),
+        ("help with notes", "Notes and reminders"),
+    ]:
         session.spoken.clear()
         session.handle(cmd)
         assert any(expect in t for t in session.spoken), (cmd, session.spoken)
@@ -668,6 +765,7 @@ def test_everyday_commands_work_with_networking_blocked(session, monkeypatch):
 
 def test_no_cloud_module_ships():
     import importlib.util
+
     assert importlib.util.find_spec("relay.connected") is None
 
 
@@ -682,11 +780,16 @@ def test_noise_blips_never_reach_the_speech_model():
             CountingSTT.calls += 1
             return ""
 
-    loop = VoiceLoop(lambda t: None, stt=CountingSTT(), wake_required=True, threaded=False,
-                     segmenter_factory=lambda: ScriptSeg([True, True, False]))
+    loop = VoiceLoop(
+        lambda t: None,
+        stt=CountingSTT(),
+        wake_required=True,
+        threaded=False,
+        segmenter_factory=lambda: ScriptSeg([True, True, False]),
+    )
     loop.on_frame(_frame())
     loop.on_frame(_frame())
-    loop.on_frame(_frame())          # 2 voiced frames = 0.06 s: a blip
+    loop.on_frame(_frame())  # 2 voiced frames = 0.06 s: a blip
     assert CountingSTT.calls == 0 and loop.screened_out == 1
 
 
@@ -694,6 +797,7 @@ def test_sendinput_structures_and_key_map():
     import ctypes
 
     from relay.executor.input_backend import INPUT, vk_for
+
     assert ctypes.sizeof(INPUT) == (40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28)
     assert vk_for("a") == 0x41 and vk_for("F5") == 0x74 and vk_for("enter") == 0x0D
     assert vk_for("ctrl") == 0x11 and vk_for("=") == 0xBB and vk_for("playpause") == 0xB3
@@ -706,6 +810,7 @@ def test_sendinput_really_reaches_windows():
     from relay.audio.hotkeys import HotkeyManager
     from relay.executor.input_backend import WindowsInputBackend
     from relay.system.windows import foreground_blocks_input
+
     if foreground_blocks_input():
         pytest.skip("an elevated/system window is in front; Windows drops injected keys")
     fired = threading.Event()
@@ -741,10 +846,12 @@ def test_with_a_screen_reader_running_focus_moves_are_not_repeated():
         def press(self, key, count=1):
             return Out(ExecState.EXECUTED)
 
-    before = ScreenSnapshot(1, foreground_title="Form", focus=UIElement(0, "Name", "Edit",
-                                                                         (0, 0, 1, 1)))
-    after = ScreenSnapshot(2, foreground_title="Form", focus=UIElement(0, "Email", "Edit",
-                                                                        (0, 0, 1, 1)))
+    before = ScreenSnapshot(
+        1, foreground_title="Form", focus=UIElement(0, "Name", "Edit", (0, 0, 1, 1))
+    )
+    after = ScreenSnapshot(
+        2, foreground_title="Form", focus=UIElement(0, "Email", "Edit", (0, 0, 1, 1))
+    )
 
     class W:
         def observe(self, timeout=2):
@@ -755,13 +862,21 @@ def test_with_a_screen_reader_running_focus_moves_are_not_repeated():
         ctx.last_narrated = before
         r = TransparentRunner(Ex(), W(), None, ctx, speak=spoken.append)
         r.screen_reader = reader_on
-        r.run([Step("press", "press tab", {"key": "tab", "announce": "Pressing Tab.",
-                                           "done_text": ""})])
+        r.run(
+            [
+                Step(
+                    "press",
+                    "press tab",
+                    {"key": "tab", "announce": "Pressing Tab.", "done_text": ""},
+                )
+            ]
+        )
         assert any("Focus is now on" in s for s in spoken) == expect_focus_line
 
 
 def test_screen_reader_watch_caches():
     from relay.accessibility.coexist import ScreenReaderWatch
+
     calls = []
     w = ScreenReaderWatch(ttl=60, probe=lambda: calls.append(1) or (True, "NVDA"))
     assert w.current() == (True, "NVDA") and w.current() == (True, "NVDA")
@@ -774,6 +889,7 @@ def test_injected_input_is_refused_honestly_when_windows_would_drop_it(monkeypat
     from relay.memory.db import connect
     from relay.memory.journal import ActionJournal, ExecState
     from relay.safety import PermissionEngine
+
     sent = []
 
     class Spy(WindowsInputBackend):
@@ -781,25 +897,31 @@ def test_injected_input_is_refused_honestly_when_windows_would_drop_it(monkeypat
             sent.append(key)
 
     monkeypatch.setattr("relay.system.windows.foreground_blocks_input", lambda: True)
-    ex = Executor(PermissionEngine(), worker=None, journal=ActionJournal(connect(":memory:")),
-                  task_id="t", input_backend=Spy())
+    ex = Executor(
+        PermissionEngine(),
+        worker=None,
+        journal=ActionJournal(connect(":memory:")),
+        task_id="t",
+        input_backend=Spy(),
+    )
     out = ex.press("enter")
     assert out.state == ExecState.FAILED and "administrator" in out.detail and sent == []
 
 
 def test_recognition_slips_are_understood_safely(session):
     from relay.intent.fuzzy import closest
+
     assert closest("Read by notes.")[0] == "read my notes"
     assert parse(closest("what's the tie")[0]).kind == Kind.TIME
     assert closest("the relay race was great yesterday") is None
     assert closest("banana") is None
     session.notes.add("buy milk")
     session.spoken.clear()
-    session.handle("Read by notes.")                     # read-only: runs, says so
+    session.handle("Read by notes.")  # read-only: runs, says so
     assert any("I think you meant: read my notes" in t for t in session.spoken)
     assert any("buy milk" in t for t in session.spoken)
     session.spoken.clear()
-    session.handle("clothes tab")                         # changes things: only offered
+    session.handle("clothes tab")  # changes things: only offered
     assert any("Did you mean: close tab" in t for t in session.spoken)
     assert ("hotkey", ("ctrl", "w")) not in session.executor.input.calls
     session.handle("no")

@@ -16,8 +16,8 @@ import re
 import threading
 from typing import Callable
 
-MAX_PART = 420          # characters per spoken part
-MIN_PART = 60           # merge tiny lines (menus, labels) into readable parts
+MAX_PART = 420  # characters per spoken part
+MIN_PART = 60  # merge tiny lines (menus, labels) into readable parts
 
 
 def split_parts(text: str) -> list[str]:
@@ -36,7 +36,7 @@ def split_parts(text: str) -> list[str]:
             sentences = re.split(r"(?<=[.!?।])\s+", p)
             cur = ""
             for s in sentences:
-                while len(s) > MAX_PART:                 # a giant "sentence"
+                while len(s) > MAX_PART:  # a giant "sentence"
                     cut = s.rfind(" ", 0, MAX_PART)
                     cut = cut if cut > MAX_PART // 2 else MAX_PART
                     if cur:
@@ -69,9 +69,13 @@ def split_parts(text: str) -> list[str]:
 
 
 class Reader:
-    def __init__(self, speak_part: Callable[[str, Callable[[bool], None] | None], None],
-                 say: Callable[[str], None], interrupt: Callable[[], None] | None = None,
-                 on_event: Callable[[str, dict], None] | None = None) -> None:
+    def __init__(
+        self,
+        speak_part: Callable[[str, Callable[[bool], None] | None], None],
+        say: Callable[[str], None],
+        interrupt: Callable[[], None] | None = None,
+        on_event: Callable[[str, dict], None] | None = None,
+    ) -> None:
         """``speak_part(text, on_done)`` queues one part and calls on_done(completed)
         when it finishes; ``say`` is for RELAY's own short announcements."""
         self._speak_part = speak_part
@@ -80,8 +84,8 @@ class Reader:
         self._on_event = on_event or (lambda kind, data: None)
         self.parts: list[str] = []
         self.title = ""
-        self.pos = 0                 # index of the part being / to be read
-        self.reading = False         # say-all in progress
+        self.pos = 0  # index of the part being / to be read
+        self.reading = False  # say-all in progress
         self._gen = 0
         self._lock = threading.Lock()
 
@@ -112,8 +116,9 @@ class Reader:
         if intro:
             n = len(self.parts)
             where = f"{self.title}. " if self.title else ""
-            self._say(f"Reading {where}{n} part{'s' if n != 1 else ''}. "
-                      "Say stop to pause, next to skip.")
+            self._say(
+                f"Reading {where}{n} part{'s' if n != 1 else ''}. Say stop to pause, next to skip."
+            )
         self._on_event("reading.start", {"title": self.title, "parts": len(self.parts)})
         self._speak_current(gen)
 
@@ -140,7 +145,7 @@ class Reader:
         with self._lock:
             if gen != self._gen or not self.reading:
                 return
-            if not completed:            # interrupted: keep the position for "continue"
+            if not completed:  # interrupted: keep the position for "continue"
                 self.reading = False
                 return
             self.pos = idx + 1
@@ -172,7 +177,7 @@ class Reader:
             self._say("There's nothing to read yet. Say read the page first.")
             return
         with self._lock:
-            self._gen += 1                     # invalidate any say-all continuation
+            self._gen += 1  # invalidate any say-all continuation
             new = self.pos + delta
             if new < 0:
                 new = 0

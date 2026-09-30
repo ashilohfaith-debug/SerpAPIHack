@@ -27,6 +27,7 @@ def rss_mb() -> float:
 
 def synth_sapi_wav(text: str, path: Path) -> None:
     import win32com.client
+
     voice = win32com.client.Dispatch("SAPI.SpVoice")
     stream = win32com.client.Dispatch("SAPI.SpFileStream")
     stream.Open(str(path), 3, False)  # SSFMCreateForWrite
@@ -53,8 +54,9 @@ def load_wav_16k_mono(path: Path) -> np.ndarray:
         x = x.reshape(-1, ch).mean(axis=1)
     if sr != 16000:
         n = int(len(x) * 16000 / sr)
-        x = np.interp(np.linspace(0, len(x), n, endpoint=False),
-                      np.arange(len(x)), x).astype(np.float32)
+        x = np.interp(np.linspace(0, len(x), n, endpoint=False), np.arange(len(x)), x).astype(
+            np.float32
+        )
     return x
 
 
@@ -79,22 +81,29 @@ def wer(ref: str, hyp: str) -> float:
 
 def bench_faster_whisper(audio: np.ndarray, models_dir: Path) -> dict:
     from faster_whisper import WhisperModel
+
     base = rss_mb()
     t0 = time.perf_counter()
-    m = WhisperModel("tiny.en", device="cpu", compute_type="int8",
-                     download_root=str(models_dir))
+    m = WhisperModel("tiny.en", device="cpu", compute_type="int8", download_root=str(models_dir))
     load = time.perf_counter() - t0
     after_load = rss_mb()
     t1 = time.perf_counter()
     segs, _ = m.transcribe(audio, language="en", beam_size=1)
     text = " ".join(s.text for s in segs).strip()
     infer = time.perf_counter() - t1
-    return {"engine": "faster-whisper", "text": text, "load_s": load,
-            "infer_s": infer, "rss_delta_mb": after_load - base, "wer": wer(PHRASE, text)}
+    return {
+        "engine": "faster-whisper",
+        "text": text,
+        "load_s": load,
+        "infer_s": infer,
+        "rss_delta_mb": after_load - base,
+        "wer": wer(PHRASE, text),
+    }
 
 
 def bench_whispercpp(audio: np.ndarray) -> dict:
     from pywhispercpp.model import Model
+
     base = rss_mb()
     t0 = time.perf_counter()
     m = Model("tiny.en", print_progress=False, print_realtime=False)
@@ -104,12 +113,19 @@ def bench_whispercpp(audio: np.ndarray) -> dict:
     segs = m.transcribe(audio)
     text = " ".join(s.text for s in segs).strip()
     infer = time.perf_counter() - t1
-    return {"engine": "whisper.cpp", "text": text, "load_s": load,
-            "infer_s": infer, "rss_delta_mb": after_load - base, "wer": wer(PHRASE, text)}
+    return {
+        "engine": "whisper.cpp",
+        "text": text,
+        "load_s": load,
+        "infer_s": infer,
+        "rss_delta_mb": after_load - base,
+        "wer": wer(PHRASE, text),
+    }
 
 
 def main() -> None:
     from relay.config import models_dir
+
     md = models_dir()
     wav = md / "_bench.wav"
     print(f"Synthesizing phrase via SAPI -> {wav.name}")
@@ -123,17 +139,21 @@ def main() -> None:
         try:
             r = fn()
             results.append(r)
-            print(f"[{r['engine']:>14}] load={r['load_s']:.2f}s infer={r['infer_s']:.2f}s "
-                  f"rtf={r['infer_s']/dur:.2f} rss+={r['rss_delta_mb']:.0f}MB wer={r['wer']:.2f}")
+            print(
+                f"[{r['engine']:>14}] load={r['load_s']:.2f}s infer={r['infer_s']:.2f}s "
+                f"rtf={r['infer_s'] / dur:.2f} rss+={r['rss_delta_mb']:.0f}MB wer={r['wer']:.2f}"
+            )
             print(f'                 -> "{r["text"]}"')
         except Exception as e:
             print(f"ENGINE FAILED: {type(e).__name__}: {e}")
 
     if len(results) == 2:
         a, b = results
-        print("\nSummary (lower is better): "
-              f"{a['engine']} rtf={a['infer_s']/dur:.2f}/rss+{a['rss_delta_mb']:.0f}MB vs "
-              f"{b['engine']} rtf={b['infer_s']/dur:.2f}/rss+{b['rss_delta_mb']:.0f}MB")
+        print(
+            "\nSummary (lower is better): "
+            f"{a['engine']} rtf={a['infer_s'] / dur:.2f}/rss+{a['rss_delta_mb']:.0f}MB vs "
+            f"{b['engine']} rtf={b['infer_s'] / dur:.2f}/rss+{b['rss_delta_mb']:.0f}MB"
+        )
 
 
 if __name__ == "__main__":

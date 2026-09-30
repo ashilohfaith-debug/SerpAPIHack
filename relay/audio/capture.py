@@ -38,8 +38,12 @@ class MicCapture:
                 pass
 
         self._stream = sd.RawInputStream(
-            samplerate=SAMPLE_RATE, channels=1, dtype="int16",
-            blocksize=FRAMES_PER_BLOCK, device=self.device, callback=_cb,
+            samplerate=SAMPLE_RATE,
+            channels=1,
+            dtype="int16",
+            blocksize=FRAMES_PER_BLOCK,
+            device=self.device,
+            callback=_cb,
         )
         self._stream.start()
         log.info("mic capture started (device=%s)", self.device)
@@ -59,4 +63,5 @@ class MicCapture:
 
 def list_devices() -> list[str]:
     import sounddevice as sd
+
     return [d["name"] for d in sd.query_devices() if d["max_input_channels"] > 0]

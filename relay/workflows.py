@@ -30,33 +30,58 @@ class Capability:
 
 CAPABILITIES: dict[str, Capability] = {
     "notepad": Capability(
-        "Notepad", "full", "UIA + keyboard",
-        "Read/edit text, Save via Ctrl+S and the file dialog. Verified by file on disk."),
+        "Notepad",
+        "full",
+        "UIA + keyboard",
+        "Read/edit text, Save via Ctrl+S and the file dialog. Verified by file on disk.",
+    ),
     "explorer": Capability(
-        "File Explorer", "full", "UIA",
-        "Read the current folder, focus items, open files. Renames/deletes need confirmation."),
+        "File Explorer",
+        "full",
+        "UIA",
+        "Read the current folder, focus items, open files. Renames/deletes need confirmation.",
+    ),
     "dialogs": Capability(
-        "Windows dialogs (#32770)", "full", "UIA",
-        "Save/Open/message boxes are detected and their buttons read; type a filename + Enter."),
+        "Windows dialogs (#32770)",
+        "full",
+        "UIA",
+        "Save/Open/message boxes are detected and their buttons read; type a filename + Enter.",
+    ),
     "calculator": Capability(
-        "Calculator", "keyboard", "keyboard",
+        "Calculator",
+        "keyboard",
+        "keyboard",
         "UWP app: digits/operators are not invokable UIA buttons, so RELAY types them "
-        "on the keyboard and reads the result display."),
+        "on the keyboard and reads the result display.",
+    ),
     "wordpad": Capability(
-        "WordPad", "full", "UIA + keyboard", "Similar to Notepad; richer formatting."),
+        "WordPad", "full", "UIA + keyboard", "Similar to Notepad; richer formatting."
+    ),
     "settings": Capability(
-        "Windows Settings", "read", "UIA",
-        "Readable and navigable; changing security-relevant settings needs confirmation."),
+        "Windows Settings",
+        "read",
+        "UIA",
+        "Readable and navigable; changing security-relevant settings needs confirmation.",
+    ),
     "chrome": Capability(
-        "Chromium browsers (Chrome/Edge/Brave)", "partial", "UIA + keyboard",
+        "Chromium browsers (Chrome/Edge/Brave)",
+        "partial",
+        "UIA + keyboard",
         "Address bar, tabs, links and headings are reachable via UIA; deep/dynamic page "
-        "content can be partial — RELAY falls back to keyboard nav and says when unsure."),
+        "content can be partial — RELAY falls back to keyboard nav and says when unsure.",
+    ),
 }
 
 
-_ALIASES = {"msedge": "chrome", "edge": "chrome", "brave": "chrome",
-            "calc": "calculator", "files": "explorer", "file explorer": "explorer",
-            "write": "wordpad"}
+_ALIASES = {
+    "msedge": "chrome",
+    "edge": "chrome",
+    "brave": "chrome",
+    "calc": "calculator",
+    "files": "explorer",
+    "file explorer": "explorer",
+    "write": "wordpad",
+}
 
 
 def capability_for(app_key: str) -> Capability | None:
@@ -72,13 +97,17 @@ def matrix_text() -> str:
     lines = ["RELAY supported applications (honest capability matrix):"]
     for cap in CAPABILITIES.values():
         lines.append(f"  - {cap.app}: {cap.level} ({cap.technique}). {cap.notes}")
-    lines.append("Anything not listed: RELAY will read what it can and tell you plainly "
-                 "when it cannot operate an app reliably.")
+    lines.append(
+        "Anything not listed: RELAY will read what it can and tell you plainly "
+        "when it cannot operate an app reliably."
+    )
     return "\n".join(lines)
 
 
 def spoken_summary() -> str:
     apps = [c.app for c in CAPABILITIES.values() if c.level in ("full", "keyboard")]
-    return ("I can reliably operate " + ", ".join(apps) + ". "
-            "I can read most other applications too, and I'll tell you plainly "
-            "whenever I can't control one reliably.")
+    return (
+        "I can reliably operate " + ", ".join(apps) + ". "
+        "I can read most other applications too, and I'll tell you plainly "
+        "whenever I can't control one reliably."
+    )

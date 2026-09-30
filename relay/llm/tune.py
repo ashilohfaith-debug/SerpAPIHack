@@ -33,11 +33,18 @@ _EXCLUDE = re.compile(
     r"embed|whisper|tts|image|vision|vl-|-vl|thinking|reasoning|guard|audio|ocr|robotics|"
     r"coder|code|uncensored|\brp\b|-rp-|lora|heretic|stheno|lunaris|magnum|eclipse|nova|"
     r"distill|\br1\b|-r1|moondream|voxtral|diffusion|phone|sea-lion|allam|apertus|preview",
-    re.I)
-_FAST = [re.compile(p, re.I) for p in (
-    r"flash-lite|-lite\b", r"flash|instant|turbo", r"haiku|mini|small|nano|air|scout",
-    r"(?:^|-)(?:3|4|7|8|9|12|14)b\b|e4b")]
-CACHE_TTL = 3 * 24 * 3600        # re-test every few days (free providers change)
+    re.I,
+)
+_FAST = [
+    re.compile(p, re.I)
+    for p in (
+        r"flash-lite|-lite\b",
+        r"flash|instant|turbo",
+        r"haiku|mini|small|nano|air|scout",
+        r"(?:^|-)(?:3|4|7|8|9|12|14)b\b|e4b",
+    )
+]
+CACHE_TTL = 3 * 24 * 3600  # re-test every few days (free providers change)
 _PROBE = [{"role": "user", "content": "open notepad"}]
 
 
@@ -55,8 +62,10 @@ def candidates(model_ids: list[str], limit: int = 20) -> list[str]:
 
 def list_models(url: str, key: str, timeout: float = 10.0) -> list[str]:
     import urllib.request
-    req = urllib.request.Request(url.rstrip("/") + "/models",
-                                 headers={"Authorization": f"Bearer {key}"} if key else {})
+
+    req = urllib.request.Request(
+        url.rstrip("/") + "/models", headers={"Authorization": f"Bearer {key}"} if key else {}
+    )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         data = json.loads(r.read().decode("utf-8", "replace"))
     items = data.get("data", data) if isinstance(data, dict) else data
@@ -67,13 +76,15 @@ def probe(url: str, key: str, model: str, timeout: float = 8.0) -> dict:
     """One real RELAY request: time to first token, and whether the reply follows the
     command format exactly."""
     from relay.llm.assistant import SYSTEM
+
     route = Route(name=model, base_url=url, api_key=key, model=model, timeout=timeout)
     client = LLMClient()
     t0 = time.monotonic()
     first, text = None, ""
     try:
-        for delta in client.stream_chat(route, [{"role": "system", "content": SYSTEM}] + _PROBE,
-                                        max_tokens=16, temperature=0.0):
+        for delta in client.stream_chat(
+            route, [{"role": "system", "content": SYSTEM}] + _PROBE, max_tokens=16, temperature=0.0
+        ):
             if first is None:
                 first = time.monotonic() - t0
             text += delta
@@ -81,21 +92,28 @@ def probe(url: str, key: str, model: str, timeout: float = 8.0) -> dict:
                 break
     except RouteError as e:
         return {"model": model, "ok": False, "error": f"HTTP {e.status}"}
-    except Exception as e:                     # timeouts, broken streams
+    except Exception as e:  # timeouts, broken streams
         return {"model": model, "ok": False, "error": type(e).__name__}
     reply = " ".join(text.split())
     ok = bool(re.match(r"^DO\s*:\s*open notepad\.?$", reply, re.I))
-    return {"model": model, "ok": ok and first is not None, "ttft": round(first or 99, 3),
-            "total": round(time.monotonic() - t0, 3), "reply": reply[:60]}
+    return {
+        "model": model,
+        "ok": ok and first is not None,
+        "ttft": round(first or 99, 3),
+        "total": round(time.monotonic() - t0, 3),
+        "reply": reply[:60],
+    }
 
 
-def tune(url: str, key: str, limit: int = 20, workers: int = 8, rounds: int = 3,
-         keep: int = 5) -> list[dict]:
+def tune(
+    url: str, key: str, limit: int = 20, workers: int = 8, rounds: int = 3, keep: int = 5
+) -> list[dict]:
     """1. screen the candidates in parallel (which ones work AND follow the rules);
     2. re-time the passing ones ONE AT A TIME, ``rounds`` times each, and rank by the
     median — parallel requests queue up behind each other and hit rate limits, so their
     timings aren't trustworthy. Returns all results, usable ones first; saves them."""
     import statistics
+
     ids = list_models(url, key)
     picks = candidates(ids, limit)
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -117,6 +135,7 @@ def tune(url: str, key: str, limit: int = 20, workers: int = 8, rounds: int = 3,
 # ---- cache (per router URL, in the user data folder) ----
 def _cache_path():
     from relay.config import user_data_dir
+
     return user_data_dir() / "llm_routes.json"
 
 
@@ -155,12 +174,15 @@ def tune_in_background(url: str, key: str, on_done=None) -> threading.Thread:
     def run():
         try:
             results = tune(url, key)
-            log.info("model ranking: %s", ", ".join(
-                f"{r['model']} {r['ttft']}s" for r in results if r.get("ok"))[:300])
+            log.info(
+                "model ranking: %s",
+                ", ".join(f"{r['model']} {r['ttft']}s" for r in results if r.get("ok"))[:300],
+            )
             if on_done is not None:
                 on_done(results)
         except Exception as e:
             log.info("model tuning skipped: %s", e)
+
     t = threading.Thread(target=run, name="llm-tune", daemon=True)
     t.start()
     return t

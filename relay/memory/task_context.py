@@ -16,15 +16,30 @@ from dataclasses import dataclass, field
 
 from relay.perception.semantic import ScreenSnapshot, UIElement
 
-CLICKABLE = {"Button", "Hyperlink", "MenuItem", "ListItem", "TabItem",
-             "CheckBox", "RadioButton", "TreeItem", "SplitButton"}
+CLICKABLE = {
+    "Button",
+    "Hyperlink",
+    "MenuItem",
+    "ListItem",
+    "TabItem",
+    "CheckBox",
+    "RadioButton",
+    "TreeItem",
+    "SplitButton",
+}
 _DEMONSTRATIVES = {"that", "it", "this", "the same", "them", "the one"}
 # spoken role word -> UIA roles it covers
 ROLE_WORDS = {
-    "link": {"Hyperlink"}, "result": {"Hyperlink"}, "button": {"Button", "SplitButton"},
-    "item": {"ListItem", "TreeItem", "MenuItem"}, "option": CLICKABLE,
-    "checkbox": {"CheckBox"}, "tab": {"TabItem"}, "menu item": {"MenuItem"},
-    "field": {"Edit", "ComboBox"}, "heading": {"Text"},
+    "link": {"Hyperlink"},
+    "result": {"Hyperlink"},
+    "button": {"Button", "SplitButton"},
+    "item": {"ListItem", "TreeItem", "MenuItem"},
+    "option": CLICKABLE,
+    "checkbox": {"CheckBox"},
+    "tab": {"TabItem"},
+    "menu item": {"MenuItem"},
+    "field": {"Edit", "ComboBox"},
+    "heading": {"Text"},
 }
 
 
@@ -54,9 +69,13 @@ class TaskContext:
         self.last_ref_key = key
 
 
-def resolve_reference(ctx: TaskContext, current: ScreenSnapshot | None,
-                      target: str | None = None, ordinal: int | None = None,
-                      role: str | None = None) -> tuple[UIElement | None, str | None]:
+def resolve_reference(
+    ctx: TaskContext,
+    current: ScreenSnapshot | None,
+    target: str | None = None,
+    ordinal: int | None = None,
+    role: str | None = None,
+) -> tuple[UIElement | None, str | None]:
     """Return (element, error). error is a machine code the caller narrates:
     no_screen | out_of_range | no_prior_reference | reference_stale | not_found | no_target."""
     if current is None:
@@ -87,9 +106,12 @@ def resolve_reference(ctx: TaskContext, current: ScreenSnapshot | None,
                     return e, None
             return None, "reference_stale"
         matches = current.find(target)
-        if not matches:                   # "click the login button" -> "login"
-            bare = " ".join(w for w in t.split() if w not in ROLE_WORDS and w not in (
-                "the", "a", "an", "on", "named", "called"))
+        if not matches:  # "click the login button" -> "login"
+            bare = " ".join(
+                w
+                for w in t.split()
+                if w not in ROLE_WORDS and w not in ("the", "a", "an", "on", "named", "called")
+            )
             if bare and bare != t:
                 matches = current.find(bare)
         if matches:

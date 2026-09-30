@@ -37,6 +37,7 @@ Done = Callable[[bool], None]
 
 def _sounddevice_player(audio: np.ndarray, sr: int, stop: threading.Event) -> None:
     import sounddevice as sd
+
     sd.play(audio, sr)
     # Poll so a set stop_event cuts playback promptly (barge-in latency ~ one poll).
     stream = sd.get_stream()
@@ -60,20 +61,20 @@ class SpeechQueue:
     def __init__(self, tts, player: Optional[Player] = None, emergency=None) -> None:
         self._tts = tts
         self._player = player or _sounddevice_player
-        self._q: "queue.Queue[_Item | None]" = queue.Queue()          # text to synthesise
+        self._q: "queue.Queue[_Item | None]" = queue.Queue()  # text to synthesise
         self._ready: "queue.Queue[_Item | None]" = queue.Queue(maxsize=2)  # audio to play
         self._stop_current = threading.Event()
         self._speaking = threading.Event()
         self._synthesising = threading.Event()
         self._shutdown = threading.Event()
         self._gen = 0
-        self._synth_gen = -1                # generation of the text being synthesised now
+        self._synth_gen = -1  # generation of the text being synthesised now
         self._gen_lock = threading.Lock()
         self._last_active = 0.0
-        self._synth_thread = threading.Thread(target=self._synth_worker, name="speech-synth",
-                                              daemon=True)
-        self._thread = threading.Thread(target=self._play_worker, name="speech",
-                                        daemon=True)
+        self._synth_thread = threading.Thread(
+            target=self._synth_worker, name="speech-synth", daemon=True
+        )
+        self._thread = threading.Thread(target=self._play_worker, name="speech", daemon=True)
         self._synth_thread.start()
         self._thread.start()
         if emergency is not None:
@@ -92,8 +93,12 @@ class SpeechQueue:
         # a synthesis still running for an interrupted generation (e.g. an online voice
         # request in flight) is not speech: after "stop" the microphone must open at once
         synthesising = self._synthesising.is_set() and self._synth_gen == self._gen
-        return (self._speaking.is_set() or synthesising
-                or not self._q.empty() or not self._ready.empty())
+        return (
+            self._speaking.is_set()
+            or synthesising
+            or not self._q.empty()
+            or not self._ready.empty()
+        )
 
     @property
     def last_active(self) -> float:
@@ -113,7 +118,7 @@ class SpeechQueue:
     def interrupt(self) -> None:
         """Barge-in: stop the current utterance and drop everything queued."""
         with self._gen_lock:
-            self._gen += 1                 # anything synthesised for the old generation is stale
+            self._gen += 1  # anything synthesised for the old generation is stale
         self._stop_current.set()
         dropped: list[_Item] = []
         for q in (self._q, self._ready):
@@ -139,9 +144,9 @@ class SpeechQueue:
     def shutdown(self) -> None:
         self._shutdown.set()
         self.interrupt()
-        self._q.put(None)                   # unblock the synth worker
+        self._q.put(None)  # unblock the synth worker
         try:
-            self._ready.put_nowait(None)    # unblock the play worker
+            self._ready.put_nowait(None)  # unblock the play worker
         except queue.Full:
             pass
 
@@ -160,7 +165,7 @@ class SpeechQueue:
             if it is None or self._shutdown.is_set():
                 self._ready.put(None)
                 return
-            if it.gen != self._gen:           # interrupted while waiting
+            if it.gen != self._gen:  # interrupted while waiting
                 self._finish(it, False)
                 continue
             if it.audio is None:
@@ -168,12 +173,12 @@ class SpeechQueue:
                 self._synthesising.set()
                 try:
                     it.audio, it.sr = self._tts.synth_to_array(it.text)
-                except Exception as e:        # never let one utterance kill speech
+                except Exception as e:  # never let one utterance kill speech
                     log.warning("speech synthesis failed: %s", e)
                     it.audio, it.sr = np.zeros(0, dtype=np.float32), 16000
                 finally:
                     self._synthesising.clear()
-            if it.gen != self._gen:           # interrupted during synthesis
+            if it.gen != self._gen:  # interrupted during synthesis
                 self._finish(it, False)
                 continue
             while not self._shutdown.is_set():

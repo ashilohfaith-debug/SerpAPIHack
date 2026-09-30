@@ -11,6 +11,10 @@ from .policy import (
 )
 
 __all__ = [
-    "Action", "ConfirmationStrength", "Decision", "PermissionEngine", "Risk",
+    "Action",
+    "ConfirmationStrength",
+    "Decision",
+    "PermissionEngine",
+    "Risk",
     "is_protected_field",
 ]

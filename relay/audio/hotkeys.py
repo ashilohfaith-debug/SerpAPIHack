@@ -23,18 +23,55 @@ log = get_logger("audio.hotkeys")
 MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN, MOD_NOREPEAT = 0x1, 0x2, 0x4, 0x8, 0x4000
 WM_HOTKEY, WM_QUIT = 0x0312, 0x0012
 
-_MODS = {"ctrl": MOD_CONTROL, "control": MOD_CONTROL, "alt": MOD_ALT, "shift": MOD_SHIFT,
-         "win": MOD_WIN, "windows": MOD_WIN}
-_VK = {"space": 0x20, "enter": 0x0D, "return": 0x0D, "tab": 0x09, "escape": 0x1B,
-       "esc": 0x1B, "backspace": 0x08, "delete": 0x2E, "insert": 0x2D, "home": 0x24,
-       "end": 0x23, "pageup": 0x21, "pagedown": 0x22, "up": 0x26, "down": 0x28,
-       "left": 0x25, "right": 0x27, "pause": 0x13, "period": 0xBE, "comma": 0xBC,
-       "slash": 0xBF, "semicolon": 0xBA, "quote": 0xDE, "minus": 0xBD, "equals": 0xBB}
+_MODS = {
+    "ctrl": MOD_CONTROL,
+    "control": MOD_CONTROL,
+    "alt": MOD_ALT,
+    "shift": MOD_SHIFT,
+    "win": MOD_WIN,
+    "windows": MOD_WIN,
+}
+_VK = {
+    "space": 0x20,
+    "enter": 0x0D,
+    "return": 0x0D,
+    "tab": 0x09,
+    "escape": 0x1B,
+    "esc": 0x1B,
+    "backspace": 0x08,
+    "delete": 0x2E,
+    "insert": 0x2D,
+    "home": 0x24,
+    "end": 0x23,
+    "pageup": 0x21,
+    "pagedown": 0x22,
+    "up": 0x26,
+    "down": 0x28,
+    "left": 0x25,
+    "right": 0x27,
+    "pause": 0x13,
+    "period": 0xBE,
+    "comma": 0xBC,
+    "slash": 0xBF,
+    "semicolon": 0xBA,
+    "quote": 0xDE,
+    "minus": 0xBD,
+    "equals": 0xBB,
+}
 _VK.update({f"f{i}": 0x6F + i for i in range(1, 13)})
 
-SPOKEN_KEY = {"ctrl": "Control", "control": "Control", "alt": "Alt", "shift": "Shift",
-              "win": "Windows", "windows": "Windows", "esc": "Escape", "space": "Space",
-              "pageup": "Page Up", "pagedown": "Page Down"}
+SPOKEN_KEY = {
+    "ctrl": "Control",
+    "control": "Control",
+    "alt": "Alt",
+    "shift": "Shift",
+    "win": "Windows",
+    "windows": "Windows",
+    "esc": "Escape",
+    "space": "Space",
+    "pageup": "Page Up",
+    "pagedown": "Page Down",
+}
 
 
 def parse_combo(combo: str) -> tuple[int, int]:
@@ -59,8 +96,7 @@ def parse_combo(combo: str) -> tuple[int, int]:
 def spoken_combo(combo: str) -> str:
     """'ctrl+alt+space' -> 'Control Alt Space' (how RELAY says it aloud)."""
     parts = [p.strip().lower() for p in combo.replace("-", "+").split("+") if p.strip()]
-    return " ".join(SPOKEN_KEY.get(p, p.upper() if len(p) == 1 else p.capitalize())
-                    for p in parts)
+    return " ".join(SPOKEN_KEY.get(p, p.upper() if len(p) == 1 else p.capitalize()) for p in parts)
 
 
 class HotkeyManager:
@@ -74,7 +110,7 @@ class HotkeyManager:
     def add(self, combo: str, callback: Callable[[], None]) -> None:
         if self._thread is not None:
             raise RuntimeError("add hotkeys before start()")
-        parse_combo(combo)                        # validate early
+        parse_combo(combo)  # validate early
         self._bindings[len(self._bindings) + 1] = (combo, callback)
 
     def start(self, timeout: float = 3.0) -> dict[str, bool]:
@@ -100,8 +136,9 @@ class HotkeyManager:
                 if msg.message == WM_HOTKEY:
                     binding = self._bindings.get(int(msg.wParam))
                     if binding is not None:
-                        threading.Thread(target=self._safe, args=(binding[1],),
-                                         name="hotkey-action", daemon=True).start()
+                        threading.Thread(
+                            target=self._safe, args=(binding[1],), name="hotkey-action", daemon=True
+                        ).start()
         finally:
             for hid in self._bindings:
                 user32.UnregisterHotKey(None, hid)

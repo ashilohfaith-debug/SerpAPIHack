@@ -30,6 +30,7 @@ class Verifier:
     def app_running(self, exe_name: str) -> bool:
         try:
             import psutil
+
             target = exe_name.lower()
             for p in psutil.process_iter(["name"]):
                 if (p.info.get("name") or "").lower() == target:
@@ -41,8 +42,10 @@ class Verifier:
     def window_present(self, title_substr: str, timeout: float = 3.0) -> bool:
         t = title_substr.lower().replace(".exe", "").strip()
         snap = self.worker.observe(timeout)
-        if snap and (t in (snap.foreground_title or "").lower()
-                     or any(t in (e.window_title or "").lower() for e in snap.elements)):
+        if snap and (
+            t in (snap.foreground_title or "").lower()
+            or any(t in (e.window_title or "").lower() for e in snap.elements)
+        ):
             return True
         # also check ALL top-level windows — the app may be open but not foreground
         for wd in self.worker.list_windows():
@@ -79,7 +82,12 @@ class Verifier:
         state = ExecState.VERIFIED if ok else ExecState.UNCERTAIN
         result = ActionOutcome(outcome.action_id, state, detail or outcome.detail)
         if self.journal is not None:
-            self.journal.append(ActionRecord(
-                task_id=outcome.action_id.split(".")[0], action_id=outcome.action_id,
-                execution_state=state, verification_result=detail))
+            self.journal.append(
+                ActionRecord(
+                    task_id=outcome.action_id.split(".")[0],
+                    action_id=outcome.action_id,
+                    execution_state=state,
+                    verification_result=detail,
+                )
+            )
         return result

@@ -51,17 +51,40 @@ VOICE_TRANSITIONS: dict[VoiceState, set[VoiceState]] = {
 TERMINAL_TASK = {TaskState.COMPLETED, TaskState.FAILED, TaskState.CANCELLED}
 TASK_TRANSITIONS: dict[TaskState, set[TaskState]] = {
     TaskState.PENDING: {TaskState.PLANNING, TaskState.CANCELLED},
-    TaskState.PLANNING: {TaskState.WAITING_FOR_CONFIRMATION, TaskState.ACTING,
-                         TaskState.FAILED, TaskState.CANCELLED},
-    TaskState.WAITING_FOR_CONFIRMATION: {TaskState.ACTING, TaskState.PAUSED,
-                                         TaskState.CANCELLED, TaskState.FAILED},
-    TaskState.ACTING: {TaskState.VERIFYING, TaskState.PAUSED, TaskState.RECOVERING,
-                       TaskState.CANCELLED, TaskState.FAILED},
-    TaskState.VERIFYING: {TaskState.ACTING, TaskState.COMPLETED, TaskState.RECOVERING,
-                          TaskState.FAILED, TaskState.CANCELLED},
+    TaskState.PLANNING: {
+        TaskState.WAITING_FOR_CONFIRMATION,
+        TaskState.ACTING,
+        TaskState.FAILED,
+        TaskState.CANCELLED,
+    },
+    TaskState.WAITING_FOR_CONFIRMATION: {
+        TaskState.ACTING,
+        TaskState.PAUSED,
+        TaskState.CANCELLED,
+        TaskState.FAILED,
+    },
+    TaskState.ACTING: {
+        TaskState.VERIFYING,
+        TaskState.PAUSED,
+        TaskState.RECOVERING,
+        TaskState.CANCELLED,
+        TaskState.FAILED,
+    },
+    TaskState.VERIFYING: {
+        TaskState.ACTING,
+        TaskState.COMPLETED,
+        TaskState.RECOVERING,
+        TaskState.FAILED,
+        TaskState.CANCELLED,
+    },
     TaskState.PAUSED: {TaskState.ACTING, TaskState.PLANNING, TaskState.CANCELLED},
-    TaskState.RECOVERING: {TaskState.ACTING, TaskState.VERIFYING, TaskState.PLANNING,
-                           TaskState.FAILED, TaskState.CANCELLED},
+    TaskState.RECOVERING: {
+        TaskState.ACTING,
+        TaskState.VERIFYING,
+        TaskState.PLANNING,
+        TaskState.FAILED,
+        TaskState.CANCELLED,
+    },
     TaskState.COMPLETED: set(),
     TaskState.FAILED: set(),
     TaskState.CANCELLED: set(),
@@ -106,7 +129,10 @@ class StateMachine:
         if self._bus is not None:
             self._bus.emit(
                 f"{self.name}.state",
-                id=self.id, **{"from": frm.value}, to=to.value, reason=reason,
+                id=self.id,
+                **{"from": frm.value},
+                to=to.value,
+                reason=reason,
             )
 
     @property
@@ -117,8 +143,9 @@ class StateMachine:
 
 
 def voice_machine(machine_id: str, bus: EventBus | None = None) -> StateMachine:
-    return StateMachine("voice", machine_id, VoiceState.IDLE, VOICE_TRANSITIONS,
-                        bus, error_state=VoiceState.ERROR)
+    return StateMachine(
+        "voice", machine_id, VoiceState.IDLE, VOICE_TRANSITIONS, bus, error_state=VoiceState.ERROR
+    )
 
 
 def task_machine(machine_id: str, bus: EventBus | None = None) -> StateMachine:
@@ -127,6 +154,7 @@ def task_machine(machine_id: str, bus: EventBus | None = None) -> StateMachine:
 
 class RelayState(str, Enum):
     """The complete 17-state dialogue, voice and execution state machine."""
+
     BOOTING = "booting"
     GREETING = "greeting"
     LOADING = "loading"
@@ -151,7 +179,10 @@ RELAY_TRANSITIONS: dict[RelayState, set[RelayState]] = {
     RelayState.GREETING: {RelayState.LOADING, RelayState.IDLE, RelayState.LISTENING},
     RelayState.LOADING: {RelayState.IDLE, RelayState.LISTENING, RelayState.FAILED},
     RelayState.IDLE: {
-        RelayState.LISTENING, RelayState.PLANNING, RelayState.PAUSED, RelayState.EMERGENCY_STOPPED,
+        RelayState.LISTENING,
+        RelayState.PLANNING,
+        RelayState.PAUSED,
+        RelayState.EMERGENCY_STOPPED,
     },
     RelayState.LISTENING: {
         RelayState.TRANSCRIBING,
@@ -160,7 +191,10 @@ RELAY_TRANSITIONS: dict[RelayState, set[RelayState]] = {
         RelayState.EMERGENCY_STOPPED,
     },
     RelayState.TRANSCRIBING: {
-        RelayState.PLANNING, RelayState.CLARIFYING, RelayState.IDLE, RelayState.FAILED,
+        RelayState.PLANNING,
+        RelayState.CLARIFYING,
+        RelayState.IDLE,
+        RelayState.FAILED,
         RelayState.EMERGENCY_STOPPED,
     },
     RelayState.CLARIFYING: {
@@ -170,33 +204,58 @@ RELAY_TRANSITIONS: dict[RelayState, set[RelayState]] = {
         RelayState.EMERGENCY_STOPPED,
     },
     RelayState.PLANNING: {
-        RelayState.AWAITING_CONFIRMATION, RelayState.ACTING, RelayState.CLARIFYING,
-        RelayState.CANCELLED, RelayState.FAILED, RelayState.EMERGENCY_STOPPED,
+        RelayState.AWAITING_CONFIRMATION,
+        RelayState.ACTING,
+        RelayState.CLARIFYING,
+        RelayState.CANCELLED,
+        RelayState.FAILED,
+        RelayState.EMERGENCY_STOPPED,
     },
     RelayState.AWAITING_CONFIRMATION: {
-        RelayState.LISTENING, RelayState.ACTING, RelayState.CANCELLED, RelayState.EMERGENCY_STOPPED,
+        RelayState.LISTENING,
+        RelayState.ACTING,
+        RelayState.CANCELLED,
+        RelayState.EMERGENCY_STOPPED,
     },
     RelayState.ACTING: {
-        RelayState.VERIFYING, RelayState.RECOVERING, RelayState.PAUSED,
-        RelayState.CANCELLED, RelayState.FAILED, RelayState.EMERGENCY_STOPPED,
+        RelayState.VERIFYING,
+        RelayState.RECOVERING,
+        RelayState.PAUSED,
+        RelayState.CANCELLED,
+        RelayState.FAILED,
+        RelayState.EMERGENCY_STOPPED,
     },
     RelayState.VERIFYING: {
-        RelayState.REPORTING, RelayState.ACTING, RelayState.RECOVERING,
-        RelayState.FAILED, RelayState.CANCELLED, RelayState.EMERGENCY_STOPPED,
+        RelayState.REPORTING,
+        RelayState.ACTING,
+        RelayState.RECOVERING,
+        RelayState.FAILED,
+        RelayState.CANCELLED,
+        RelayState.EMERGENCY_STOPPED,
     },
     RelayState.REPORTING: {
-        RelayState.IDLE, RelayState.LISTENING, RelayState.PAUSED, RelayState.EMERGENCY_STOPPED,
+        RelayState.IDLE,
+        RelayState.LISTENING,
+        RelayState.PAUSED,
+        RelayState.EMERGENCY_STOPPED,
     },
     RelayState.PAUSED: {
-        RelayState.IDLE, RelayState.PLANNING, RelayState.ACTING,
-        RelayState.CANCELLED, RelayState.EMERGENCY_STOPPED,
+        RelayState.IDLE,
+        RelayState.PLANNING,
+        RelayState.ACTING,
+        RelayState.CANCELLED,
+        RelayState.EMERGENCY_STOPPED,
     },
     RelayState.CANCELLED: {RelayState.IDLE, RelayState.LISTENING},
     RelayState.EMERGENCY_STOPPED: {RelayState.IDLE, RelayState.RECOVERING},
     RelayState.FAILED: {RelayState.RECOVERING, RelayState.IDLE, RelayState.LISTENING},
     RelayState.RECOVERING: {
-        RelayState.IDLE, RelayState.PLANNING, RelayState.ACTING,
-        RelayState.FAILED, RelayState.CANCELLED, RelayState.EMERGENCY_STOPPED,
+        RelayState.IDLE,
+        RelayState.PLANNING,
+        RelayState.ACTING,
+        RelayState.FAILED,
+        RelayState.CANCELLED,
+        RelayState.EMERGENCY_STOPPED,
     },
 }
 

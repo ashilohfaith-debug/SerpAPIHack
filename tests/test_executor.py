@@ -38,8 +38,15 @@ def _setup(worker=None, confirm=None, emergency=None):
     journal = ActionJournal(connect(":memory:"))
     tid = new_task_id()
     backend = RecordingBackend()
-    ex = Executor(engine, worker or FakeWorker(), journal, tid,
-                  emergency=emergency, confirm=confirm, input_backend=backend)
+    ex = Executor(
+        engine,
+        worker or FakeWorker(),
+        journal,
+        tid,
+        emergency=emergency,
+        confirm=confirm,
+        input_backend=backend,
+    )
     return ex, journal, tid, backend
 
 
@@ -50,15 +57,16 @@ def _el(name, role="Button"):
 # ---- gating ----
 def test_dangerous_action_blocked_without_confirmation():
     ex, journal, tid, _ = _setup(worker=FakeWorker(run_results=[(True, True), (True, True)]))
-    o = ex.invoke_element(_el("Delete"))          # ELEVATED -> needs confirmation
+    o = ex.invoke_element(_el("Delete"))  # ELEVATED -> needs confirmation
     assert o.state is ExecState.CANCELLED and "not confirmed" in o.detail
     states = [r.execution_state for r in journal.for_task(tid)]
     assert ExecState.PROPOSED in states and ExecState.CANCELLED in states
 
 
 def test_dangerous_action_runs_after_confirmation():
-    ex, _, _, _ = _setup(worker=FakeWorker(run_results=[(True, True), (True, True)]),
-                         confirm=lambda d: True)
+    ex, _, _, _ = _setup(
+        worker=FakeWorker(run_results=[(True, True), (True, True)]), confirm=lambda d: True
+    )
     o = ex.invoke_element(_el("Delete"))
     assert o.state is ExecState.EXECUTED
 
@@ -89,9 +97,11 @@ def test_type_text_uses_backend_and_journals():
 
 # ---- verification ----
 def test_verifier_window_and_focus_and_file(tmp_path):
-    snap = ScreenSnapshot(1, foreground_title="Untitled - Notepad",
-                          focus=UIElement(1, "Editor", "Document", (0, 0, 5, 5),
-                                          value="hello brave new world"))
+    snap = ScreenSnapshot(
+        1,
+        foreground_title="Untitled - Notepad",
+        focus=UIElement(1, "Editor", "Document", (0, 0, 5, 5), value="hello brave new world"),
+    )
     w = FakeWorker(observe_snaps=[snap, snap])
     vf = Verifier(w)
     assert vf.window_present("Notepad")
@@ -104,6 +114,7 @@ def test_verifier_window_and_focus_and_file(tmp_path):
 
 def test_verify_folds_outcome_and_journals():
     from relay.executor.executor import ActionOutcome
+
     journal = ActionJournal(connect(":memory:"))
     vf = Verifier(FakeWorker(), journal)
     ex_ok = ActionOutcome("task_x.a1", ExecState.EXECUTED, "did it")
@@ -116,8 +127,11 @@ def test_verify_folds_outcome_and_journals():
 # ---- recovery ----
 def test_recovery_detects_unexpected_dialog():
     prev = ScreenSnapshot(1, foreground_title="Editor")
-    cur = ScreenSnapshot(2, foreground_title="Editor",
-                         dialogs=[Dialog("Save changes?", ("Save", "Don't Save", "Cancel"))])
+    cur = ScreenSnapshot(
+        2,
+        foreground_title="Editor",
+        dialogs=[Dialog("Save changes?", ("Save", "Don't Save", "Cancel"))],
+    )
     issue = detect(prev, cur, action_ok=True)
     assert issue and issue.kind == "unexpected_dialog" and "Save" in issue.spoken
 

@@ -30,7 +30,7 @@ KEY = "sk_test_sarvam_123"
 
 class MockSarvam(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    log = []                  # (path, port, headers, body bytes)
+    log = []  # (path, port, headers, body bytes)
     status = 200
 
     def log_message(self, *a):
@@ -59,12 +59,14 @@ class MockSarvam(BaseHTTPRequestHandler):
             req = json.loads(body)
             tone = 0.3 * np.sin(np.linspace(0, 200, 4410)).astype(np.float32)
             wav = float_to_wav(tone, 22050)
-            return self._send(200, {"request_id": "r1", "audios": [
-                base64.b64encode(wav).decode()], "echo": req})
+            return self._send(
+                200, {"request_id": "r1", "audios": [base64.b64encode(wav).decode()], "echo": req}
+            )
         if self.path == "/speech-to-text":
             ok = b'name="mode"' in body and b"RIFF" in body and b'name="file"' in body
-            return self._send(200, {"transcript": "What time is it?" if ok else "",
-                                    "language_code": "hi-IN"})
+            return self._send(
+                200, {"transcript": "What time is it?" if ok else "", "language_code": "hi-IN"}
+            )
         self._send(404, {"detail": "not found"})
 
 
@@ -108,19 +110,22 @@ class OfflineSTT:
 
 # ---------------------------------------------------------------- client
 def test_tts_request_and_audio(base):
-    audio, sr = SarvamClient(KEY, base=base).tts("Hello there", "hi-IN", speaker="shubh",
-                                                 pace=1.2)
+    audio, sr = SarvamClient(KEY, base=base).tts("Hello there", "hi-IN", speaker="shubh", pace=1.2)
     assert sr == 22050 and len(audio) == 4410 and audio.dtype == np.float32
     path, _port, headers, body = MockSarvam.log[-1]
     req = json.loads(body)
     assert path == "/text-to-speech" and headers["api-subscription-key"] == KEY
-    assert req == {"text": "Hello there", "language_code": "hi-IN", "model": "bulbul:v3",
-                   "pace": 1.2, "speaker": "shubh"}
+    assert req == {
+        "text": "Hello there",
+        "language_code": "hi-IN",
+        "model": "bulbul:v3",
+        "pace": 1.2,
+        "speaker": "shubh",
+    }
 
 
 def test_stt_sends_multipart_wav(base):
-    text, lang = SarvamClient(KEY, base=base).stt(float_to_wav(np.zeros(1600)),
-                                                  mode="translate")
+    text, lang = SarvamClient(KEY, base=base).stt(float_to_wav(np.zeros(1600)), mode="translate")
     assert (text, lang) == ("What time is it?", "hi-IN")
     body = MockSarvam.log[-1][3]
     assert b"saaras:v3" in body and b"translate" in body
@@ -153,11 +158,13 @@ def test_key_never_in_repr():
 
 def test_gateway_base_url_with_a_path(base):
     """SARVAM_BASE_URL can be the developer's own proxy (which adds the real key)."""
+
     class Prefixed(MockSarvam):
         def do_POST(self):
             assert self.path.startswith("/sarvam/")
-            self.path = self.path[len("/sarvam"):]
+            self.path = self.path[len("/sarvam") :]
             super().do_POST()
+
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Prefixed)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
@@ -194,11 +201,13 @@ def test_falls_back_to_offline_voice_and_says_so_once(base):
 
 def test_offline_notice_when_network_is_down():
     notes = []
-    tts = SarvamTTS(SarvamClient(KEY, base="http://127.0.0.1:9", timeout=2), OfflineTTS(),
-                    on_fallback=notes.append)
+    tts = SarvamTTS(
+        SarvamClient(KEY, base="http://127.0.0.1:9", timeout=2),
+        OfflineTTS(),
+        on_fallback=notes.append,
+    )
     tts.synth_to_array("hello")
-    assert notes == ["I can't reach the online voice right now, so I'm using my offline "
-                     "voice."]
+    assert notes == ["I can't reach the online voice right now, so I'm using my offline voice."]
 
 
 def test_secrets_are_spoken_offline_only(base):
@@ -226,7 +235,7 @@ def test_stt_falls_back_to_whisper(base):
 
 def test_settings_from_environment(monkeypatch):
     monkeypatch.delenv("RELAY_OFFLINE")
-    assert settings()["key"] == ""                       # no key: Sarvam fully off
+    assert settings()["key"] == ""  # no key: Sarvam fully off
     assert settings()["base"] == "https://api.sarvam.ai"
     monkeypatch.setenv("SARVAM_API_KEY", " abc ")
     monkeypatch.setenv("SARVAM_SPEAKER", "shubh")
@@ -234,7 +243,7 @@ def test_settings_from_environment(monkeypatch):
     # ONE key turns on both: Bulbul voice and Saaras recognition
     assert s["key"] == "abc" and s["stt"] is True and s["speaker"] == "shubh"
     assert s["tts_model"] == "bulbul:v3" and s["language"] == "en-IN"
-    monkeypatch.setenv("SARVAM_STT", "off")               # keep only the voice
+    monkeypatch.setenv("SARVAM_STT", "off")  # keep only the voice
     assert settings()["stt"] is False
 
 
@@ -246,6 +255,7 @@ def _loud(seconds=1.0):
 
 def _loop(local_text, dispatched):
     from relay.loop import VoiceLoop
+
     cloud = OfflineSTT("Relay, what time is it?")
     loop = VoiceLoop(dispatched.append, stt=cloud, wake_required=True, threaded=False)
     loop.wake_stt = OfflineSTT(local_text)

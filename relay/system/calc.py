@@ -16,19 +16,57 @@ import operator
 import re
 
 _UNITS = {
-    "zero": 0, "oh": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
-    "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
-    "eighteen": 18, "nineteen": 19,
+    "zero": 0,
+    "oh": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
 }
-_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fourty": 40, "fifty": 50, "sixty": 60,
-         "seventy": 70, "eighty": 80, "ninety": 90}
-_SCALES = {"hundred": 100, "thousand": 1000, "lakh": 100_000, "lakhs": 100_000,
-           "lac": 100_000, "lacs": 100_000, "million": 1_000_000, "crore": 10_000_000,
-           "crores": 10_000_000, "billion": 1_000_000_000}
+_TENS = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fourty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+_SCALES = {
+    "hundred": 100,
+    "thousand": 1000,
+    "lakh": 100_000,
+    "lakhs": 100_000,
+    "lac": 100_000,
+    "lacs": 100_000,
+    "million": 1_000_000,
+    "crore": 10_000_000,
+    "crores": 10_000_000,
+    "billion": 1_000_000_000,
+}
 
-_LEAD = re.compile(r"^(?:what(?:'s| is)|whats|calculate|compute|how much is|solve|"
-                   r"tell me|find|work out)\s+", re.I)
+_LEAD = re.compile(
+    r"^(?:what(?:'s| is)|whats|calculate|compute|how much is|solve|"
+    r"tell me|find|work out)\s+",
+    re.I,
+)
 _TAIL = re.compile(r"\s+(?:equals?|is equal to|is)$", re.I)
 
 _OPS = [
@@ -52,11 +90,15 @@ def _words_to_numbers(text: str) -> str:
     i = 0
     while i < len(tokens):
         t = tokens[i]
-        if t in _UNITS or t in _TENS or (t in _SCALES and out and _is_num(out[-1])) \
-                or (t == "a" and i + 1 < len(tokens) and tokens[i + 1] in _SCALES):
+        if (
+            t in _UNITS
+            or t in _TENS
+            or (t in _SCALES and out and _is_num(out[-1]))
+            or (t == "a" and i + 1 < len(tokens) and tokens[i + 1] in _SCALES)
+        ):
             total, current, j = 0.0, 0.0, i
             seen = False
-            if t in _SCALES:                       # "2 lakh" -> scale a digit
+            if t in _SCALES:  # "2 lakh" -> scale a digit
                 current = float(out.pop())
             while j < len(tokens):
                 w = tokens[j]
@@ -75,8 +117,11 @@ def _words_to_numbers(text: str) -> str:
                     else:
                         total += (current or 1) * s
                         current = 0
-                elif w == "and" and j + 1 < len(tokens) and (tokens[j + 1] in _UNITS
-                                                             or tokens[j + 1] in _TENS):
+                elif (
+                    w == "and"
+                    and j + 1 < len(tokens)
+                    and (tokens[j + 1] in _UNITS or tokens[j + 1] in _TENS)
+                ):
                     pass
                 elif w == "point" and j + 1 < len(tokens) and tokens[j + 1] in _UNITS:
                     digits = []
@@ -95,7 +140,7 @@ def _words_to_numbers(text: str) -> str:
             i = j
             continue
         if re.fullmatch(r"\d+(?:\.\d+)?", t) and i + 1 < len(tokens) and tokens[i + 1] in _SCALES:
-            out.append(t)                           # let the scale branch multiply it
+            out.append(t)  # let the scale branch multiply it
             i += 1
             continue
         out.append(t)
@@ -107,8 +152,14 @@ def _is_num(s: str) -> bool:
     return bool(re.fullmatch(r"\d+(?:\.\d+)?", s))
 
 
-_BIN = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
-        ast.Div: operator.truediv, ast.Mod: operator.mod, ast.Pow: operator.pow}
+_BIN = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
 
 
 def _eval(node):
@@ -124,8 +175,12 @@ def _eval(node):
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
         v = _eval(node.operand)
         return -v if isinstance(node.op, ast.USub) else v
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
-            and node.func.id == "sqrt" and len(node.args) == 1:
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "sqrt"
+        and len(node.args) == 1
+    ):
         return math.sqrt(_eval(node.args[0]))
     raise ValueError("not arithmetic")
 

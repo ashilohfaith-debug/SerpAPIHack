@@ -4,6 +4,8 @@ $form = New-Object System.Windows.Forms.Form
 $form.Text = "RELAY Test Window"
 $form.Size = New-Object System.Drawing.Size(640, 420)
 $form.StartPosition = "CenterScreen"
+$form.TopMost = $true
+$form.Add_Shown({ $form.Activate() })
 
 $box = New-Object System.Windows.Forms.RichTextBox
 $box.Location = New-Object System.Drawing.Point(10, 10)

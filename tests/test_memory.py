@@ -23,7 +23,9 @@ def test_journal_is_append_only_history():
     for st in (ExecState.PROPOSED, ExecState.EXECUTED, ExecState.VERIFIED):
         j.append(ActionRecord(task_id="t", action_id="a", execution_state=st))
     assert [r.execution_state for r in j.for_task("t")] == [
-        ExecState.PROPOSED, ExecState.EXECUTED, ExecState.VERIFIED
+        ExecState.PROPOSED,
+        ExecState.EXECUTED,
+        ExecState.VERIFIED,
     ]
 
 

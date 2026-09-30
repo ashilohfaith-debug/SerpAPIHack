@@ -22,8 +22,14 @@ GWL_EXSTYLE = -20
 WS_EX_TOOLWINDOW = 0x00000080
 DWMWA_CLOAKED = 14
 
-_SKIP_TITLES = {"program manager", "windows input experience", "settings", "",
-                "microsoft text input application", "nvidia geforce overlay"}
+_SKIP_TITLES = {
+    "program manager",
+    "windows input experience",
+    "settings",
+    "",
+    "microsoft text input application",
+    "nvidia geforce overlay",
+}
 _SKIP_CLASSES = {"Shell_TrayWnd", "Progman", "WorkerW", "Windows.UI.Core.CoreWindow"}
 
 
@@ -31,7 +37,7 @@ _SKIP_CLASSES = {"Shell_TrayWnd", "Progman", "WorkerW", "Windows.UI.Core.CoreWin
 class WindowInfo:
     hwnd: int
     title: str
-    app: str          # process name, e.g. "notepad.exe"
+    app: str  # process name, e.g. "notepad.exe"
     minimized: bool = False
 
     @property
@@ -46,11 +52,21 @@ class WindowInfo:
         return t
 
 
-_FRIENDLY = {"winword.exe": "Word", "excel.exe": "Excel", "powerpnt.exe": "PowerPoint",
-             "chrome.exe": "Chrome", "msedge.exe": "Edge", "brave.exe": "Brave",
-             "firefox.exe": "Firefox", "notepad.exe": "Notepad", "explorer.exe": "File Explorer",
-             "whatsapp.root.exe": "WhatsApp", "whatsapp.exe": "WhatsApp",
-             "spotify.exe": "Spotify", "calculatorapp.exe": "Calculator"}
+_FRIENDLY = {
+    "winword.exe": "Word",
+    "excel.exe": "Excel",
+    "powerpnt.exe": "PowerPoint",
+    "chrome.exe": "Chrome",
+    "msedge.exe": "Edge",
+    "brave.exe": "Brave",
+    "firefox.exe": "Firefox",
+    "notepad.exe": "Notepad",
+    "explorer.exe": "File Explorer",
+    "whatsapp.root.exe": "WhatsApp",
+    "whatsapp.exe": "WhatsApp",
+    "spotify.exe": "Spotify",
+    "calculatorapp.exe": "Calculator",
+}
 
 
 def _friendly_app(exe: str) -> str:
@@ -63,6 +79,7 @@ def _proc_name(hwnd: int) -> str:
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     try:
         import psutil
+
         return psutil.Process(pid.value).name()
     except Exception:
         return ""
@@ -71,8 +88,9 @@ def _proc_name(hwnd: int) -> str:
 def _cloaked(hwnd: int) -> bool:
     try:
         val = ctypes.c_int(0)
-        ctypes.windll.dwmapi.DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, ctypes.byref(val),
-                                                   ctypes.sizeof(val))
+        ctypes.windll.dwmapi.DwmGetWindowAttribute(
+            hwnd, DWMWA_CLOAKED, ctypes.byref(val), ctypes.sizeof(val)
+        )
         return val.value != 0
     except Exception:
         return False
@@ -114,8 +132,7 @@ def list_windows() -> list[WindowInfo]:
             user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
             if pid.value == own_pid:
                 return True
-            out.append(WindowInfo(int(hwnd), title, _proc_name(hwnd),
-                                  bool(user32.IsIconic(hwnd))))
+            out.append(WindowInfo(int(hwnd), title, _proc_name(hwnd), bool(user32.IsIconic(hwnd))))
         except Exception:
             pass
         return True
@@ -141,23 +158,36 @@ def foreground_blocks_input() -> bool:
     adv = ctypes.WinDLL("advapi32", use_last_error=True)
     k32.OpenProcess.restype = wintypes.HANDLE
     k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-    adv.OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD,
-                                     ctypes.POINTER(wintypes.HANDLE)]
-    adv.GetTokenInformation.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
-                                        wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    adv.OpenProcessToken.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.HANDLE),
+    ]
+    adv.GetTokenInformation.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
     k32.CloseHandle.argtypes = [wintypes.HANDLE]
-    proc = k32.OpenProcess(0x1000, False, pid.value)      # QUERY_LIMITED_INFORMATION
+    proc = k32.OpenProcess(0x1000, False, pid.value)  # QUERY_LIMITED_INFORMATION
     if not proc:
-        return True                                        # can't even look: protected
+        return True  # can't even look: protected
     try:
         token = wintypes.HANDLE()
-        if not adv.OpenProcessToken(proc, 0x0008, ctypes.byref(token)):   # TOKEN_QUERY
+        if not adv.OpenProcessToken(proc, 0x0008, ctypes.byref(token)):  # TOKEN_QUERY
             return True
         try:
             elevated = wintypes.DWORD()
             size = wintypes.DWORD()
-            if not adv.GetTokenInformation(token, 20, ctypes.byref(elevated),   # Elevation
-                                           ctypes.sizeof(elevated), ctypes.byref(size)):
+            if not adv.GetTokenInformation(
+                token,
+                20,
+                ctypes.byref(elevated),  # Elevation
+                ctypes.sizeof(elevated),
+                ctypes.byref(size),
+            ):
                 return False
             if not elevated.value:
                 return False
@@ -179,7 +209,10 @@ def foreground() -> WindowInfo | None:
     if user32 is None:
         return None
     hwnd = user32.GetForegroundWindow()
-    if not hwnd:
+    if not hwnd or not user32.IsWindow(hwnd):
+        wins = list_windows()
+        if len(wins) == 1:
+            return wins[0]
         return None
     return WindowInfo(int(hwnd), _title(hwnd), _proc_name(hwnd), bool(user32.IsIconic(hwnd)))
 
@@ -193,7 +226,7 @@ def find(query: str, windows: list[WindowInfo] | None = None) -> WindowInfo | No
     if not q:
         return None
     wins = windows if windows is not None else list_windows()
-    for w in wins:                                   # app name first (exact-ish)
+    for w in wins:  # app name first (exact-ish)
         app = _friendly_app(w.app).lower()
         if q == app or q == w.app.lower().replace(".exe", ""):
             return w
@@ -218,9 +251,11 @@ def activate(hwnd: int) -> bool:
     try:
         if user32.IsIconic(hwnd):
             user32.ShowWindow(hwnd, SW_RESTORE)
-        if user32.SetForegroundWindow(hwnd) and user32.GetForegroundWindow() == hwnd:
-            return True
+        user32.BringWindowToTop(hwnd)
+        user32.SetForegroundWindow(hwnd)
         fg = user32.GetForegroundWindow()
+        if fg == hwnd or (not fg and len(list_windows()) == 1 and list_windows()[0].hwnd == hwnd):
+            return True
         cur_tid = ctypes.windll.kernel32.GetCurrentThreadId()
         fg_tid = user32.GetWindowThreadProcessId(fg, None) if fg else 0
         attached = bool(fg_tid) and bool(user32.AttachThreadInput(cur_tid, fg_tid, True))
@@ -233,7 +268,10 @@ def activate(hwnd: int) -> bool:
         if user32.GetForegroundWindow() != hwnd:
             user32.SwitchToThisWindow(hwnd, True)
         time.sleep(0.15)
-        if user32.GetForegroundWindow() == hwnd:
+        fg_now = user32.GetForegroundWindow()
+        if fg_now == hwnd or (
+            not fg_now and len(list_windows()) == 1 and list_windows()[0].hwnd == hwnd
+        ):
             return True
         return _activate_by_title_click(hwnd)
     except Exception:
@@ -253,40 +291,57 @@ def _activate_by_title_click(hwnd: int) -> bool:
         MOUSEEVENTF_LEFTUP,
         MOUSEINPUT,
     )
+
     if user32.IsIconic(hwnd):
         return False
     rect = wintypes.RECT()
     if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
         return False
-    x = rect.left + max(40, (rect.right - rect.left) // 3)       # clear of icon + buttons
+    x = rect.left + max(40, (rect.right - rect.left) // 3)  # clear of icon + buttons
     user32.WindowFromPoint.restype = wintypes.HWND
     user32.WindowFromPoint.argtypes = [wintypes.POINT]
     user32.GetAncestor.restype = wintypes.HWND
     # WM_NCHITTEST with a timeout: a hung app must never freeze RELAY
-    user32.SendMessageTimeoutW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
-                                           wintypes.LPARAM, wintypes.UINT, wintypes.UINT,
-                                           ctypes.POINTER(ctypes.c_size_t)]
+    user32.SendMessageTimeoutW.argtypes = [
+        wintypes.HWND,
+        wintypes.UINT,
+        wintypes.WPARAM,
+        wintypes.LPARAM,
+        wintypes.UINT,
+        wintypes.UINT,
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
     y = None
-    for dy in (12, 18, 24, 30, 38):          # below the invisible resize border
+    for dy in (12, 18, 24, 30, 38):  # below the invisible resize border
         cy = rect.top + dy
         hit = user32.WindowFromPoint(wintypes.POINT(x, cy))
-        if not hit or user32.GetAncestor(hit, 2) != hwnd:          # GA_ROOT
-            continue                                               # covered here
+        if not hit or user32.GetAncestor(hit, 2) != hwnd:  # GA_ROOT
+            continue  # covered here
         result = ctypes.c_size_t(0)
         lparam = ((cy & 0xFFFF) << 16) | (x & 0xFFFF)
-        if user32.SendMessageTimeoutW(hwnd, 0x0084, 0, lparam, 0x0002, 500,   # ABORTIFHUNG
-                                      ctypes.byref(result)) and result.value == 2:  # CAPTION
+        if (
+            user32.SendMessageTimeoutW(
+                hwnd,
+                0x0084,
+                0,
+                lparam,
+                0x0002,
+                500,  # ABORTIFHUNG
+                ctypes.byref(result),
+            )
+            and result.value == 2
+        ):  # CAPTION
             y = cy
             break
     if y is None:
-        return False                          # no verified title-bar point: don't click
+        return False  # no verified title-bar point: don't click
     old = wintypes.POINT()
     user32.GetCursorPos(ctypes.byref(old))
     user32.SetCursorPos(x, y)
-    down = INPUT(type=INPUT_MOUSE, u=_INPUTUNION(mi=MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTDOWN,
-                                                                0, 0)))
-    up = INPUT(type=INPUT_MOUSE, u=_INPUTUNION(mi=MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTUP, 0,
-                                                              0)))
+    down = INPUT(
+        type=INPUT_MOUSE, u=_INPUTUNION(mi=MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, 0))
+    )
+    up = INPUT(type=INPUT_MOUSE, u=_INPUTUNION(mi=MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, 0)))
     arr = (INPUT * 2)(down, up)
     user32.SendInput(2, arr, ctypes.sizeof(INPUT))
     time.sleep(0.25)
@@ -327,5 +382,9 @@ def spoken_list(windows: list[WindowInfo], limit: int = 10) -> str:
     names = [w.spoken + (" (minimized)" if w.minimized else "") for w in windows[:limit]]
     more = f", and {len(windows) - limit} more" if len(windows) > limit else ""
     n = len(windows)
-    return (f"{n} window{'s are' if n != 1 else ' is'} open: "
-            + "; ".join(f"{i}, {nm}" for i, nm in enumerate(names, 1)) + more + ".")
+    return (
+        f"{n} window{'s are' if n != 1 else ' is'} open: "
+        + "; ".join(f"{i}, {nm}" for i, nm in enumerate(names, 1))
+        + more
+        + "."
+    )

@@ -22,7 +22,7 @@ def _tone(freq: float, ms: int, vol: float = 0.25) -> np.ndarray:
     n = int(SR * ms / 1000)
     t = np.arange(n) / SR
     wave = np.sin(2 * np.pi * freq * t)
-    fade = min(n // 4, int(SR * 0.012))           # click-free edges
+    fade = min(n // 4, int(SR * 0.012))  # click-free edges
     env = np.ones(n)
     if fade:
         env[:fade] = np.linspace(0, 1, fade)

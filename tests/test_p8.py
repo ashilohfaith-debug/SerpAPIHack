@@ -20,14 +20,18 @@ def _el(name, role="Button", value=""):
 def test_mode_gating():
     assert pol.should_speak(pol.Priority.BACKGROUND, pol.QUICK) is False
     assert pol.should_speak(pol.Priority.TASK, pol.QUICK) is True
-    assert pol.should_speak(pol.Priority.TASK, pol.QUIET) is False      # quiet drops task chatter
-    assert pol.should_speak(pol.Priority.CRITICAL, pol.QUIET) is True   # keeps critical
+    assert pol.should_speak(pol.Priority.TASK, pol.QUIET) is False  # quiet drops task chatter
+    assert pol.should_speak(pol.Priority.CRITICAL, pol.QUIET) is True  # keeps critical
     assert pol.should_speak(pol.Priority.BACKGROUND, pol.DETAILED) is True
 
 
 def test_describe_verbosity_and_spell():
-    snap = ScreenSnapshot(1, foreground_app="notepad.exe", foreground_title="Untitled",
-                          elements=[_el("Save"), _el("Cancel")])
+    snap = ScreenSnapshot(
+        1,
+        foreground_app="notepad.exe",
+        foreground_title="Untitled",
+        elements=[_el("Save"), _el("Cancel")],
+    )
     assert "controls include" not in pol.describe(snap, pol.QUICK).lower()
     assert "controls include" in pol.describe(snap, pol.DETAILED).lower()
     assert pol.spell("Hi!") == "H, I, !"
@@ -100,8 +104,7 @@ class FakeWorker:
 
 
 def test_dangerous_click_requires_spoken_confirmation_before_acting():
-    snap = ScreenSnapshot(1, foreground_app="app", foreground_title="App",
-                          elements=[_el("Delete")])
+    snap = ScreenSnapshot(1, foreground_app="app", foreground_title="App", elements=[_el("Delete")])
     ctx = TaskContext("t")
     ctx.last_narrated = snap
     fx = FakeExec()
@@ -110,9 +113,15 @@ def test_dangerous_click_requires_spoken_confirmation_before_acting():
     def on_confirm(dec, target, retry):
         captured.update(dec=dec, target=target, retry=retry)
 
-    runner = TransparentRunner(fx, FakeWorker(snap), FakeVerifier(), ctx,
-                               speak=lambda t: None, engine=PermissionEngine(),
-                               on_confirm_needed=on_confirm)
+    runner = TransparentRunner(
+        fx,
+        FakeWorker(snap),
+        FakeVerifier(),
+        ctx,
+        speak=lambda t: None,
+        engine=PermissionEngine(),
+        on_confirm_needed=on_confirm,
+    )
     steps, _ = plan(parse("click delete"))
     results = runner.run(steps)
     # It asked for confirmation and did NOT act.
@@ -128,6 +137,7 @@ def test_dangerous_click_requires_spoken_confirmation_before_acting():
 def test_session_confirmation_and_mode(tmp_path):
     from relay.safety import Action
     from relay.session import Session
+
     spoken = []
     s = Session(speak=spoken.append, db_path=":memory:")
     try:
@@ -141,12 +151,12 @@ def test_session_confirmation_and_mode(tmp_path):
         s._on_confirm_needed(dec, "Delete", retry=lambda: ran.__setitem__("n", ran["n"] + 1))
         assert s._pending is not None
         spoken.clear()
-        s.handle("nope")                 # cancel path
+        s.handle("nope")  # cancel path
         assert s._pending is None and ran["n"] == 0
         assert any("cancel" in t.lower() for t in spoken)
 
         s._on_confirm_needed(dec, "Delete", retry=lambda: ran.__setitem__("n", ran["n"] + 1))
-        s.handle("confirm delete")       # confirm path
+        s.handle("confirm delete")  # confirm path
         assert ran["n"] == 1 and s._pending is None
     finally:
         s.close()

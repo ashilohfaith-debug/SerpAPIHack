@@ -38,10 +38,18 @@ from relay.safety import Action
 log = get_logger("runner")
 
 _APP_EXE = {
-    "notepad": "notepad.exe", "calculator": "calc.exe", "calc": "calc.exe",
-    "file explorer": "explorer.exe", "explorer": "explorer.exe", "files": "explorer.exe",
-    "paint": "mspaint.exe", "wordpad": "write.exe", "edge": "msedge.exe",
-    "microsoft edge": "msedge.exe", "chrome": "chrome.exe", "brave": "brave.exe",
+    "notepad": "notepad.exe",
+    "calculator": "calc.exe",
+    "calc": "calc.exe",
+    "file explorer": "explorer.exe",
+    "explorer": "explorer.exe",
+    "files": "explorer.exe",
+    "paint": "mspaint.exe",
+    "wordpad": "write.exe",
+    "edge": "msedge.exe",
+    "microsoft edge": "msedge.exe",
+    "chrome": "chrome.exe",
+    "brave": "brave.exe",
     "settings": "ms-settings:",
 }
 
@@ -54,19 +62,36 @@ _REF_ERROR_SPEECH = {
     "no_target": "I'm not sure what to act on.",
 }
 
-SPOKEN_KEYS = {"ctrl": "Control", "alt": "Alt", "shift": "Shift", "win": "Windows",
-               "esc": "Escape", "pageup": "Page Up", "pagedown": "Page Down",
-               "backspace": "Backspace", "delete": "Delete", "enter": "Enter",
-               "tab": "Tab", "space": "Space", "=": "plus", "-": "minus",
-               "up": "Up arrow", "down": "Down arrow", "left": "Left arrow",
-               "right": "Right arrow", "home": "Home", "end": "End",
-               "playpause": "play/pause", "nexttrack": "next track",
-               "prevtrack": "previous track", "stop": "stop"}
+SPOKEN_KEYS = {
+    "ctrl": "Control",
+    "alt": "Alt",
+    "shift": "Shift",
+    "win": "Windows",
+    "esc": "Escape",
+    "pageup": "Page Up",
+    "pagedown": "Page Down",
+    "backspace": "Backspace",
+    "delete": "Delete",
+    "enter": "Enter",
+    "tab": "Tab",
+    "space": "Space",
+    "=": "plus",
+    "-": "minus",
+    "up": "Up arrow",
+    "down": "Down arrow",
+    "left": "Left arrow",
+    "right": "Right arrow",
+    "home": "Home",
+    "end": "End",
+    "playpause": "play/pause",
+    "nexttrack": "next track",
+    "prevtrack": "previous track",
+    "stop": "stop",
+}
 
 
 def spoken_keys(keys) -> str:
-    return " ".join(SPOKEN_KEYS.get(k, k.upper() if len(k) == 1 else k.capitalize())
-                    for k in keys)
+    return " ".join(SPOKEN_KEYS.get(k, k.upper() if len(k) == 1 else k.capitalize()) for k in keys)
 
 
 @dataclass
@@ -92,9 +117,19 @@ def _wait(cond, timeout: float, interval: float = 0.25) -> bool:
 
 
 class TransparentRunner:
-    def __init__(self, executor, worker, verifier, ctx: TaskContext, speak=None,
-                 emergency=None, bus=None, engine=None, on_confirm_needed=None,
-                 mode: str = "quick") -> None:
+    def __init__(
+        self,
+        executor,
+        worker,
+        verifier,
+        ctx: TaskContext,
+        speak=None,
+        emergency=None,
+        bus=None,
+        engine=None,
+        on_confirm_needed=None,
+        mode: str = "quick",
+    ) -> None:
         self.ex = executor
         self.worker = worker
         self.vf = verifier
@@ -110,8 +145,13 @@ class TransparentRunner:
         # them again would talk over it (RELAY still reports everything else)
         self.screen_reader = False
 
-    def say(self, text: str, priority: int = pol.Priority.TASK, wait: bool = False,
-            timeout: float = 10.0) -> None:
+    def say(
+        self,
+        text: str,
+        priority: int = pol.Priority.TASK,
+        wait: bool = False,
+        timeout: float = 10.0,
+    ) -> None:
         if not text or not pol.should_speak(priority, self.mode):
             return
         self.last_said = text
@@ -124,6 +164,7 @@ class TransparentRunner:
         if self._speak is not None:
             try:
                 import inspect
+
                 sig = None
                 try:
                     sig = inspect.signature(self._speak)
@@ -175,8 +216,9 @@ class TransparentRunner:
             r = self._run_step(step)
             results.append(r)
             if r.state in ("failed", "awaiting_confirmation", "cancelled"):
-                self._emit_task("waiting_for_confirmation" if r.state == "awaiting_confirmation"
-                                else r.state)
+                self._emit_task(
+                    "waiting_for_confirmation" if r.state == "awaiting_confirmation" else r.state
+                )
                 break  # stop the sequence; the user decides / confirms
         else:
             if steps:
@@ -191,9 +233,9 @@ class TransparentRunner:
         prev = self.ctx.last_narrated or self.worker.observe(3.0)
         announce = step.payload.get("announce", f"I'm going to {step.description}.")
         if announce:
-            self.say(announce, wait=True)                      # announce before acting (wait)
+            self.say(announce, wait=True)  # announce before acting (wait)
         outcome, detail = self._act(step)
-        if outcome == "AWAIT":                      # needs spoken confirmation first
+        if outcome == "AWAIT":  # needs spoken confirmation first
             return StepResult(step.description, "awaiting_confirmation", detail)
         new = self.worker.observe(3.0)
         # system settings (volume, media keys) don't change the screen: anything that
@@ -217,13 +259,16 @@ class TransparentRunner:
             self.say(f"I couldn't do that. {detail}", pol.Priority.CRITICAL)
             return StepResult(desc, "failed", detail, deltas)
         if outcome.state == ExecState.VERIFIED:
-            self.say(outcome.detail if p.get("speak_detail") and outcome.detail
-                     else f"Done. {desc[:1].upper() + desc[1:]}.")
+            self.say(
+                outcome.detail
+                if p.get("speak_detail") and outcome.detail
+                else f"Done. {desc[:1].upper() + desc[1:]}."
+            )
             state = "verified"
         elif outcome.state == ExecState.EXECUTED:
             # ran, but the result isn't observable (a key press, a media key): say
             # exactly what was done — never "done" as if it were verified
-            if "done_text" in p:               # "" = the announcement already said it
+            if "done_text" in p:  # "" = the announcement already said it
                 if p["done_text"]:
                     self.say(p["done_text"])
                 state = "executed"
@@ -231,9 +276,14 @@ class TransparentRunner:
                 self.say("I did that, but I couldn't fully confirm it.")
                 state = "uncertain"
         elif outcome.state == ExecState.UNCERTAIN:
-            self.say(p.get("uncertain_text") or
-                     (f"I did that, but I couldn't confirm it: {outcome.detail}."
-                      if outcome.detail else "I did that, but I couldn't fully confirm it."))
+            self.say(
+                p.get("uncertain_text")
+                or (
+                    f"I did that, but I couldn't confirm it: {outcome.detail}."
+                    if outcome.detail
+                    else "I did that, but I couldn't fully confirm it."
+                )
+            )
             state = "uncertain"
         elif outcome.state == ExecState.CANCELLED:
             self.say(f"I didn't do that: {_human(outcome.detail)}.", pol.Priority.CONFIRMATION)
@@ -241,7 +291,7 @@ class TransparentRunner:
         else:
             self.say(f"That didn't work: {_human(outcome.detail)}.", pol.Priority.CRITICAL)
             state = "failed"
-        for d in deltas:                                # tell the user every change
+        for d in deltas:  # tell the user every change
             self.say(d)
         return StepResult(desc, state, outcome.detail if outcome else detail, deltas)
 
@@ -256,9 +306,12 @@ class TransparentRunner:
             # bring the app's window forward — it may not have grabbed the foreground
             self.worker.activate_app(app)
             running = self.vf.app_running(exe) if exe.endswith(".exe") else True
-            present = running or self.vf.window_present(app)
-            return self.vf.verify(o, present, "app is on screen" if present
-                                  else "could not confirm the app opened"), ""
+            present = self.vf.window_present(app) or (
+                running and self.vf.window_present(exe.replace(".exe", ""))
+            )
+            return self.vf.verify(
+                o, present, "app is on screen" if present else "could not confirm the app opened"
+            ), ""
         if kind == "launch":
             return self._act_launch(p), ""
         if kind == "open_uri":
@@ -268,16 +321,19 @@ class TransparentRunner:
         if kind == "type":
             o = self.ex.type_text(p["text"])
             time.sleep(0.4)
-            snippet = (p["text"].split() or [p["text"]])[0]
-            seen = self.vf.focus_value_contains(snippet[:12])
-            return self.vf.verify(o, seen, "the text is there" if seen
-                                  else "couldn't confirm the text"), ""
+            txt = p["text"].strip()
+            check_txt = txt if len(txt) <= 20 else txt[:20]
+            seen = self.vf.focus_value_contains(check_txt) or self.vf.page_contains(check_txt)
+            return self.vf.verify(
+                o, seen, "the text is there" if seen else "couldn't confirm the text"
+            ), ""
         if kind == "save":
             o = self.ex.hotkey("ctrl", "s")
             time.sleep(1.0)
             dlg = self.vf.dialog_present()
-            return self.vf.verify(o, dlg, "a save dialog opened" if dlg
-                                  else "no save dialog appeared"), ""
+            return self.vf.verify(
+                o, dlg, "a save dialog opened" if dlg else "no save dialog appeared"
+            ), ""
         if kind == "save_as":
             return self._act_save_as(p), ""
         if kind in ("press", "scroll"):
@@ -298,13 +354,19 @@ class TransparentRunner:
             ok = self.vf.file_exists(str(p["dest"]))
             return self.vf.verify(o, ok, p.get("ok_text", "")), ""
         if kind == "recycle":
+            from pathlib import Path
+
             o = self.ex.recycle(p["paths"])
-            return self.vf.verify(o, o.ok, p.get("ok_text", "moved to the Recycle Bin")), ""
+            all_removed = not any(Path(path).exists() for path in p["paths"])
+            return self.vf.verify(o, all_removed, p.get("ok_text", "moved to the Recycle Bin")), ""
         return None, "unsupported step"
 
     def _act_launch(self, p):
-        o = self.ex.launch_entry(p["entry"]) if p.get("entry") is not None \
+        o = (
+            self.ex.launch_entry(p["entry"])
+            if p.get("entry") is not None
             else self.ex.launch_app(p["exe"])
+        )
         finder = p.get("find_window")
         win = None
         if finder is not None:
@@ -313,25 +375,35 @@ class TransparentRunner:
             def seen():
                 found["w"] = finder()
                 return found["w"] is not None
+
             _wait(seen, p.get("timeout", 8.0), 0.4)
             win = found.get("w")
             if win is not None and p.get("activate") is not None:
                 p["activate"](win.hwnd)
             if win is not None:
-                time.sleep(p.get("settle", 1.0))   # let it finish drawing before we look
+                time.sleep(p.get("settle", 1.0))  # let it finish drawing before we look
         ok = win is not None
-        return self.vf.verify(o, ok, f"{p.get('label', 'The app')} is open." if ok
-                              else "I couldn't see its window yet")
+        return self.vf.verify(
+            o,
+            ok,
+            f"{p.get('label', 'The app')} is open." if ok else "I couldn't see its window yet",
+        )
 
     def _act_open_uri(self, p):
         o = self.ex.open_uri(p["uri"], p.get("label", ""))
         check = p.get("check")
         ok = _wait(check, p.get("timeout", 8.0), 0.4) if check is not None else False
-        return self.vf.verify(o, ok, p.get("ok_text", "it opened") if ok
-                              else p.get("fail_text", "I couldn't confirm it opened"))
+        return self.vf.verify(
+            o,
+            ok,
+            p.get("ok_text", "it opened")
+            if ok
+            else p.get("fail_text", "I couldn't confirm it opened"),
+        )
 
     def _act_window(self, p):
         from relay.system import windows as w
+
         op, hwnd = p["op"], p["hwnd"]
         o = self.ex.window_op(hwnd, op, p.get("label", ""))
         if op == "close":
@@ -339,8 +411,10 @@ class TransparentRunner:
             if gone:
                 done = f"{p.get('label', 'The window')} is closed."
                 if w.foreground_blocks_input():
-                    done += (" Windows has put one of its own invisible windows in front; "
-                             "press Alt+Tab to get back to your other windows.")
+                    done += (
+                        " Windows has put one of its own invisible windows in front; "
+                        "press Alt+Tab to get back to your other windows."
+                    )
                 return self.vf.verify(o, True, done)
             # still there: most likely the app is asking to save — narrate, don't force
             snap = self.worker.observe(3.0)
@@ -349,15 +423,24 @@ class TransparentRunner:
                 btns = f" Options: {', '.join(d.buttons)}." if d.buttons else ""
                 return self.vf.verify(o, False, f"It's asking: {d.title}.{btns}")
             return self.vf.verify(o, False, "the window is still open")
-        checks = {"minimize": lambda: w.user32.IsIconic(hwnd),
-                  "maximize": lambda: w.user32.IsZoomed(hwnd),
-                  "restore": lambda: not w.user32.IsIconic(hwnd),
-                  "activate": lambda: w.user32.GetForegroundWindow() == hwnd}
+        checks = {
+            "minimize": lambda: w.user32.IsIconic(hwnd),
+            "maximize": lambda: w.user32.IsZoomed(hwnd),
+            "restore": lambda: not w.user32.IsIconic(hwnd),
+            "activate": lambda: (
+                w.user32.GetForegroundWindow() == hwnd
+                or (w.foreground() is not None and w.foreground().hwnd == hwnd)
+            ),
+        }
         ok = _wait(checks[op], 2.0, 0.2)
         if not ok and op == "activate" and w.foreground_blocks_input():
             # an invisible Windows/system window holds focus: only a real key press frees it
-            return self.vf.verify(o, False, "Windows is keeping one of its own windows in "
-                                  "front. Press Alt+Tab once, then ask me again")
+            return self.vf.verify(
+                o,
+                False,
+                "Windows is keeping one of its own windows in "
+                "front. Press Alt+Tab once, then ask me again",
+            )
         return self.vf.verify(o, ok, p.get("ok_text", "") if ok else "")
 
     def _act_hotkey(self, p):
@@ -412,14 +495,20 @@ class TransparentRunner:
             return self.vf.verify(o3, False, f"It's asking: {d.title}.{btns}")
         stem = p["name"].rsplit(".", 1)[0].lower()
         titled = bool(snap and stem[:20] in (snap.foreground_title or "").lower())
-        return self.vf.verify(o3, titled, f"Saved as {p['name']}." if titled
-                              else "the dialog closed but I couldn't see the new name")
+        return self.vf.verify(
+            o3,
+            titled,
+            f"Saved as {p['name']}."
+            if titled
+            else "the dialog closed but I couldn't see the new name",
+        )
 
     def _act_activate(self, step):
         p = step.payload
         snap = self.worker.observe(3.0)
-        el, err = resolve_reference(self.ctx, snap, target=p.get("target"),
-                                    ordinal=p.get("ordinal"), role=p.get("role"))
+        el, err = resolve_reference(
+            self.ctx, snap, target=p.get("target"), ordinal=p.get("ordinal"), role=p.get("role")
+        )
         if el is None and p.get("deep_find") is not None and err in ("not_found", "out_of_range"):
             el = p["deep_find"]()
             if el is not None:
@@ -428,16 +517,23 @@ class TransparentRunner:
             return None, _REF_ERROR_SPEECH.get(err, "I couldn't do that.")
         if self.engine is not None and self._on_confirm_needed is not None:
             is_pwd = bool(el.states.get("is_password") or el.states.get("protected"))
-            dec = self.engine.classify(Action(
-                kind="invoke", target_app=el.window_title,
-                target_label=el.name, target_role=el.role,
-                is_password_field=is_pwd))
+            dec = self.engine.classify(
+                Action(
+                    kind="invoke",
+                    target_app=el.window_title,
+                    target_label=el.name,
+                    target_role=el.role,
+                    is_password_field=is_pwd,
+                )
+            )
             if dec.requires_confirmation:
                 self._on_confirm_needed(
-                    dec, el.name,
-                    lambda e=el, s=snap, d=step.description: self._confirmed_activate(d, e, s))
+                    dec,
+                    el.name,
+                    lambda e=el, s=snap, d=step.description: self._confirmed_activate(d, e, s),
+                )
                 return "AWAIT", dec.spoken_summary
-        if p.get("ordinal") is not None:          # say WHICH one an ordinal resolved to
+        if p.get("ordinal") is not None:  # say WHICH one an ordinal resolved to
             role = el.role.lower() if el.role else "control"
             self.say(f"That's the {role} {el.name}.", pol.Priority.FOCUS)
         return self._invoke_verify(el, snap), ""
@@ -446,11 +542,12 @@ class TransparentRunner:
         o = self.ex.invoke_element(el)
         time.sleep(0.6)
         after = self.worker.observe(3.0)
-        changed = bool(delta_mod.diff(prev_snap, after)) or \
-            (after is not None and prev_snap is not None
-             and after.fingerprint() != prev_snap.fingerprint())
-        return self.vf.verify(o, changed, "it responded" if changed
-                              else "nothing seemed to change")
+        changed = bool(delta_mod.diff(prev_snap, after)) or (
+            after is not None
+            and prev_snap is not None
+            and after.fingerprint() != prev_snap.fingerprint()
+        )
+        return self.vf.verify(o, changed, "it responded" if changed else "nothing seemed to change")
 
     def _confirmed_activate(self, desc, el, prev_snap) -> StepResult:
         """Run an activation the user has just confirmed by phrase, and narrate it."""
@@ -463,6 +560,7 @@ class TransparentRunner:
         class _S:
             description = desc
             payload: dict = {}
+
         return self._narrate_outcome(_S, outcome, "", deltas)
 
     # --- answering intents (no OS action) ---
@@ -472,8 +570,9 @@ class TransparentRunner:
         if ak == Kind.WHAT_CHANGED:
             deltas = delta_mod.diff(self.ctx.last_narrated, snap)
             self.ctx.last_narrated = snap
-            self.say("Nothing has changed." if not deltas else " ".join(deltas),
-                     pol.Priority.REQUESTED)
+            self.say(
+                "Nothing has changed." if not deltas else " ".join(deltas), pol.Priority.REQUESTED
+            )
             return StepResult("what changed", "answered", deltas=deltas)
         if snap is None:
             self.say("I can't read the screen right now.", pol.Priority.REQUESTED)
@@ -481,23 +580,32 @@ class TransparentRunner:
         if ak == Kind.WHERE_AM_I:
             self.say(pol.describe(snap, self.mode), pol.Priority.REQUESTED)
         elif ak == Kind.LIST_OPTIONS:
-            names = [e.name for e in _reading_order(delta_mod.meaningful(snap.elements))
-                     if e.name][:10]
-            self.say("Your options include: " + ", ".join(names) + "." if names
-                     else "I don't see any labelled controls to choose from.",
-                     pol.Priority.REQUESTED)
+            names = [e.name for e in _reading_order(delta_mod.meaningful(snap.elements)) if e.name][
+                :10
+            ]
+            self.say(
+                "Your options include: " + ", ".join(names) + "."
+                if names
+                else "I don't see any labelled controls to choose from.",
+                pol.Priority.REQUESTED,
+            )
         elif ak == Kind.READ_FOCUS:
             if snap.selection:
                 self.say(f"Selected text: {snap.selection}", pol.Priority.REQUESTED)
             elif snap.focus and (snap.focus.value or snap.focus.name):
-                self.say(f"{snap.focus.role}: {snap.focus.value or snap.focus.name}",
-                         pol.Priority.REQUESTED)
+                self.say(
+                    f"{snap.focus.role}: {snap.focus.value or snap.focus.name}",
+                    pol.Priority.REQUESTED,
+                )
             else:
                 self.say("Nothing is focused right now.", pol.Priority.REQUESTED)
         elif ak == Kind.HELP:
-            self.say("You can say: what's on my screen, open an app, click something, "
-                     "type text, save, what changed, next, spell that, quiet mode, "
-                     "stop, or cancel.", pol.Priority.REQUESTED)
+            self.say(
+                "You can say: what's on my screen, open an app, click something, "
+                "type text, save, what changed, next, spell that, quiet mode, "
+                "stop, or cancel.",
+                pol.Priority.REQUESTED,
+            )
         else:  # DESCRIBE_SCREEN
             self.say(pol.describe(snap, self.mode), pol.Priority.REQUESTED)
         self.ctx.last_narrated = snap

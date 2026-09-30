@@ -33,6 +33,7 @@ ObserveFn = Callable[[int], ScreenSnapshot]
 
 def _default_observe(version: int) -> ScreenSnapshot:
     from relay.perception import uia
+
     return uia.observe(version)
 
 
@@ -60,7 +61,15 @@ class _WorkerThread:
         # other threads (audio-device watch, volume) may do so earlier.
         try:
             import comtypes
+
             comtypes.CoInitialize()
+        except Exception:
+            pass
+        try:
+            import uiautomation as auto
+
+            auto.SetGlobalSearchTimeout(1.0)
+            auto.TIME_OUT_SECOND = 1.0
         except Exception:
             pass
         try:
@@ -134,11 +143,13 @@ class UIAWorker:
         prev = self._current
         self._current = snap  # L1 replace (never accumulate stale elements)
         if self._bus is not None and (prev is None or prev.fingerprint() != snap.fingerprint()):
-            self._bus.emit("perception.change",
-                           foreground_app=snap.foreground_app,
-                           foreground_title=snap.foreground_title,
-                           summary=snap.summary(),
-                           observation_version=snap.observation_version)
+            self._bus.emit(
+                "perception.change",
+                foreground_app=snap.foreground_app,
+                foreground_title=snap.foreground_title,
+                summary=snap.summary(),
+                observation_version=snap.observation_version,
+            )
         return snap
 
     def run(self, fn: Callable, timeout: float = 2.0):
@@ -157,12 +168,14 @@ class UIAWorker:
         """Bring a launched app's window to the foreground (best-effort — Windows
         may refuse a foreground change; the caller still verifies)."""
         from relay.perception import uia
+
         val, ok = self.run(lambda: uia.find_and_activate(app), timeout)
         return bool(ok and val)
 
     def list_windows(self, timeout: float = 3.0) -> list[dict]:
         """All visible top-level windows (title/app/hwnd)."""
         from relay.perception import uia
+
         val, ok = self.run(uia.list_top_windows, timeout)
         return val if (ok and val) else []
 
@@ -174,8 +187,11 @@ class UIAWorker:
     def is_stale(self, snap: ScreenSnapshot | None) -> bool:
         """True if the given snapshot is not the current observation — callers
         must re-observe before acting on its elements."""
-        return snap is None or self._current is None \
+        return (
+            snap is None
+            or self._current is None
             or snap.observation_version != self._current.observation_version
+        )
 
     # --- event-driven change monitor (WinEvents + debouncing + polling fallback) ---
     def start_change_monitor(self, interval: float = 0.3) -> None:
@@ -183,6 +199,7 @@ class UIAWorker:
             return
         try:
             from relay.perception.events import WinEventMonitor
+
             self._winevent_monitor = WinEventMonitor(
                 on_change=lambda: self.observe(), debounce_s=0.15
             )
@@ -193,8 +210,9 @@ class UIAWorker:
             log.warning("could not initialize WinEvent monitor: %s", e)
         # Polling fallback if WinEvents unavailable
         self._monitor_stop.clear()
-        self._monitor = threading.Thread(target=self._monitor_loop, args=(interval,),
-                                         name="uia-change-monitor", daemon=True)
+        self._monitor = threading.Thread(
+            target=self._monitor_loop, args=(interval,), name="uia-change-monitor", daemon=True
+        )
         self._monitor.start()
 
     def _monitor_loop(self, interval: float) -> None:

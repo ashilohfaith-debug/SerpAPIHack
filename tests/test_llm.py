@@ -29,9 +29,9 @@ SCRIPTS = {
 
 class MockLLM(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    log = []                        # (path, client port, headers, body)
+    log = []  # (path, client port, headers, body)
 
-    def log_message(self, *a):      # keep test output quiet
+    def log_message(self, *a):  # keep test output quiet
         pass
 
     def _record(self, body=None):
@@ -77,7 +77,7 @@ class MockLLM(BaseHTTPRequestHandler):
             self.wfile.write(b"0\r\n\r\n")
             self.wfile.flush()
         except OSError:
-            pass                    # the client cancelled this stream
+            pass  # the client cancelled this stream
 
     def _chunk(self, data: bytes) -> None:
         self.wfile.write(b"%x\r\n%s\r\n" % (len(data), data))
@@ -129,7 +129,7 @@ def test_client_reuses_one_connection(server):
     list(client.stream_chat(route, _msgs()))
     list(client.stream_chat(route, _msgs()))
     ports = {port for _path, port, _h, _b in MockLLM.log}
-    assert len(MockLLM.log) == 3 and len(ports) == 1     # warm + 2 requests, one socket
+    assert len(MockLLM.log) == 3 and len(ports) == 1  # warm + 2 requests, one socket
 
 
 def test_client_http_error_carries_status_and_retry_after(server):
@@ -152,13 +152,13 @@ def test_route_repr_hides_key(server):
 # ---------------------------------------------------------------- router
 def test_router_hedges_a_slow_route(server):
     router = Router([_route(server, "slow"), _route(server, "fast")], min_hedge=0.3)
-    router.health["slow"].ttft = 0.1            # looks fastest, so it is tried first
+    router.health["slow"].ttft = 0.1  # looks fastest, so it is tried first
     router.health["fast"].ttft = 0.5
     t0 = time.monotonic()
     text = "".join(router.stream(_msgs()))
     took = time.monotonic() - t0
     assert text.startswith("Paris") and router.last_route == "fast"
-    assert took < 1.2                           # did not wait for the 1.5 s route
+    assert took < 1.2  # did not wait for the 1.5 s route
 
 
 def test_router_fails_over_at_once_on_error(server):
@@ -166,7 +166,7 @@ def test_router_fails_over_at_once_on_error(server):
     router.health["err500"].ttft = 0.1
     t0 = time.monotonic()
     text = "".join(router.stream(_msgs()))
-    assert text.startswith("Paris") and time.monotonic() - t0 < 1.0   # no hedge wait
+    assert text.startswith("Paris") and time.monotonic() - t0 < 1.0  # no hedge wait
     assert router.health["err500"].failures == 1
 
 
@@ -174,14 +174,14 @@ def test_router_cools_down_a_rate_limited_route(server):
     router = Router([_route(server, "rate429"), _route(server, "fast")])
     router.health["rate429"].ttft = 0.1
     "".join(router.stream(_msgs()))
-    assert [r.name for r in router.ordered()] == ["fast"]      # skipped for Retry-After
+    assert [r.name for r in router.ordered()] == ["fast"]  # skipped for Retry-After
 
 
 def test_router_raises_noroute_when_everything_fails(server):
     router = Router([_route(server, "err500")])
     with pytest.raises(NoRoute):
         list(router.stream(_msgs()))
-    with pytest.raises(NoRoute):                # an empty answer is a failure too
+    with pytest.raises(NoRoute):  # an empty answer is a failure too
         list(Router([_route(server, "empty")]).stream(_msgs()))
 
 
@@ -201,8 +201,8 @@ def test_router_stops_streaming_when_cancelled(server):
     for delta in router.stream(_msgs(), cancel=cancel):
         got.append(delta)
         if len(got) == 3:
-            cancel.set()                        # the user said "stop"
-    assert len(got) <= 4 and time.monotonic() - t0 < 1.5     # 40 words would take 4 s
+            cancel.set()  # the user said "stop"
+    assert len(got) <= 4 and time.monotonic() - t0 < 1.5  # 40 words would take 4 s
 
 
 def test_router_connection_is_reused_across_questions(server):
@@ -235,14 +235,25 @@ class ScriptRouter:
 
 
 def test_first_sentence_is_spoken_before_the_answer_finishes():
-    router = ScriptRouter(["An index fund ", "is a basket of shares. ", "It tracks ",
-                           "a market ", "index ", "like the ", "Nifty fifty."], gap=0.1)
+    router = ScriptRouter(
+        [
+            "An index fund ",
+            "is a basket of shares. ",
+            "It tracks ",
+            "a market ",
+            "index ",
+            "like the ",
+            "Nifty fifty.",
+        ],
+        gap=0.1,
+    )
     spoken = []
     kind, text = Assistant(router).respond(
-        "what is an index fund", lambda s: spoken.append((s, time.monotonic())))
+        "what is an index fund", lambda s: spoken.append((s, time.monotonic()))
+    )
     assert kind == "answer"
     assert spoken[0][0] == "An index fund is a basket of shares."
-    assert spoken[0][1] < router.finished_at - 0.3        # long before the stream ended
+    assert spoken[0][1] < router.finished_at - 0.3  # long before the stream ended
     assert spoken[-1][0] == "It tracks a market index like the Nifty fifty."
 
 
@@ -262,11 +273,13 @@ def test_markdown_and_links_are_not_read_out():
 
 def test_do_command_is_validated_before_running():
     kind, cmd = Assistant(ScriptRouter(["DO: what time", " is it\n", "extra"])).respond(
-        "tell me the time please", lambda s: None)
+        "tell me the time please", lambda s: None
+    )
     assert (kind, cmd) == ("command", "what time is it")
     spoken = []
     kind, text = Assistant(ScriptRouter(["DO: delete my notes\n"])).respond(
-        "wipe everything", spoken.append)
+        "wipe everything", spoken.append
+    )
     assert kind == "answer" and spoken == ["I'm not able to do that one."]
 
 
@@ -281,7 +294,8 @@ def test_validate_command_rejects_unsafe_and_unknown():
 
 def test_offline_when_no_route_answers():
     kind, text = Assistant(ScriptRouter([], fail=NoRoute("down"))).respond(
-        "what is the weather", lambda s: None)
+        "what is the weather", lambda s: None
+    )
     assert (kind, text) == ("offline", "")
 
 
@@ -306,9 +320,11 @@ def test_follow_up_questions_keep_recent_turns():
     a = Assistant(router, max_turns=2)
     for q in ("capital of france", "and germany", "and italy"):
         a.respond(q, lambda s: None)
-    history = router.calls[-1][1:-1]            # between system prompt and new question
+    history = router.calls[-1][1:-1]  # between system prompt and new question
     assert [m["content"] for m in history if m["role"] == "user"] == [
-        "capital of france", "and germany"]
+        "capital of france",
+        "and germany",
+    ]
 
 
 def test_next_sentence_is_synthesised_while_the_last_one_plays():
@@ -332,7 +348,7 @@ def test_next_sentence_is_synthesised_while_the_last_one_plays():
         took = time.monotonic() - t0
     finally:
         q.shutdown()
-    assert took < 2.1                     # serial would be 2.4 s; pipelined about 1.6 s
+    assert took < 2.1  # serial would be 2.4 s; pipelined about 1.6 s
 
 
 def test_stop_frees_the_microphone_even_while_an_online_voice_request_is_in_flight():
@@ -340,7 +356,7 @@ def test_stop_frees_the_microphone_even_while_an_online_voice_request_is_in_flig
 
     from relay.audio.speech import SpeechQueue
 
-    class NetworkTTS:                     # a 2 s online request that can't be aborted
+    class NetworkTTS:  # a 2 s online request that can't be aborted
         def synth_to_array(self, text):
             time.sleep(2.0)
             return np.zeros(160, dtype=np.float32), 16000
@@ -350,8 +366,8 @@ def test_stop_frees_the_microphone_even_while_an_online_voice_request_is_in_flig
         q.say("A long answer.")
         time.sleep(0.2)
         assert q.is_speaking
-        q.interrupt()                     # the user pressed stop
-        assert not q.is_speaking          # mic may listen again immediately
+        q.interrupt()  # the user pressed stop
+        assert not q.is_speaking  # mic may listen again immediately
     finally:
         q.shutdown()
 
@@ -371,6 +387,7 @@ class FakeAssistant:
 
 def _session(assistant):
     from relay.session import Session
+
     spoken = []
     return Session(speak=spoken.append, db_path=":memory:", assistant=assistant), spoken
 
@@ -403,7 +420,7 @@ def test_assistant_command_is_announced_then_run_offline():
         s.handle("could you check the clock for me")
         joined = " ".join(spoken)
         assert "I understood that as: what time is it." in joined
-        assert "It's" in joined or ":" in joined           # the time was spoken
+        assert "It's" in joined or ":" in joined  # the time was spoken
     finally:
         s.close()
 
@@ -438,17 +455,19 @@ def test_without_assistant_unknown_is_still_explained():
 def test_routes_from_env_override_config(monkeypatch, tmp_path):
     from relay.config import Config
     from relay.llm import routes_from_config
+
     monkeypatch.setenv("RELAY_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("RELAY_OFFLINE")
-    assert routes_from_config(Config()) == []                 # off by default
+    assert routes_from_config(Config()) == []  # off by default
     monkeypatch.setenv("RELAY_LLM_URL", "http://localhost:3001/v1")
     monkeypatch.setenv("RELAY_LLM_KEY", "freellmapi-abc")
     routes = routes_from_config(Config())
     assert [r.model for r in routes] == ["auto:fast", "auto"]
     assert all(r.api_key == "freellmapi-abc" for r in routes)
     dev = routes[0].extra_headers["X-Relay-Device"]
-    assert len(dev) == 32 and routes_from_config(Config())[0].extra_headers[
-        "X-Relay-Device"] == dev                              # stable per install
+    assert (
+        len(dev) == 32 and routes_from_config(Config())[0].extra_headers["X-Relay-Device"] == dev
+    )  # stable per install
 
 
 def test_local_router_on_another_port_is_found(monkeypatch):
@@ -457,6 +476,7 @@ def test_local_router_on_another_port_is_found(monkeypatch):
     import socket
 
     import relay.llm as llm
+
     srv = socket.socket()
     srv.bind(("127.0.0.1", 0))
     srv.listen(1)
@@ -474,16 +494,35 @@ def test_local_router_on_another_port_is_found(monkeypatch):
 # ---------------------------------------------------------------- model tuning
 def test_tuning_picks_fast_chat_models_only():
     from relay.llm.tune import candidates
-    ids = ["auto", "fusion", "claude-opus-4-5", "gemini-3.5-flash-lite", "qwen3.7-flash",
-           "text-embedding-3", "whisper-large", "qwen3-vl-235b-a22b-thinking",
-           "llama-3.1-8b-instruct", "deepseek-r1-distill-qwen-7b", "glm-4.7-flash",
-           "gemma-4-e4b-uncensored-aggressive", "mistral-small-3.2-24b"]
+
+    ids = [
+        "auto",
+        "fusion",
+        "claude-opus-4-5",
+        "gemini-3.5-flash-lite",
+        "qwen3.7-flash",
+        "text-embedding-3",
+        "whisper-large",
+        "qwen3-vl-235b-a22b-thinking",
+        "llama-3.1-8b-instruct",
+        "deepseek-r1-distill-qwen-7b",
+        "glm-4.7-flash",
+        "gemma-4-e4b-uncensored-aggressive",
+        "mistral-small-3.2-24b",
+    ]
     picked = candidates(ids)
-    assert picked[0] == "gemini-3.5-flash-lite"                # flash-lite ranks first
+    assert picked[0] == "gemini-3.5-flash-lite"  # flash-lite ranks first
     assert {"qwen3.7-flash", "glm-4.7-flash", "llama-3.1-8b-instruct"} <= set(picked)
-    for bad in ("auto", "fusion", "claude-opus-4-5", "text-embedding-3", "whisper-large",
-                "qwen3-vl-235b-a22b-thinking", "deepseek-r1-distill-qwen-7b",
-                "gemma-4-e4b-uncensored-aggressive"):
+    for bad in (
+        "auto",
+        "fusion",
+        "claude-opus-4-5",
+        "text-embedding-3",
+        "whisper-large",
+        "qwen3-vl-235b-a22b-thinking",
+        "deepseek-r1-distill-qwen-7b",
+        "gemma-4-e4b-uncensored-aggressive",
+    ):
         assert bad not in picked
 
 
@@ -493,25 +532,34 @@ def test_tuned_ranking_drives_the_routes(monkeypatch, tmp_path):
     from relay.config import Config
     from relay.llm import routes_from_config
     from relay.llm.tune import best_models, save_cache
+
     monkeypatch.delenv("RELAY_OFFLINE")
     monkeypatch.setenv("RELAY_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("RELAY_LLM_URL", "http://127.0.0.1:9/v1")
     assert [r.model for r in routes_from_config(Config())] == ["auto:fast", "auto"]
-    save_cache("http://127.0.0.1:9/v1", [
-        {"model": "gemini-3.5-flash-lite", "ok": True, "ttft": 1.25},
-        {"model": "qwen3.7-flash", "ok": True, "ttft": 1.47},
-        {"model": "broken-model", "ok": False, "ttft": 0.5},
-        {"model": "glm-4.7-flash", "ok": True, "ttft": 2.1},
-        {"model": "slow-model", "ok": True, "ttft": 5.0}])
+    save_cache(
+        "http://127.0.0.1:9/v1",
+        [
+            {"model": "gemini-3.5-flash-lite", "ok": True, "ttft": 1.25},
+            {"model": "qwen3.7-flash", "ok": True, "ttft": 1.47},
+            {"model": "broken-model", "ok": False, "ttft": 0.5},
+            {"model": "glm-4.7-flash", "ok": True, "ttft": 2.1},
+            {"model": "slow-model", "ok": True, "ttft": 5.0},
+        ],
+    )
     routes = routes_from_config(Config())
-    assert [r.model for r in routes] == ["gemini-3.5-flash-lite", "qwen3.7-flash",
-                                         "glm-4.7-flash", "auto:fast"]   # router last
-    assert routes[0].ttft_hint == 1.25 and routes[-1].ttft_hint == 3.1   # backup: last
+    assert [r.model for r in routes] == [
+        "gemini-3.5-flash-lite",
+        "qwen3.7-flash",
+        "glm-4.7-flash",
+        "auto:fast",
+    ]  # router last
+    assert routes[0].ttft_hint == 1.25 and routes[-1].ttft_hint == 3.1  # backup: last
     router = Router(routes)
-    assert router.ordered()[0].model == "gemini-3.5-flash-lite"   # fastest tried first
+    assert router.ordered()[0].model == "gemini-3.5-flash-lite"  # fastest tried first
     assert best_models("http://127.0.0.1:9/v1", 1) == [("gemini-3.5-flash-lite", 1.25)]
-    monkeypatch.setattr(_t, "time", lambda: 10 ** 10)             # a stale ranking…
-    assert best_models("http://127.0.0.1:9/v1") == []             # …is not used
+    monkeypatch.setattr(_t, "time", lambda: 10**10)  # a stale ranking…
+    assert best_models("http://127.0.0.1:9/v1") == []  # …is not used
 
 
 def test_new_routes_keep_what_was_learned():

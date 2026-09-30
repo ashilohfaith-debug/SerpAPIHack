@@ -74,8 +74,7 @@ class Goal:
         curr = self.current_step
         curr_desc = f" Currently: {curr.description}." if curr else ""
         return (
-            f"Goal {self.title} in {self.mode} mode: {done} of {total} steps completed."
-            f"{curr_desc}"
+            f"Goal {self.title} in {self.mode} mode: {done} of {total} steps completed.{curr_desc}"
         )
 
 
@@ -194,8 +193,7 @@ class GoalManager:
 
         gid = f"goal_{uuid.uuid4().hex[:8]}"
         goal_steps = [
-            GoalStep(step_id=f"{gid}_s{idx}", description=desc)
-            for idx, desc in enumerate(steps, 1)
+            GoalStep(step_id=f"{gid}_s{idx}", description=desc) for idx, desc in enumerate(steps, 1)
         ]
         if goal_steps:
             goal_steps[0].state = "current"

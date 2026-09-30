@@ -25,10 +25,20 @@ MAX_DEPTH = 12
 MAX_VISITED = 2500
 
 _INTERACTIVE = {
-    "ButtonControl", "EditControl", "ComboBoxControl", "CheckBoxControl",
-    "RadioButtonControl", "MenuItemControl", "ListItemControl", "TreeItemControl",
-    "TabItemControl", "HyperlinkControl", "SliderControl", "SplitButtonControl",
-    "DocumentControl", "TextControl",
+    "ButtonControl",
+    "EditControl",
+    "ComboBoxControl",
+    "CheckBoxControl",
+    "RadioButtonControl",
+    "MenuItemControl",
+    "ListItemControl",
+    "TreeItemControl",
+    "TabItemControl",
+    "HyperlinkControl",
+    "SliderControl",
+    "SplitButtonControl",
+    "DocumentControl",
+    "TextControl",
 }
 
 _dpi_done = False
@@ -60,6 +70,7 @@ def _role(ctrl) -> str:
 def _app_name(ctrl) -> str:
     try:
         import psutil
+
         return psutil.Process(ctrl.ProcessId).name()
     except Exception:
         return ""
@@ -151,14 +162,27 @@ def _is_chromium(root) -> bool:
         return False
 
 
-def _enumerate(root, window_title: str, screen_area: int) -> list[UIElement]:
+_DIALOG_CLASSES = {
+    "#32770",
+    "Popup",
+    "ContentDialog",
+    "Flyout",
+    "Windows.UI.Core.CoreWindow",
+    "Shell_Dialog",
+    "ModalWindow",
+    "TopLevelWindowForOverflowXamlIsland",
+}
+
+
+def _enumerate(root, window_title: str, screen_area: int, app_name: str = "") -> list[UIElement]:
     elements: list[UIElement] = []
     visited = [0]
     deep = _is_chromium(root)
     max_depth = 30 if deep else MAX_DEPTH
     max_elements = 200 if deep else MAX_ELEMENTS
+    now = time.time()
 
-    def walk(ctrl, depth: int) -> None:
+    def walk(ctrl, depth: int, ancestry: tuple[str, ...]) -> None:
         if visited[0] >= MAX_VISITED or depth > max_depth or len(elements) >= max_elements:
             return
         visited[0] += 1
@@ -167,11 +191,13 @@ def _enumerate(root, window_title: str, screen_area: int) -> list[UIElement]:
             role_full = ctrl.ControlTypeName or ""
         except Exception:
             pass
+        current_ancestry = ancestry
         if role_full in _INTERACTIVE and _valid(ctrl):
             r = ctrl.BoundingRectangle
             area = (r.right - r.left) * (r.bottom - r.top)
             if area < screen_area * 0.95:  # skip near-fullscreen containers
                 role = role_full.replace("Control", "")
+                current_ancestry = ancestry + (role,)
                 name = ""
                 try:
                     name = (ctrl.Name or "").strip()
@@ -183,26 +209,55 @@ def _enumerate(root, window_title: str, screen_area: int) -> list[UIElement]:
                     states["focused"] = bool(ctrl.HasKeyboardFocus)
                 except Exception:
                     pass
-                elements.append(UIElement(
-                    uid=0, name=name, role=role,
-                    bbox=(int(r.left), int(r.top), int(r.right), int(r.bottom)),
-                    value=value, actions=actions, states=states,
-                    window_title=window_title,
-                ))
+
+                # Extract rich accessibility metadata
+                stable_id = ""
+                try:
+                    stable_id = getattr(ctrl, "AutomationId", "") or ""
+                except Exception:
+                    pass
+                if not stable_id:
+                    stable_id = f"{role}_{name}_{int(r.left)}_{int(r.top)}"
+
+                desc = ""
+                try:
+                    desc = getattr(ctrl, "HelpText", "") or getattr(ctrl, "ItemStatus", "") or ""
+                except Exception:
+                    pass
+
+                elements.append(
+                    UIElement(
+                        uid=0,
+                        name=name,
+                        role=role,
+                        bbox=(int(r.left), int(r.top), int(r.right), int(r.bottom)),
+                        value=value,
+                        actions=actions,
+                        states=states,
+                        window_title=window_title,
+                        provenance="uia",
+                        description=desc.strip(),
+                        ancestry=ancestry,
+                        confidence=1.0,
+                        timestamp=now,
+                        stable_id=stable_id,
+                        app=app_name,
+                    )
+                )
         try:
             children = ctrl.GetChildren()
         except Exception:
             children = []
         for c in children:
-            walk(c, depth + 1)
+            walk(c, depth + 1, current_ancestry)
 
-    walk(root, 0)
+    walk(root, 0, ())
     return elements
 
 
 def _detect_dialogs(fg) -> list[Dialog]:
-    """Detect classic Win32 dialogs (#32770) — save/open/message boxes — by class,
-    collecting their button labels."""
+    """Detect classic Win32 dialogs (#32770) and modern WinUI/XAML dialogs,
+    collecting button labels."""
     dialogs: list[Dialog] = []
     try:
         candidates = [fg] + list(fg.GetChildren())
@@ -210,16 +265,21 @@ def _detect_dialogs(fg) -> list[Dialog]:
         candidates = [fg]
     for w in candidates:
         try:
-            if getattr(w, "ClassName", "") == "#32770":
+            cls = (getattr(w, "ClassName", "") or "").strip()
+            is_dlg_cls = cls in _DIALOG_CLASSES or "dialog" in cls.lower() or "modal" in cls.lower()
+            ctrl_type = getattr(w, "ControlTypeName", "") or ""
+            is_win = ctrl_type == "WindowControl" and w != fg
+            if is_dlg_cls or is_win:
                 buttons = []
                 for c in w.GetChildren():
                     try:
-                        if c.ControlTypeName == "ButtonControl" and c.Name:
+                        if c.ControlTypeName in ("ButtonControl", "HyperlinkControl") and c.Name:
                             buttons.append(c.Name.strip())
                     except Exception:
                         pass
-                dialogs.append(Dialog(title=(w.Name or "Dialog").strip(),
-                                      buttons=tuple(buttons)))
+                title = (w.Name or "Dialog").strip()
+                if title or buttons:
+                    dialogs.append(Dialog(title=title, buttons=tuple(buttons)))
         except Exception:
             continue
     return dialogs
@@ -229,7 +289,13 @@ def list_top_windows() -> list[dict]:
     """All visible top-level windows (title + owning app + hwnd). Runs on the UIA
     thread. Lets RELAY find a just-launched app that didn't grab the foreground."""
     import uiautomation as auto
+
     ensure_dpi_aware()
+    try:
+        auto.SetGlobalSearchTimeout(1.0)
+        auto.TIME_OUT_SECOND = 1.0
+    except Exception:
+        pass
     out: list[dict] = []
     try:
         root = auto.GetRootControl()
@@ -243,8 +309,13 @@ def list_top_windows() -> list[dict]:
             r = w.BoundingRectangle
             if r.width() <= 0 or r.height() <= 0:
                 continue
-            out.append({"title": (w.Name or "").strip(), "app": _app_name(w),
-                        "hwnd": int(w.NativeWindowHandle)})
+            out.append(
+                {
+                    "title": (w.Name or "").strip(),
+                    "app": _app_name(w),
+                    "hwnd": int(w.NativeWindowHandle),
+                }
+            )
         except Exception:
             continue
     return out
@@ -255,9 +326,10 @@ def activate_window(hwnd: int) -> bool:
     can refuse a foreground change from a background process (a documented OS lock),
     so this is best-effort and the caller must still verify."""
     import time
+
     user32 = ctypes.windll.user32
     try:
-        user32.ShowWindow(hwnd, 9)       # SW_RESTORE
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
         user32.BringWindowToTop(hwnd)
         user32.SetForegroundWindow(hwnd)
         time.sleep(0.2)
@@ -282,6 +354,11 @@ def observe(observation_version: int) -> ScreenSnapshot:
     import uiautomation as auto
 
     ensure_dpi_aware()
+    try:
+        auto.SetGlobalSearchTimeout(1.0)
+        auto.TIME_OUT_SECOND = 1.0
+    except Exception:
+        pass
     user32 = ctypes.windll.user32
     screen_area = user32.GetSystemMetrics(0) * user32.GetSystemMetrics(1)
 
@@ -309,21 +386,33 @@ def observe(observation_version: int) -> ScreenSnapshot:
             name = (fc.Name or "").strip()
             actions, value, states = _actions_and_value(fc, role, name)
             r = fc.BoundingRectangle
+            stable_id = (
+                getattr(fc, "AutomationId", "") or f"{role}_{name}_{int(r.left)}_{int(r.top)}"
+            )
             focus_el = UIElement(
-                uid=-1, name=name, role=role,
+                uid=-1,
+                name=name,
+                role=role,
                 bbox=(int(r.left), int(r.top), int(r.right), int(r.bottom)),
-                value=value, actions=actions, states={**states, "focused": True},
+                value=value,
+                actions=actions,
+                states={**states, "focused": True},
                 window_title=title,
+                provenance="uia",
+                confidence=1.0,
+                timestamp=time.time(),
+                stable_id=stable_id,
+                app=app,
             )
     except Exception:
         focus_el = None
 
-    elements = _enumerate(fg, title, screen_area)
+    elements = _enumerate(fg, title, screen_area, app_name=app)
     if len(elements) < 5 and _is_chromium(fg):
         # Chromium/Electron builds its accessibility tree only after the first request
         # from an assistive tool: the first look can be nearly empty. Look once more.
         time.sleep(0.4)
-        elements = _enumerate(fg, title, screen_area)
+        elements = _enumerate(fg, title, screen_area, app_name=app)
     # small-first (more specific), de-dup, assign stable uids
     elements.sort(key=lambda e: (e.bbox[2] - e.bbox[0]) * (e.bbox[3] - e.bbox[1]))
     seen: set[tuple] = set()
@@ -333,10 +422,26 @@ def observe(observation_version: int) -> ScreenSnapshot:
         if key not in seen:
             seen.add(key)
             unique.append(e)
-    numbered = [UIElement(uid=i, name=e.name, role=e.role, bbox=e.bbox, value=e.value,
-                          actions=e.actions, states=e.states, window_title=e.window_title,
-                          provenance=e.provenance)
-                for i, e in enumerate(unique, start=1)]
+    numbered = [
+        UIElement(
+            uid=i,
+            name=e.name,
+            role=e.role,
+            bbox=e.bbox,
+            value=e.value,
+            actions=e.actions,
+            states=e.states,
+            window_title=e.window_title,
+            provenance=e.provenance,
+            description=e.description,
+            ancestry=e.ancestry,
+            confidence=e.confidence,
+            timestamp=e.timestamp,
+            stable_id=e.stable_id,
+            app=e.app,
+        )
+        for i, e in enumerate(unique, start=1)
+    ]
 
     dialogs = _detect_dialogs(fg)
     selection = ""
@@ -353,7 +458,11 @@ def observe(observation_version: int) -> ScreenSnapshot:
 
     return ScreenSnapshot(
         observation_version=observation_version,
-        foreground_app=app, foreground_title=title,
-        focus=focus_el, elements=numbered, dialogs=dialogs, selection=selection,
+        foreground_app=app,
+        foreground_title=title,
+        focus=focus_el,
+        elements=numbered,
+        dialogs=dialogs,
+        selection=selection,
         uia_available=bool(numbered or focus_el or title),
     )

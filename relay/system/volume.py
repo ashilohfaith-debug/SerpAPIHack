@@ -14,11 +14,13 @@ log = get_logger("system.volume")
 
 def _endpoint():
     import comtypes
+
     try:
-        comtypes.CoInitialize()           # this may run on any thread
+        comtypes.CoInitialize()  # this may run on any thread
     except OSError:
         pass
     from pycaw.pycaw import AudioUtilities
+
     dev = AudioUtilities.GetSpeakers()
     ev = getattr(dev, "EndpointVolume", None)
     if ev is not None:
@@ -28,6 +30,7 @@ def _endpoint():
 
     from comtypes import CLSCTX_ALL
     from pycaw.pycaw import IAudioEndpointVolume
+
     iface = dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
     return cast(iface, POINTER(IAudioEndpointVolume))
 

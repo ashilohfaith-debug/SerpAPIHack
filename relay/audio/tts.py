@@ -45,16 +45,19 @@ class PiperTTS:
         from piper.config import PiperConfig
 
         from relay import inference_threads
+
         with open(f"{self.onnx_path}.json", encoding="utf-8") as f:
             cfg = json.load(f)
         opts = onnxruntime.SessionOptions()
         opts.intra_op_num_threads = inference_threads()
         opts.inter_op_num_threads = 1
         opts.add_session_config_entry("session.intra_op.allow_spinning", "0")
-        session = onnxruntime.InferenceSession(str(self.onnx_path), sess_options=opts,
-                                               providers=["CPUExecutionProvider"])
-        return PiperVoice(session=session, config=PiperConfig.from_dict(cfg),
-                          download_dir=self.onnx_path.parent)
+        session = onnxruntime.InferenceSession(
+            str(self.onnx_path), sess_options=opts, providers=["CPUExecutionProvider"]
+        )
+        return PiperVoice(
+            session=session, config=PiperConfig.from_dict(cfg), download_dir=self.onnx_path.parent
+        )
 
     def set_rate(self, rate: float) -> None:
         """Speech speed multiplier (1.0 normal; 1.5 = 50% faster)."""
@@ -67,6 +70,7 @@ class PiperTTS:
         cfg = None
         if abs(self.rate - 1.0) > 1e-3:
             from piper import SynthesisConfig
+
             cfg = SynthesisConfig(length_scale=1.0 / self.rate)
         chunks = list(voice.synthesize(text, syn_config=cfg))
         if not chunks:
@@ -93,7 +97,8 @@ class SapiTTS:
 
     def __init__(self) -> None:
         import threading
-        self._local = threading.local()   # one COM voice per thread (apartment-safe)
+
+        self._local = threading.local()  # one COM voice per thread (apartment-safe)
         self.rate = 1.0
 
     def _ensure(self):
@@ -101,7 +106,8 @@ class SapiTTS:
         if voice is None:
             import pythoncom
             import win32com.client
-            pythoncom.CoInitialize()   # SAPI is used from the speech thread
+
+            pythoncom.CoInitialize()  # SAPI is used from the speech thread
             voice = win32com.client.Dispatch("SAPI.SpVoice")
             self._local.voice = voice
         return voice
@@ -117,6 +123,7 @@ class SapiTTS:
         import tempfile
 
         import win32com.client
+
         voice = self._ensure()
         try:  # SAPI rate is -10..10; map 0.5x..2.5x onto it
             voice.Rate = int(max(-10, min(10, round((self.rate - 1.0) * 8))))
@@ -156,6 +163,7 @@ def default_piper_voice() -> Path | None:
     release (public-domain) voice, else any complete installed voice."""
     from relay.config import Config
     from relay.models_manager import voice_path
+
     try:
         preferred = Config.load().voice
     except Exception:

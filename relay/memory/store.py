@@ -29,8 +29,18 @@ class Provenance:
 # Strong secret tokens: matched as substrings (conservative — a false refusal costs
 # nothing, a stored credential is a breach). "pin"/"one-time" use word boundaries to
 # avoid false hits inside words like "spinning".
-_SECRET_SUBSTR = ("password", "passwd", "secret", "token", "apikey", "api_key",
-                  "otp", "passcode", "cvv", "credential")
+_SECRET_SUBSTR = (
+    "password",
+    "passwd",
+    "secret",
+    "token",
+    "apikey",
+    "api_key",
+    "otp",
+    "passcode",
+    "cvv",
+    "credential",
+)
 _SECRET_WORD = re.compile(r"(?i)\b(pwd|pin|one[- ]?time|security code)\b")
 
 
@@ -53,8 +63,14 @@ class MemoryStore:
         self.conn = conn
 
     # ---------------- L3 preferences ----------------
-    def set_pref(self, key: str, value: str, scope: str = "",
-                 provenance: str = Provenance.EXPLICIT, approved: bool = True) -> bool:
+    def set_pref(
+        self,
+        key: str,
+        value: str,
+        scope: str = "",
+        provenance: str = Provenance.EXPLICIT,
+        approved: bool = True,
+    ) -> bool:
         if looks_sensitive(key, value):
             return False  # never persist secrets in ordinary preference tables
         self.conn.execute(
@@ -100,8 +116,14 @@ class MemoryStore:
         return f"{row['provenance']} (recorded {when})"
 
     # ---------------- L4 learned control labels ----------------
-    def learn_label(self, app_key: str, description: str, control_name: str,
-                    control_type: str = "", provenance: str = Provenance.VERIFIED) -> None:
+    def learn_label(
+        self,
+        app_key: str,
+        description: str,
+        control_name: str,
+        control_type: str = "",
+        provenance: str = Provenance.VERIFIED,
+    ) -> None:
         desc = description.strip().lower()
         existing = self.conn.execute(
             "SELECT hits FROM learned_control_labels WHERE app_key=? AND description=?",
@@ -117,8 +139,9 @@ class MemoryStore:
                  hits=excluded.hits, updated=excluded.updated""",
             (app_key, desc, control_name, control_type, provenance, hits, time.time()),
         )
-        self.conn.execute("DELETE FROM labels_fts WHERE app_key=? AND description=?",
-                          (app_key, desc))
+        self.conn.execute(
+            "DELETE FROM labels_fts WHERE app_key=? AND description=?", (app_key, desc)
+        )
         self.conn.execute(
             "INSERT INTO labels_fts (app_key, description, control_name) VALUES (?,?,?)",
             (app_key, desc, control_name),
@@ -132,8 +155,9 @@ class MemoryStore:
         return dict(row) if row else None
 
     # ---------------- L4 workflow templates ----------------
-    def save_workflow(self, app_key: str, name: str, steps: list,
-                      preconditions: str = "", verification: str = "") -> str:
+    def save_workflow(
+        self, app_key: str, name: str, steps: list, preconditions: str = "", verification: str = ""
+    ) -> str:
         wid = f"wf_{uuid.uuid4().hex[:10]}"
         now = time.time()
         self.conn.execute(
@@ -141,8 +165,18 @@ class MemoryStore:
                (id, app_key, name, steps_json, preconditions, verification, provenance,
                 validation, hits, created, updated)
                VALUES (?,?,?,?,?,?,?,?,0,?,?)""",
-            (wid, app_key, name, json.dumps(steps), preconditions, verification,
-             Provenance.VERIFIED, "unvalidated", now, now),
+            (
+                wid,
+                app_key,
+                name,
+                json.dumps(steps),
+                preconditions,
+                verification,
+                Provenance.VERIFIED,
+                "unvalidated",
+                now,
+                now,
+            ),
         )
         return wid
 
@@ -173,8 +207,9 @@ class MemoryStore:
             (scope, 1 if allowed else 0, time.time()),
         )
 
-    def add_episodic(self, summary: str, app_key: str = "",
-                     provenance: str = Provenance.OBSERVED) -> str | None:
+    def add_episodic(
+        self, summary: str, app_key: str = "", provenance: str = Provenance.OBSERVED
+    ) -> str | None:
         """Store an episodic summary ONLY if the user has opted in and it holds no
         sensitive content. Returns the id, or None if refused."""
         if not self.permission("episodic"):

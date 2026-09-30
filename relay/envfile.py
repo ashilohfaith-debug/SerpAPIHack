@@ -27,6 +27,7 @@ def candidate_files() -> list[Path]:
     files = [app / ".env"]
     try:
         from relay.config import user_data_dir
+
         files.append(user_data_dir() / ".env")
     except Exception:
         pass
@@ -46,7 +47,7 @@ def parse(text: str) -> dict[str, str]:
         value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
             value = value[1:-1]
-        elif " #" in value:                       # trailing comment
+        elif " #" in value:  # trailing comment
             value = value.split(" #", 1)[0].rstrip()
         if key and key.replace("_", "").isalnum():
             out[key] = value
@@ -67,7 +68,7 @@ def load_env(files: list[Path] | None = None) -> list[Path]:
         f = todo.pop(0)
         key = os.path.normcase(str(Path(f).resolve()))
         if key in seen:
-            continue                              # no loops, no double loading
+            continue  # no loops, no double loading
         seen.add(key)
         try:
             values = parse(Path(f).read_text(encoding="utf-8-sig"))
@@ -80,5 +81,5 @@ def load_env(files: list[Path] | None = None) -> list[Path]:
         ref = values.get("RELAY_ENV_FILE", "").strip()
         if ref:
             target = Path(ref) if Path(ref).is_absolute() else Path(f).parent / ref
-            todo.insert(0, target)                # read it next, before other files
+            todo.insert(0, target)  # read it next, before other files
     return loaded

@@ -34,15 +34,16 @@ class SpeechSegmenter:
     ``None`` | ``"start"`` | ``"end"`` per frame.
     """
 
-    def __init__(self, aggressiveness: int = 2, start_frames: int = 3,
-                 end_frames: int = 20) -> None:
+    def __init__(
+        self, aggressiveness: int = 2, start_frames: int = 3, end_frames: int = 20
+    ) -> None:
         self.vad = VAD(aggressiveness)
         self.start_frames = start_frames
         self.end_frames = end_frames
         self._speech_run = 0
         self._silence_run = 0
         self._in_speech = False
-        self.last_speech = False      # VAD verdict for the most recent frame
+        self.last_speech = False  # VAD verdict for the most recent frame
 
     def push(self, frame_bytes: bytes) -> str | None:
         speech = self.vad.is_speech(frame_bytes)

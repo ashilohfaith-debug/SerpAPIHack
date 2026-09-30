@@ -23,11 +23,11 @@ def app_dir() -> Path:
 
 def launcher() -> tuple[str, str, str]:
     """(target, arguments, working_dir) that starts RELAY with no console window."""
-    if getattr(sys, "frozen", False):                   # PyInstaller build
+    if getattr(sys, "frozen", False):  # PyInstaller build
         exe = Path(sys.executable)
-        windowless = exe.with_name("relay.exe")         # not relay-cli.exe's console
+        windowless = exe.with_name("relay.exe")  # not relay-cli.exe's console
         exe = windowless if windowless.exists() else exe
-        return str(exe), "--toggle", str(exe.parent)     # the key starts AND closes RELAY
+        return str(exe), "--toggle", str(exe.parent)  # the key starts AND closes RELAY
     py = Path(sys.executable)
     pyw = py.with_name("pythonw.exe")
     return str(pyw if pyw.exists() else py), "-m relay --toggle", str(app_dir())
@@ -43,13 +43,21 @@ def startup_dir() -> Path:
 
 def desktop_dir() -> Path:
     from relay.system.files import known_folder
+
     return known_folder("desktop") or (Path.home() / "Desktop")
 
 
-def create_shortcut(path: Path, target: str, args: str, workdir: str, hotkey: str = "",
-                    description: str = "Relay — voice assistant for blind users") -> Path:
+def create_shortcut(
+    path: Path,
+    target: str,
+    args: str,
+    workdir: str,
+    hotkey: str = "",
+    description: str = "Relay — voice assistant for blind users",
+) -> Path:
     import pythoncom
     import win32com.client
+
     pythoncom.CoInitialize()
     shell = win32com.client.Dispatch("WScript.Shell")
     sc = shell.CreateShortCut(str(path))
@@ -58,21 +66,25 @@ def create_shortcut(path: Path, target: str, args: str, workdir: str, hotkey: st
     sc.WorkingDirectory = workdir
     sc.Description = description
     if hotkey:
-        sc.Hotkey = hotkey.upper()          # e.g. "CTRL+ALT+R"
+        sc.Hotkey = hotkey.upper()  # e.g. "CTRL+ALT+R"
     sc.save()
     return path
 
 
-def install(hotkey: str = "ctrl+alt+r", desktop: bool = True, start_menu: bool = True,
-            autostart: bool = False) -> list[Path]:
+def install(
+    hotkey: str = "ctrl+alt+r",
+    desktop: bool = True,
+    start_menu: bool = True,
+    autostart: bool = False,
+) -> list[Path]:
     target, args, workdir = launcher()
     made: list[Path] = []
     if desktop:
-        made.append(create_shortcut(desktop_dir() / f"{APP_NAME}.lnk", target, args, workdir,
-                                    hotkey=hotkey))
+        made.append(
+            create_shortcut(desktop_dir() / f"{APP_NAME}.lnk", target, args, workdir, hotkey=hotkey)
+        )
     if start_menu:
-        made.append(create_shortcut(_programs_dir() / f"{APP_NAME}.lnk", target, args,
-                                    workdir))
+        made.append(create_shortcut(_programs_dir() / f"{APP_NAME}.lnk", target, args, workdir))
     if autostart:
         made.append(set_autostart(True))
     return made
@@ -92,8 +104,11 @@ def set_autostart(on: bool) -> Path:
 
 def uninstall() -> list[Path]:
     removed = []
-    for p in (desktop_dir() / f"{APP_NAME}.lnk", _programs_dir() / f"{APP_NAME}.lnk",
-              startup_dir() / f"{APP_NAME}.lnk"):
+    for p in (
+        desktop_dir() / f"{APP_NAME}.lnk",
+        _programs_dir() / f"{APP_NAME}.lnk",
+        startup_dir() / f"{APP_NAME}.lnk",
+    ):
         try:
             p.unlink()
             removed.append(p)

@@ -21,7 +21,7 @@ LAPTOP_MIC = Endpoint("mic", "Microphone Array (Realtek(R) Audio)", 4)
 # ---------------------------------------------------------------- devices
 def test_headphones_are_recognised():
     assert BOAT.is_headphones and BOAT_HF.is_headphones and not SPEAKERS.is_headphones
-    assert Endpoint("x", "Speakers (Galaxy Buds2)", 1).is_headphones      # by name
+    assert Endpoint("x", "Speakers (Galaxy Buds2)", 1).is_headphones  # by name
     assert Endpoint("x", "Headphones (Realtek(R) Audio)", -1).is_headphones
     assert BOAT_HF.is_hands_free and not BOAT.is_hands_free and not LAPTOP_MIC.is_hands_free
 
@@ -34,33 +34,38 @@ def test_device_names_are_speakable():
 
 
 def test_watch_reports_only_real_changes():
-    states = [(SPEAKERS, LAPTOP_MIC), (SPEAKERS, LAPTOP_MIC), (BOAT, LAPTOP_MIC),
-              (None, None), (SPEAKERS, LAPTOP_MIC)]
+    states = [
+        (SPEAKERS, LAPTOP_MIC),
+        (SPEAKERS, LAPTOP_MIC),
+        (BOAT, LAPTOP_MIC),
+        (None, None),
+        (SPEAKERS, LAPTOP_MIC),
+    ]
     probe = iter(states).__next__
     got = []
     w = DeviceWatch(lambda *a: got.append(a))
     w.prime(probe)
-    assert w.check() is False                            # same devices
+    assert w.check() is False  # same devices
     assert w.check() is True and got[-1] == (SPEAKERS, BOAT, LAPTOP_MIC, LAPTOP_MIC)
-    assert w.check() is False and w.output == BOAT       # a Core Audio hiccup is ignored
+    assert w.check() is False and w.output == BOAT  # a Core Audio hiccup is ignored
     assert w.check() is True and got[-1][:2] == (BOAT, SPEAKERS)
 
 
 def test_hands_free_mic_is_avoided(monkeypatch):
     monkeypatch.setattr(dv, "laptop_mic", lambda: 1)
     monkeypatch.setattr(dv, "mapper_device", lambda kind: 0)
-    assert dv.mic_device_for(BOAT_HF) == 1               # keep the headphones in stereo
-    assert dv.mic_device_for(LAPTOP_MIC) == 0            # otherwise follow Windows
+    assert dv.mic_device_for(BOAT_HF) == 1  # keep the headphones in stereo
+    assert dv.mic_device_for(LAPTOP_MIC) == 0  # otherwise follow Windows
     monkeypatch.setattr(dv, "laptop_mic", lambda: None)
-    assert dv.mic_device_for(BOAT_HF) == 0               # no other mic: use the headset
+    assert dv.mic_device_for(BOAT_HF) == 0  # no other mic: use the headset
 
 
 def test_real_windows_devices_can_be_read():
     out, inp = dv.default_endpoints()
     if out is None:
-        return                                           # no Core Audio (e.g. CI)
+        return  # no Core Audio (e.g. CI)
     assert out.id and isinstance(out.is_headphones, bool)
-    assert dv.mapper_device("output") is not None        # the Sound Mapper exists
+    assert dv.mapper_device("output") is not None  # the Sound Mapper exists
 
 
 # ---------------------------------------------------------------- voice barge-in
@@ -81,10 +86,16 @@ class Words:
 
 def _loop(headphones=True, speaking=True, stt=None):
     from relay.loop import VoiceLoop
+
     dispatched, interrupts = [], []
-    loop = VoiceLoop(dispatched.append, stt=stt or Words(""), speech=FakeSpeech(speaking),
-                     wake_required=True, threaded=False,
-                     interrupt=lambda: interrupts.append(1))
+    loop = VoiceLoop(
+        dispatched.append,
+        stt=stt or Words(""),
+        speech=FakeSpeech(speaking),
+        wake_required=True,
+        threaded=False,
+        interrupt=lambda: interrupts.append(1),
+    )
     loop.headphones = headphones
     return loop, dispatched, interrupts
 
@@ -99,7 +110,7 @@ def test_on_headphones_a_command_over_relays_voice_interrupts_it_first():
     loop, dispatched, interrupts = _loop()
     loop.on_transcript("Relay, what time is it?")
     assert interrupts == [1] and dispatched == ["what time is it?"]
-    loop.on_transcript("Relay")                          # bare wake word: stop and listen
+    loop.on_transcript("Relay")  # bare wake word: stop and listen
     assert interrupts == [1, 1] and loop._armed
 
 
@@ -108,7 +119,7 @@ def test_room_talk_is_still_ignored_on_headphones():
     loop.on_transcript("so what are we having for dinner")
     assert dispatched == [] and interrupts == []
     quiet, dispatched2, _ = _loop(speaking=False)
-    quiet.on_transcript("stop")                          # nothing to interrupt: ignored
+    quiet.on_transcript("stop")  # nothing to interrupt: ignored
     assert dispatched2 == []
 
 
@@ -120,6 +131,7 @@ def test_on_speakers_relay_never_listens_to_itself():
 
 def test_headphones_keep_the_microphone_open_while_relay_talks():
     from tests.test_daily import ScriptSeg
+
     stt = Words("stop")
     loop, dispatched, _ = _loop(stt=stt)
     loop._seg_factory = lambda: ScriptSeg([True] * 20 + [False])
@@ -148,11 +160,12 @@ def test_stop_over_relay_is_handled_locally_with_online_recognition():
 def test_talk_key_also_cancels_a_streaming_answer():
     loop, _, interrupts = _loop()
     loop.push_to_talk()
-    assert interrupts == [1]                             # the session's full stop
+    assert interrupts == [1]  # the session's full stop
 
 
 def test_microphone_reopens_on_a_new_device(monkeypatch):
     import relay.audio
+
     opened = []
 
     class FakeMic:
@@ -201,9 +214,12 @@ def _app(out=SPEAKERS, reading=False, speaking=False):
     said, stops, mics = [], [], []
     app.loop = SimpleNamespace(headphones=False, restart_mic=mics.append)
     app.devices = SimpleNamespace(output=out, input=LAPTOP_MIC)
-    app.session = SimpleNamespace(store=_Store(), reader=SimpleNamespace(reading=reading),
-                                  stop_speaking=lambda: stops.append(1),
-                                  say=lambda t, p=None: said.append(t))
+    app.session = SimpleNamespace(
+        store=_Store(),
+        reader=SimpleNamespace(reading=reading),
+        stop_speaking=lambda: stops.append(1),
+        say=lambda t, p=None: said.append(t),
+    )
     app.speech = SimpleNamespace(is_speaking=speaking)
     app.cfg = SimpleNamespace(push_to_talk_hotkey="ctrl+alt+space")
     app._announce_timer, app._paused_for_privacy, app._announced_out = None, "", out
@@ -223,8 +239,7 @@ def test_plugging_in_headphones_turns_on_voice_interrupt():
     app, said, _, _ = _app()
     _change(app, SPEAKERS, BOAT)
     assert app.loop.headphones
-    assert said == ["boAt Rockerz 450 headphones connected. You can interrupt me just by "
-                    "talking."]
+    assert said == ["boAt Rockerz 450 headphones connected. You can interrupt me just by talking."]
 
 
 def test_unplugging_headphones_pauses_private_reading():
@@ -237,8 +252,9 @@ def test_unplugging_headphones_pauses_private_reading():
 def test_unplugging_while_idle_just_says_where_sound_goes():
     app, said, stops, _ = _app(out=BOAT)
     _change(app, BOAT, SPEAKERS)
-    assert stops == [] and said == ["Headphones disconnected. I'll talk through the "
-                                    "Realtek Audio speakers."]
+    assert stops == [] and said == [
+        "Headphones disconnected. I'll talk through the Realtek Audio speakers."
+    ]
 
 
 def test_headphone_mode_is_remembered_per_device():
@@ -247,8 +263,8 @@ def test_headphone_mode_is_remembered_per_device():
     assert "Headphone mode off for boAt Rockerz 450 headphones" in app.set_headphone_mode("off")
     assert not app.loop.headphones
     _change(app, BOAT, SPEAKERS)
-    _change(app, SPEAKERS, BOAT)                          # reconnected later: remembered
-    assert not app.loop.headphones                        # the user said: not headphones
+    _change(app, SPEAKERS, BOAT)  # reconnected later: remembered
+    assert not app.loop.headphones  # the user said: not headphones
     assert said[-1] == "Now speaking through boAt Rockerz 450 headphones."
     assert app.set_headphone_mode("auto").endswith("Headphone mode is on.")
     assert app.loop.headphones
@@ -262,21 +278,22 @@ def test_usb_earphones_that_windows_calls_speakers():
     _change(app, SPEAKERS, ab13x)
     assert app.loop.headphones and said == [
         "AB13X USB Audio has its own microphone, so I think it's headphones or earphones: "
-        "you can interrupt me just by talking. If it's a speaker, say headphone mode off."]
-    app.set_headphone_mode("off")                         # they were USB speakers after all
+        "you can interrupt me just by talking. If it's a speaker, say headphone mode off."
+    ]
+    app.set_headphone_mode("off")  # they were USB speakers after all
     _change(app, ab13x, SPEAKERS)
     _change(app, SPEAKERS, ab13x)
     assert not app.loop.headphones and said[-1] == "Now speaking through AB13X USB Audio speakers."
 
 
 def test_saying_im_using_headphones_does_not_touch_the_laptop_speakers():
-    app, _, _, _ = _app()                                 # laptop speakers in use
+    app, _, _, _ = _app()  # laptop speakers in use
     app.devices.output = Endpoint("usb2", "Speakers (USB Audio Device)", 1)
     assert not app._is_headphones(app.devices.output)
-    app.set_headphone_mode("on")                          # "I'm using headphones"
+    app.set_headphone_mode("on")  # "I'm using headphones"
     assert app.loop.headphones
     _change(app, app.devices.output, SPEAKERS)
-    assert not app.loop.headphones                        # speakers: still half-duplex
+    assert not app.loop.headphones  # speakers: still half-duplex
 
 
 def test_a_bluetooth_double_switch_is_announced_once():
@@ -286,15 +303,15 @@ def test_a_bluetooth_double_switch_is_announced_once():
     first = app._announce_timer
     app.devices.output = BOAT
     app._on_audio_change(BOAT_HF, BOAT, LAPTOP_MIC, LAPTOP_MIC)
-    assert first.finished.is_set() and app._announce_timer is not first   # replaced
+    assert first.finished.is_set() and app._announce_timer is not first  # replaced
     app._announce_timer.cancel()
     app._announce_audio()
-    assert said == ["boAt Rockerz 450 headphones connected. You can interrupt me just by "
-                    "talking."]
+    assert said == ["boAt Rockerz 450 headphones connected. You can interrupt me just by talking."]
 
 
 def test_a_new_default_microphone_is_opened(monkeypatch):
     import relay.app
+
     monkeypatch.setattr(relay.app, "mic_device_for", lambda ep: f"device-for-{ep.id}")
     app, _, _, mics = _app()
     _change(app, SPEAKERS, SPEAKERS, LAPTOP_MIC, BOAT_HF)
@@ -303,6 +320,7 @@ def test_a_new_default_microphone_is_opened(monkeypatch):
 
 def test_where_is_the_sound_going(monkeypatch):
     import relay.app
+
     monkeypatch.setattr(relay.app, "laptop_mic", lambda: 1)
     app, _, _, _ = _app(out=BOAT)
     app.devices.input = BOAT_HF
@@ -334,8 +352,9 @@ def test_headphone_commands_reach_the_audio_control():
 # ---------------------------------------------------------------- closing by keyboard
 def test_launch_key_again_closes_relay():
     from relay.core.single_instance import QuitSignal
+
     name = "Local\\RelayQuitTest-" + uuid.uuid4().hex
-    assert QuitSignal.request(name) is False             # nothing running yet
+    assert QuitSignal.request(name) is False  # nothing running yet
     fired = threading.Event()
     sig = QuitSignal(name)
     assert sig.listen(fired.set)
@@ -348,6 +367,7 @@ def test_launch_key_again_closes_relay():
 
 def test_shortcut_toggles_relay():
     from relay.install import launcher
+
     assert launcher()[1].endswith("--toggle")
 
 
@@ -356,6 +376,7 @@ def test_installed_copy_reads_the_project_env(tmp_path, monkeypatch):
     import os
 
     from relay.envfile import load_env
+
     monkeypatch.delenv("RELAY_OFFLINE")
     monkeypatch.delenv("RELAY_T9", raising=False)
     project = tmp_path / "project.env"
@@ -367,22 +388,24 @@ def test_installed_copy_reads_the_project_env(tmp_path, monkeypatch):
     loop_back.write_text(f"RELAY_ENV_FILE={installed}\n", encoding="utf-8")
     loaded = load_env([installed, loop_back])
     assert os.environ["RELAY_T9"] == "from_project"
-    assert loaded == [installed, project, loop_back]      # each file once, no loop
+    assert loaded == [installed, project, loop_back]  # each file once, no loop
 
 
 # ---------------------------------------------------------------- palette + listening
 def test_listening_and_palette_commands():
     from relay.intent.grammar import Kind, parse
+
     assert parse("stop listening").kind == Kind.LISTENING
     assert parse("stop listening").slots["on"] is False
     assert parse("start listening").slots["on"] is True
     assert parse("hide the palette").kind == Kind.PALETTE
     assert parse("show the palette").slots["visible"] is True
-    assert parse("stop").kind == Kind.CONTROL                  # still the stop word
+    assert parse("stop").kind == Kind.CONTROL  # still the stop word
 
 
 def test_switched_off_relay_ignores_the_room_but_not_the_talk_key():
     from tests.test_daily import ScriptSeg
+
     stt = Words("relay what time is it")
     loop, dispatched, _ = _loop(headphones=False, speaking=False, stt=stt)
     loop._seg_factory, loop._custom_seg = (lambda: ScriptSeg([True] * 20 + [False])), True
@@ -391,8 +414,8 @@ def test_switched_off_relay_ignores_the_room_but_not_the_talk_key():
     loop.enabled = False
     for _ in range(21):
         loop.on_frame(loud)
-    assert stt.calls == 0 and dispatched == []               # off: nothing heard
-    loop.push_to_talk()                                      # the talk key still works
+    assert stt.calls == 0 and dispatched == []  # off: nothing heard
+    loop.push_to_talk()  # the talk key still works
     for _ in range(21):
         loop.on_frame(loud)
     assert stt.calls == 1
@@ -401,16 +424,17 @@ def test_switched_off_relay_ignores_the_room_but_not_the_talk_key():
 def test_what_relay_heard_is_published_for_the_palette():
     from relay.core import EventBus
     from relay.loop import VoiceLoop
+
     bus, heard = EventBus(), []
     bus.subscribe("voice.heard", lambda e: heard.append(e.data["text"]))
-    loop = VoiceLoop(lambda t: None, stt=Words(""), wake_required=True, bus=bus,
-                     threaded=False)
+    loop = VoiceLoop(lambda t: None, stt=Words(""), wake_required=True, bus=bus, threaded=False)
     loop.on_transcript("Relay, what time is it?")
     assert heard == ["what time is it?"]
 
 
 def test_palette_states_and_text():
     from relay.ui.palette import STATES, _shorten
+
     for state in ("ready", "listening", "hearing", "working", "speaking", "off"):
         assert state in STATES
     assert len(_shorten("word " * 100)) <= 110

@@ -9,10 +9,17 @@ from .vad import VAD, SpeechSegmenter
 from .wake import Command, detect_wake, match_command
 
 __all__ = [
-    "SAMPLE_RATE", "WhisperSTT",
-    "PiperTTS", "SapiTTS", "make_tts",
-    "VAD", "SpeechSegmenter",
+    "SAMPLE_RATE",
+    "WhisperSTT",
+    "PiperTTS",
+    "SapiTTS",
+    "make_tts",
+    "VAD",
+    "SpeechSegmenter",
     "SpeechQueue",
-    "Command", "detect_wake", "match_command",
-    "MicCapture", "list_devices",
+    "Command",
+    "detect_wake",
+    "match_command",
+    "MicCapture",
+    "list_devices",
 ]

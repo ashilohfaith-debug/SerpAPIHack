@@ -17,7 +17,7 @@ def test_pref_set_get_scope_fallback_and_delete():
     s.set_pref("narration_mode", "detailed", scope="notepad.exe")
     s.set_pref("speech_rate", "1.2")  # global
     assert s.get_pref("narration_mode", scope="notepad.exe") == "detailed"
-    assert s.get_pref("speech_rate", scope="notepad.exe") == "1.2"   # falls back to global
+    assert s.get_pref("speech_rate", scope="notepad.exe") == "1.2"  # falls back to global
     assert s.get_pref("missing", default="x") == "x"
     assert s.delete_pref("narration_mode", scope="notepad.exe")
     assert s.get_pref("narration_mode", scope="notepad.exe") is None
@@ -34,7 +34,7 @@ def test_sensitive_values_are_never_stored():
     s = _store()
     assert s.set_pref("mypassword", "hunter2") is False
     assert s.set_pref("bank", "my otp is 123456") is False
-    assert s.set_pref("note:code", "483920") is False   # bare OTP-looking code
+    assert s.set_pref("note:code", "483920") is False  # bare OTP-looking code
     assert s.all_prefs() == []
 
 
@@ -45,8 +45,9 @@ def test_learned_label_upsert_and_fts_sync():
     s.learn_label("calc.exe", "the multiply sign", "Multiply by", "Button")  # again -> hits++
     rec = s.recall_label("calc.exe", "The Multiply Sign")
     assert rec["control_name"] == "Multiply by" and rec["hits"] == 2
-    n = s.conn.execute("SELECT COUNT(*) c FROM labels_fts WHERE description='the multiply sign'"
-                       ).fetchone()["c"]
+    n = s.conn.execute(
+        "SELECT COUNT(*) c FROM labels_fts WHERE description='the multiply sign'"
+    ).fetchone()["c"]
     assert n == 1  # FTS mirror kept in sync, not duplicated
 
 
@@ -63,7 +64,7 @@ def test_workflow_save_recall_validate():
 # ---- L5 episodic (opt-in) + FTS + deletion purge ----
 def test_episodic_requires_optin_then_searchable_and_deletable():
     s = _store()
-    assert s.add_episodic("Saved report.docx to Documents") is None   # off by default
+    assert s.add_episodic("Saved report.docx to Documents") is None  # off by default
     s.set_permission("episodic", True)
     eid = s.add_episodic("Saved report.docx to Documents", app_key="notepad.exe")
     assert eid is not None
@@ -115,7 +116,7 @@ def test_preference_persists_across_restart(tmp_path):
     s1 = MemoryStore(connect(db))
     s1.set_pref("narration_mode", "detailed", scope="notepad.exe")
     s1.conn.close()
-    s2 = MemoryStore(connect(db))   # fresh connection = a restart
+    s2 = MemoryStore(connect(db))  # fresh connection = a restart
     assert s2.get_pref("narration_mode", scope="notepad.exe") == "detailed"
 
 
@@ -133,6 +134,7 @@ def test_memory_intents_parse():
 # ---- Session memory ops (headless; no UIA calls for these intents) ----
 def test_session_remembers_and_recalls():
     from relay.session import Session
+
     spoken = []
     s = Session(speak=spoken.append, db_path=":memory:")
     try:

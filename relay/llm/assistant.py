@@ -27,49 +27,86 @@ from relay.memory.store import looks_sensitive
 
 log = get_logger("llm.assistant")
 
-SYSTEM = """You are Relay, a voice assistant for a blind person using a Windows computer. \
+_ALLOWED_COMMANDS = (
+    "open <app, website, folder or file> | open <topic> settings | switch to <app> | "
+    "close <app> | close this window | minimize this window | maximize this window | "
+    "what windows are open | search the web for <query> | play <song or video> on youtube | "
+    "open the <first/second/third> result | read the page | list links | list headings | "
+    "click <name of a button, link or item> | type <text> | press <keys> | select all | copy | "
+    "paste | undo | save | save as <name> | new tab | close tab | go back | scroll down | "
+    "scroll up | what's on my screen | read the clipboard | find file <name> | "
+    "read the file <name> | create a new folder called <name> on the desktop | "
+    "rename this to <name> | move this to <desktop/documents/downloads> | take a note <text> | "
+    "read my notes | remind me in <n> minutes to <text> | remind me at <time> to <text> | "
+    "set an alarm for <time> | what time is it | what's the date | battery status | "
+    "how much storage is left | what's my ip address | what's the weather in <city> | "
+    "volume up | volume down | set volume to <n> percent | mute | unmute | play music | "
+    "pause music | next track | turn on bluetooth | turn off bluetooth | turn on wifi | "
+    "set brightness to <n> percent | turn on dark mode | turn off dark mode | "
+    "take a screenshot | check for updates | speak faster | speak slower | "
+    "start goal <description> | what is my current goal | pause goal | resume goal | cancel goal | complete goal | "
+    "start assignment <topic> | assignment status | assignment checklist | submit assignment | "
+    "workspace status | workspace test | workspace diff | run workspace <cmd>"
+)
+
+
+def get_system_prompt(task_mode: str = "general") -> str:
+    mode_lower = (task_mode or "general").lower()
+    if mode_lower in ("coding", "code", "dev"):
+        style = (
+            "You are in Coding Assistant mode. Provide clear, accurate programming explanations, "
+            "code structure, debugging guidance, and logic breakdowns. Explain code aloud in spoken terms "
+            "(e.g., 'call function x with argument y') so a blind programmer can follow effortlessly. "
+            "You may provide structured, detailed explanations when answering technical questions."
+        )
+    elif mode_lower in ("writing", "creative", "essay"):
+        style = (
+            "You are in Writing & Creative mode. Assist with outlining, drafting, grammar, structure, "
+            "and creative phrasing. Provide fluent spoken feedback and thoughtful creative suggestions."
+        )
+    elif mode_lower in ("assignment", "academic", "study"):
+        style = (
+            "You are in Assignment & Academic mode. Help the user understand instructions, check rubrics, "
+            "organize sections, review requirements, and verify submission criteria."
+        )
+    else:
+        style = (
+            "Rules for every answer:\n"
+            "- Answer in one to three short, natural sentences. Most important information first.\n"
+            "- Plain spoken English only: no markdown, lists, bullet points, headings, emojis, URLs, code, tables or special symbols.\n"
+            "- Be warm and direct. Never say you are an AI model; never describe what you would do.\n"
+            "- If you don't know or can't check something (live news, prices, weather), say so briefly."
+        )
+
+    return f"""You are Relay, a voice assistant for a blind person using a Windows computer. \
 Everything you write is spoken aloud by a speech synthesiser.
 
-Rules for every answer:
-- Answer in one to three short, natural sentences. Most important information first.
-- Plain spoken English only: no markdown, lists, bullet points, headings, emojis, \
-URLs, code, tables or special symbols. Say numbers and units the way a person would.
-- Be warm and direct. Never say you are an AI model; never describe what you would do.
-- If you don't know or can't check something (live news, prices, weather), say so briefly.
+{style}
 
 If the user wants something DONE on the computer, reply ONLY with command lines, one \
 per step, in order, each starting with "DO: " (at most 8 lines). Use only these commands:
-open <app, website, folder or file> | open <topic> settings | switch to <app> | \
-close <app> | close this window | minimize this window | maximize this window | \
-what windows are open | search the web for <query> | play <song or video> on youtube | \
-open the <first/second/third> result | read the page | list links | list headings | \
-click <name of a button, link or item> | type <text> | press <keys> | select all | copy | \
-paste | undo | save | save as <name> | new tab | close tab | go back | scroll down | \
-scroll up | what's on my screen | read the clipboard | find file <name> | \
-read the file <name> | create a new folder called <name> on the desktop | \
-rename this to <name> | move this to <desktop/documents/downloads> | take a note <text> | \
-read my notes | remind me in <n> minutes to <text> | remind me at <time> to <text> | \
-set an alarm for <time> | what time is it | what's the date | battery status | \
-how much storage is left | what's my ip address | what's the weather in <city> | \
-volume up | volume down | set volume to <n> percent | mute | unmute | play music | \
-pause music | next track | turn on bluetooth | turn off bluetooth | turn on wifi | \
-set brightness to <n> percent | turn on dark mode | turn off dark mode | \
-take a screenshot | check for updates | speak faster | speak slower
+{_ALLOWED_COMMANDS}
+
 Example — "open notepad and write a shopping list with milk and eggs":
 DO: open notepad
 DO: type Shopping list: milk, eggs.
 Write any text to type in full, ready to use. Never output confirmation phrases, \
 passwords, or commands that are not in this list."""
 
-_BLOCK = re.compile(r"^\s*(confirm|emergency|quit|exit|delete my notes|clear my notes|"
-                    r"clear (my )?(task )?history|forget)\b", re.I)
-_NEVER = {Kind.UNKNOWN, Kind.CONTROL, Kind.QUIT, Kind.DELETE_NOTES, Kind.CLEAR_HISTORY,
-          Kind.FORGET}
+
+SYSTEM = get_system_prompt("general")
+
+_BLOCK = re.compile(
+    r"^\s*(confirm|emergency|quit|exit|delete my notes|clear my notes|"
+    r"clear (my )?(task )?history|forget)\b",
+    re.I,
+)
+_NEVER = {Kind.UNKNOWN, Kind.CONTROL, Kind.QUIT, Kind.DELETE_NOTES, Kind.CLEAR_HISTORY, Kind.FORGET}
 # a sentence is finished only once the NEXT character arrives and is a space: while
 # streaming, "It costs 3." may still become "It costs 3.5 lakh."
 _SENTENCE_END = re.compile(r"[.!?।…]+[\"')\]]*\s")
-_MIN_CHUNK = 12          # merge a very short opener ("Sure.") into the next sentence
-_MAX_STEPS = 8           # longest plan the assistant may propose
+_MIN_CHUNK = 12  # merge a very short opener ("Sure.") into the next sentence
+_MAX_STEPS = 8  # longest plan the assistant may propose
 
 
 def validate_command(line: str) -> str | None:
@@ -77,14 +114,14 @@ def validate_command(line: str) -> str | None:
     line = (line or "").strip().splitlines()[0].strip() if (line or "").strip() else ""
     line = re.sub(r"^\s*DO\s*:\s*", "", line, flags=re.I).strip("`\"' ")
     if not re.match(r"(?i)(?:type|write|take a note|note|remind me)\b", line):
-        line = line.rstrip(". ")                    # "DO: open notepad." -> "open notepad"
+        line = line.rstrip(". ")  # "DO: open notepad." -> "open notepad"
     if not line or _BLOCK.match(line) or looks_sensitive(line):
         return None
     return line if parse(line).kind not in _NEVER else None
 
 
 def _clean_for_speech(text: str) -> str:
-    text = re.sub(r"[*_`#>|]+", " ", text)                 # stray markdown
+    text = re.sub(r"[*_`#>|]+", " ", text)  # stray markdown
     text = re.sub(r"https?://\S+", "a link", text)
     return re.sub(r"\s+", " ", text).strip()
 
@@ -95,20 +132,39 @@ class Assistant:
         self.history: deque[dict] = deque(maxlen=max_turns * 2)
         self._lock = threading.Lock()
 
-    def respond(self, utterance: str, speak: Callable[[str], None],
-                context: str = "", page_text: str = "", max_tokens: int = 260,
-                cancel: threading.Event | None = None) -> tuple[str, str]:
+    def respond(
+        self,
+        utterance: str,
+        speak: Callable[[str], None],
+        context: str = "",
+        page_text: str = "",
+        max_tokens: int = 260,
+        task_mode: str = "general",
+        cancel: threading.Event | None = None,
+    ) -> tuple[str, str]:
         """Stream a reply. Returns ("command", cmd) | ("answer", text) | ("offline", "").
         Answer sentences are passed to ``speak`` the moment each one is complete."""
         if looks_sensitive(utterance):
-            return "answer", self._say_local(speak, "I won't send that — it looks like a "
-                                                    "password or a code.")
+            return "answer", self._say_local(
+                speak, "I won't send that — it looks like a password or a code."
+            )
         user = utterance.strip()
         if page_text:
-            user = (f"{user}\n\nThe text on the user's screen (use it to answer):\n"
-                    f"{page_text[:6000]}")
-        messages = [{"role": "system", "content": SYSTEM + (f"\n\nContext: {context}"
-                                                            if context else "")}]
+            user = (
+                f"{user}\n\nThe text on the user's screen (use it to answer):\n{page_text[:6000]}"
+            )
+        sys_prompt = get_system_prompt(task_mode)
+        if (
+            task_mode.lower() in ("coding", "code", "dev", "writing", "creative", "assignment")
+            and max_tokens == 260
+        ):
+            max_tokens = 1024
+        messages = [
+            {
+                "role": "system",
+                "content": sys_prompt + (f"\n\nContext: {context}" if context else ""),
+            }
+        ]
         with self._lock:
             messages += list(self.history)
         messages.append({"role": "user", "content": user})
@@ -116,33 +172,33 @@ class Assistant:
         full = ""
         pending = ""
         spoken_any = False
-        mode = None                          # None until we know: "cmd" or "answer"
+        mode = None  # None until we know: "cmd" or "answer"
         try:
             for delta in self.router.stream(messages, max_tokens=max_tokens, cancel=cancel):
                 full += delta
                 if mode is None:
                     head = full.lstrip()
                     if len(head) < 3 and "DO:".startswith(head.upper()[:3]):
-                        continue                # can't tell yet
+                        continue  # can't tell yet
                     mode = "cmd" if head.upper().startswith("DO:") else "answer"
                     if mode == "answer":
                         pending = full
                         continue
                 if mode == "cmd":
                     if len(re.findall(r"(?im)^\s*DO\s*:", full)) > _MAX_STEPS:
-                        break                   # enough steps; ignore the rest
+                        break  # enough steps; ignore the rest
                     continue
                 pending += delta
-                while True:                     # speak each finished sentence at once
+                while True:  # speak each finished sentence at once
                     m = _SENTENCE_END.search(pending, _MIN_CHUNK - 1)
                     if not m:
                         break
-                    sentence, pending = pending[:m.end()], pending[m.end():]
+                    sentence, pending = pending[: m.end()], pending[m.end() :]
                     out = _clean_for_speech(sentence)
                     if out:
                         speak(out)
                         spoken_any = True
-                if len(pending) > 220:          # a very long clause: don't wait for "."
+                if len(pending) > 220:  # a very long clause: don't wait for "."
                     cut = pending.rfind(" ", 0, 200)
                     cut = cut if cut > 80 else 200
                     speak(_clean_for_speech(pending[:cut]))
@@ -159,9 +215,12 @@ class Assistant:
             cmds = [validate_command(ln) for ln in lines[:_MAX_STEPS]]
             if not cmds or any(c is None for c in cmds):
                 # all or nothing: never run half of a plan that has an unsafe step
-                return "answer", self._say_local(speak, "I'm not able to do that one." if
-                                                 len(cmds) <= 1 else "I can't do all of that "
-                                                 "safely, so I haven't started.")
+                return "answer", self._say_local(
+                    speak,
+                    "I'm not able to do that one."
+                    if len(cmds) <= 1
+                    else "I can't do all of that safely, so I haven't started.",
+                )
             return ("command", cmds[0]) if len(cmds) == 1 else ("plan", cmds)
         tail = _clean_for_speech(pending)
         if tail:

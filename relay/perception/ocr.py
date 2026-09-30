@@ -9,6 +9,8 @@ lazily and can be unloaded to free RAM.
 
 from __future__ import annotations
 
+import time
+
 from relay.diagnostics import get_logger
 from relay.perception.semantic import UIElement
 
@@ -22,12 +24,14 @@ class OCR:
     def _ensure(self):
         if self._engine is None:
             from rapidocr_onnxruntime import RapidOCR
+
             log.info("loading RapidOCR (CPU)")
             self._engine = RapidOCR()
         return self._engine
 
-    def read_screen(self, min_conf: float = 0.5,
-                    region: tuple[int, int, int, int] | None = None) -> list[UIElement]:
+    def read_screen(
+        self, min_conf: float = 0.5, region: tuple[int, int, int, int] | None = None
+    ) -> list[UIElement]:
         """OCR the primary screen (or a (left, top, right, bottom) region, e.g. the
         foreground window); return text regions as low-trust UIElements. Returns []
         if OCR is unavailable or finds nothing. The capture is never stored."""
@@ -35,11 +39,16 @@ class OCR:
             import mss
             import numpy as np
             from PIL import Image
+
             with mss.mss() as sct:
                 if region is not None:
                     left, top, right, bottom = region
-                    mon = {"left": left, "top": top, "width": max(1, right - left),
-                           "height": max(1, bottom - top)}
+                    mon = {
+                        "left": left,
+                        "top": top,
+                        "width": max(1, right - left),
+                        "height": max(1, bottom - top),
+                    }
                 else:
                     mon = sct.monitors[1]
                 raw = sct.grab(mon)
@@ -65,12 +74,20 @@ class OCR:
                 continue
             xs = [int(p[0]) for p in box]
             ys = [int(p[1]) for p in box]
-            out.append(UIElement(
-                uid=uid, name=str(text).strip(), role="Text",
-                bbox=(min(xs), min(ys), max(xs), max(ys)),
-                actions=(), states={"ocr_confidence": round(float(conf), 2)},
-                provenance="ocr",
-            ))
+            out.append(
+                UIElement(
+                    uid=uid,
+                    name=str(text).strip(),
+                    role="Text",
+                    bbox=(min(xs), min(ys), max(xs), max(ys)),
+                    actions=("click",),
+                    states={"ocr_confidence": round(float(conf), 2)},
+                    provenance="ocr",
+                    confidence=round(float(conf), 2),
+                    timestamp=time.time(),
+                    stable_id=f"ocr_{min(xs)}_{min(ys)}",
+                )
+            )
             uid += 1
         return out
 
@@ -89,5 +106,4 @@ def to_text(regions: list[UIElement]) -> str:
             rows[-1].append(r)
         else:
             rows.append([r])
-    return "\n".join(" ".join(e.name for e in sorted(row, key=lambda e: e.bbox[0]))
-                     for row in rows)
+    return "\n".join(" ".join(e.name for e in sorted(row, key=lambda e: e.bbox[0])) for row in rows)

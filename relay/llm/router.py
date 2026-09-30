@@ -32,14 +32,19 @@ class NoRoute(Exception):
 
 @dataclass
 class _Health:
-    ttft: float = 0.8              # learned seconds to first token (EWMA)
+    ttft: float = 0.8  # learned seconds to first token (EWMA)
     failures: int = 0
     cool_until: float = 0.0
 
 
 class Router:
-    def __init__(self, routes: list[Route], client: LLMClient | None = None,
-                 min_hedge: float = 0.5, first_token_timeout: float = 10.0) -> None:
+    def __init__(
+        self,
+        routes: list[Route],
+        client: LLMClient | None = None,
+        min_hedge: float = 0.5,
+        first_token_timeout: float = 10.0,
+    ) -> None:
         self.routes = list(routes)
         self.client = client or LLMClient()
         self.min_hedge = min_hedge
@@ -50,8 +55,9 @@ class Router:
 
     def replace_routes(self, routes: list[Route]) -> None:
         """New routes (e.g. after tuning), keeping what was learned about old ones."""
-        self.health = {r.name: self.health.get(r.name) or _Health(ttft=r.ttft_hint or 0.8)
-                       for r in routes}
+        self.health = {
+            r.name: self.health.get(r.name) or _Health(ttft=r.ttft_hint or 0.8) for r in routes
+        }
         self.routes = list(routes)
 
     # ---- bookkeeping ----
@@ -80,9 +86,13 @@ class Router:
             threading.Thread(target=self.client.warm, args=(r,), daemon=True).start()
 
     # ---- streaming with hedging ----
-    def stream(self, messages: list[dict], max_tokens: int = 300,
-               temperature: float = 0.3, cancel: threading.Event | None = None
-               ) -> Iterator[str]:
+    def stream(
+        self,
+        messages: list[dict],
+        max_tokens: int = 300,
+        temperature: float = 0.3,
+        cancel: threading.Event | None = None,
+    ) -> Iterator[str]:
         routes = self.ordered()
         if not routes:
             raise NoRoute("every route is cooling down after errors")
@@ -95,27 +105,29 @@ class Router:
 
         def run(route: Route, ev: threading.Event) -> None:
             try:
-                for delta in self.client.stream_chat(route, messages, max_tokens,
-                                                     temperature, cancel=ev):
+                for delta in self.client.stream_chat(
+                    route, messages, max_tokens, temperature, cancel=ev
+                ):
                     events.put(("delta", route.name, delta, time.monotonic()))
                 events.put(("done", route.name, None, time.monotonic()))
-            except Exception as e:                     # route error, timeout, parse error
+            except Exception as e:  # route error, timeout, parse error
                 events.put(("error", route.name, e, time.monotonic()))
 
         def start(route: Route) -> None:
             started.append(route.name)
-            ev = cancels[route.name] = threading.Event()   # before the thread runs
-            threading.Thread(target=run, args=(route, ev), name=f"llm-{route.name}",
-                             daemon=True).start()
+            ev = cancels[route.name] = threading.Event()  # before the thread runs
+            threading.Thread(
+                target=run, args=(route, ev), name=f"llm-{route.name}", daemon=True
+            ).start()
 
         def stop(name: str) -> None:
             cancels[name].set()
-            self.client.abort(by_name[name])           # unblock its read right now
+            self.client.abort(by_name[name])  # unblock its read right now
 
         pending = list(routes)
         start(pending.pop(0))
         winner = None
-        ended: set[str] = set()                        # routes whose stream is over
+        ended: set[str] = set()  # routes whose stream is over
         hedge_at = t0 + max(self.min_hedge, 1.5 * self.health[started[0]].ttft)
         deadline = t0 + self.first_token_timeout
         try:
@@ -133,8 +145,7 @@ class Router:
                         if name not in ended:
                             self._fail(name, TimeoutError("no first token"))
                     raise NoRoute("no route answered in time")
-                wait = min(0.1, max(0.005, min(hedge_at if pending else deadline,
-                                               deadline) - now))
+                wait = min(0.1, max(0.005, min(hedge_at if pending else deadline, deadline) - now))
                 try:
                     kind, name, payload, at = events.get(timeout=wait)
                 except queue.Empty:
@@ -143,7 +154,7 @@ class Router:
                     winner = name
                     self._ok(name, at - t0)
                     self.last_route, self.last_ttft = name, at - t0
-                    for other in list(cancels):        # the loser stops streaming
+                    for other in list(cancels):  # the loser stops streaming
                         if other != name and other not in ended:
                             stop(other)
                     yield payload
@@ -151,10 +162,11 @@ class Router:
                 ended.add(name)
                 if kind == "error":
                     self._fail(name, payload)
-                if pending:                            # fail over at once
+                if pending:  # fail over at once
                     start(pending.pop(0))
                     hedge_at = time.monotonic() + max(
-                        self.min_hedge, 1.5 * self.health[started[-1]].ttft)
+                        self.min_hedge, 1.5 * self.health[started[-1]].ttft
+                    )
                 elif ended >= set(started):
                     raise NoRoute(str(payload) if kind == "error" else "empty response")
             # stream the rest of the winner
@@ -166,7 +178,7 @@ class Router:
                     kind, name, payload, at = events.get(timeout=0.1)
                 except queue.Empty:
                     if time.monotonic() - last_at > self.first_token_timeout:
-                        return                          # the stream stalled
+                        return  # the stream stalled
                     continue
                 if name != winner:
                     continue
@@ -177,8 +189,8 @@ class Router:
                 ended.add(name)
                 if kind == "error":
                     self._fail(name, payload)
-                return                                  # keep what was already spoken
-        finally:        # stop any stream still running (loser, or caller stopped early)
+                return  # keep what was already spoken
+        finally:  # stop any stream still running (loser, or caller stopped early)
             for name in list(cancels):
                 if name not in ended and not cancels[name].is_set():
                     stop(name)

@@ -22,12 +22,12 @@ MODES = (QUICK, DETAILED, GUIDED, QUIET)
 
 
 class Priority:
-    CRITICAL = 0      # errors that block the user
+    CRITICAL = 0  # errors that block the user
     CONFIRMATION = 1  # a confirmation is required
-    TASK = 2          # a change relevant to the current task
-    FOCUS = 3         # focus moved
-    REQUESTED = 4     # the user asked for this
-    BACKGROUND = 5    # unrelated background activity
+    TASK = 2  # a change relevant to the current task
+    FOCUS = 3  # focus moved
+    REQUESTED = 4  # the user asked for this
+    BACKGROUND = 5  # unrelated background activity
 
 
 def should_speak(priority: int, mode: str) -> bool:

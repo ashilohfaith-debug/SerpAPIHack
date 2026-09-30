@@ -69,12 +69,12 @@ class SarvamClient:
         self._https = u.scheme == "https"
         self._host = u.hostname or "api.sarvam.ai"
         self._port = u.port or (443 if self._https else 80)
-        self._prefix = u.path.rstrip("/")          # e.g. a gateway at https://host/sarvam
+        self._prefix = u.path.rstrip("/")  # e.g. a gateway at https://host/sarvam
         self.timeout = timeout
         self._conn: http.client.HTTPConnection | None = None
         self._lock = threading.Lock()
 
-    def __repr__(self) -> str:        # never leak the key into logs/tracebacks
+    def __repr__(self) -> str:  # never leak the key into logs/tracebacks
         return f"SarvamClient(host={self._host!r})"
 
     # ---- transport (one kept-alive connection) ----
@@ -103,25 +103,32 @@ class SarvamClient:
                 self._drop()
 
     def _request(self, path: str, body: bytes, content_type: str) -> dict:
-        headers = {"api-subscription-key": self._key, "Content-Type": content_type,
-                   "Accept": "application/json", "User-Agent": "RELAY/0.3"}
+        headers = {
+            "api-subscription-key": self._key,
+            "Content-Type": content_type,
+            "Accept": "application/json",
+            "User-Agent": "RELAY/0.3",
+        }
         with self._lock:
-            for attempt in (0, 1):             # one retry if a kept-alive socket went stale
+            for attempt in (0, 1):  # one retry if a kept-alive socket went stale
                 try:
                     c = self._connection()
                     c.request("POST", self._prefix + path, body=body, headers=headers)
                     resp = c.getresponse()
                     data = resp.read()
                     break
-                except (http.client.RemoteDisconnected, ConnectionResetError,
-                        BrokenPipeError, http.client.CannotSendRequest):
+                except (
+                    http.client.RemoteDisconnected,
+                    ConnectionResetError,
+                    BrokenPipeError,
+                    http.client.CannotSendRequest,
+                ):
                     self._drop()
                     if attempt:
                         raise SarvamError(0, "connection lost") from None
                 except (OSError, http.client.HTTPException) as e:
                     self._drop()
-                    raise SarvamError(0, f"network unavailable ({type(e).__name__})") \
-                        from None
+                    raise SarvamError(0, f"network unavailable ({type(e).__name__})") from None
         if resp.status != 200:
             msg = ""
             try:
@@ -136,14 +143,25 @@ class SarvamClient:
             raise SarvamError(-1, "unexpected response") from None
 
     # ---- APIs ----
-    def tts(self, text: str, language_code: str = "en-IN", speaker: str = "",
-            pace: float = 1.0, model: str = "bulbul:v3") -> tuple[np.ndarray, int]:
-        payload = {"text": text[:2400], "language_code": language_code, "model": model,
-                   "pace": max(0.5, min(2.0, float(pace)))}
+    def tts(
+        self,
+        text: str,
+        language_code: str = "en-IN",
+        speaker: str = "",
+        pace: float = 1.0,
+        model: str = "bulbul:v3",
+    ) -> tuple[np.ndarray, int]:
+        payload = {
+            "text": text[:2400],
+            "language_code": language_code,
+            "model": model,
+            "pace": max(0.5, min(2.0, float(pace))),
+        }
         if speaker:
             payload["speaker"] = speaker
-        data = self._request("/text-to-speech", json.dumps(payload).encode("utf-8"),
-                             "application/json")
+        data = self._request(
+            "/text-to-speech", json.dumps(payload).encode("utf-8"), "application/json"
+        )
         audios = data.get("audios") or []
         if not audios:
             raise SarvamError(-1, "no audio returned")
@@ -153,18 +171,28 @@ class SarvamClient:
             parts.append(a)
         return np.concatenate(parts).astype(np.float32), sr
 
-    def stt(self, wav_bytes: bytes, mode: str = "transcribe", language_code: str = "unknown",
-            model: str = "saaras:v3") -> tuple[str, str]:
+    def stt(
+        self,
+        wav_bytes: bytes,
+        mode: str = "transcribe",
+        language_code: str = "unknown",
+        model: str = "saaras:v3",
+    ) -> tuple[str, str]:
         """Returns (transcript, detected_language_code)."""
         boundary = "----relay" + uuid.uuid4().hex
         out = io.BytesIO()
         for k, v in {"model": model, "mode": mode, "language_code": language_code}.items():
-            out.write(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n"
-                      f"{v}\r\n".encode())
-        out.write(f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; "
-                  f"filename=\"audio.wav\"\r\nContent-Type: audio/wav\r\n\r\n".encode())
+            out.write(
+                f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n'
+                f"{v}\r\n".encode()
+            )
+        out.write(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="file"; '
+            f'filename="audio.wav"\r\nContent-Type: audio/wav\r\n\r\n'.encode()
+        )
         out.write(wav_bytes)
         out.write(f"\r\n--{boundary}--\r\n".encode())
-        data = self._request("/speech-to-text", out.getvalue(),
-                             f"multipart/form-data; boundary={boundary}")
+        data = self._request(
+            "/speech-to-text", out.getvalue(), f"multipart/form-data; boundary={boundary}"
+        )
         return (data.get("transcript") or "").strip(), data.get("language_code") or ""

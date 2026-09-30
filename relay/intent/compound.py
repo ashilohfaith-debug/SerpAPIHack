@@ -22,26 +22,82 @@ import re
 
 from relay.intent.grammar import Kind, parse
 
-_FREE_TEXT = {Kind.TYPE, Kind.WEB_SEARCH, Kind.YOUTUBE, Kind.SET_REMINDER, Kind.TAKE_NOTE,
-              Kind.REMEMBER, Kind.ASK, Kind.SUMMARIZE, Kind.CALCULATE, Kind.EMAIL}
-_STRONG = re.compile(r"\s*(?:,\s*)?\b(?:and then|then|after that|and after that|next)\b"
-                     r"\s*,?\s*", re.I)
+_FREE_TEXT = {
+    Kind.TYPE,
+    Kind.WEB_SEARCH,
+    Kind.YOUTUBE,
+    Kind.SET_REMINDER,
+    Kind.TAKE_NOTE,
+    Kind.REMEMBER,
+    Kind.ASK,
+    Kind.SUMMARIZE,
+    Kind.CALCULATE,
+    Kind.EMAIL,
+}
+_STRONG = re.compile(
+    r"\s*(?:,\s*)?\b(?:and then|then|after that|and after that|next)\b"
+    r"\s*,?\s*",
+    re.I,
+)
 _WEAK = re.compile(r"\s*,\s*(?:and\s+)?|\s+and\s+", re.I)
 _FOLLOW_UP = re.compile(
     r"^(?:save(?: it| the file| this| the document)?(?: as .+)?|press .+|hit enter|"
     r"send(?: it| the message| message)?|read it(?: out| aloud| back| to me)?|select all|"
     r"copy(?: it| that| all)?|paste(?: it)?|(?:open|click|read|play) the (?:first|second|"
-    r"third|fourth|fifth|last|top) .+)$", re.I)
+    r"third|fourth|fifth|last|top) .+)$",
+    re.I,
+)
 _CARRY = re.compile(r"^(open|close|switch to|launch|start)\s", re.I)
 # a piece that starts with a verb is its own (unknown) request, not another app name
-_VERBISH = {"send", "play", "type", "write", "call", "search", "read", "find", "set", "turn",
-            "make", "take", "remind", "go", "click", "press", "save", "copy", "paste",
-            "delete", "move", "rename", "tell", "what", "how", "is", "are", "can", "please",
-            "reply", "message", "text", "ask", "show", "check", "book", "buy", "order"}
-_READ_RESULT = re.compile(r"^read the (first|second|third|fourth|fifth|top|last) "
-                          r"(?:result|link|one|article)$", re.I)
-_FOLDERS = r"(?:my\s+|the\s+)?(desktop|documents|downloads|pictures|photos|music|videos)" \
-           r"(?:\s+folder)?"
+_VERBISH = {
+    "send",
+    "play",
+    "type",
+    "write",
+    "call",
+    "search",
+    "read",
+    "find",
+    "set",
+    "turn",
+    "make",
+    "take",
+    "remind",
+    "go",
+    "click",
+    "press",
+    "save",
+    "copy",
+    "paste",
+    "delete",
+    "move",
+    "rename",
+    "tell",
+    "what",
+    "how",
+    "is",
+    "are",
+    "can",
+    "please",
+    "reply",
+    "message",
+    "text",
+    "ask",
+    "show",
+    "check",
+    "book",
+    "buy",
+    "order",
+}
+_READ_RESULT = re.compile(
+    r"^read the (first|second|third|fourth|fifth|top|last) "
+    r"(?:result|link|one|article)$",
+    re.I,
+)
+_FOLDERS = (
+    r"(?:my\s+|the\s+)?(desktop|documents|downloads|pictures|photos|music|videos)"
+    r"(?:\s+folder)?"
+)
 
 
 def _kind(text: str) -> Kind:
@@ -61,12 +117,20 @@ def split_steps(text: str) -> list[str] | None:
     if not raw or not re.search(r"\band\b|,|\bthen\b|\bafter that\b", raw, re.I):
         return None
     # natural two-step shapes that are really one command
-    m = re.fullmatch(r"(?:open|go to)\s+youtube\s*,?\s+and\s+(?:play|search for|search|find)"
-                     r"\s+(.+)", raw, re.I)
+    m = re.fullmatch(
+        r"(?:open|go to)\s+youtube\s*,?\s+and\s+(?:play|search for|search|find)"
+        r"\s+(.+)",
+        raw,
+        re.I,
+    )
     if m:
         return [f"play {m.group(1)} on youtube"]
-    m = re.fullmatch(r"(?:open|find)\s+(?:my\s+|the\s+)?(.+?)\s*,?\s+and\s+read\s+it"
-                     r"(?:\s+(?:out|aloud|to me|out loud))?", raw, re.I)
+    m = re.fullmatch(
+        r"(?:open|find)\s+(?:my\s+|the\s+)?(.+?)\s*,?\s+and\s+read\s+it"
+        r"(?:\s+(?:out|aloud|to me|out loud))?",
+        raw,
+        re.I,
+    )
     if m and _kind("open " + m.group(1)) == Kind.OPEN_APP:
         return [f"read the file {m.group(1)}"]
     steps: list[str] = []
@@ -82,11 +146,15 @@ def split_steps(text: str) -> list[str] | None:
                 split = bool(_FOLLOW_UP.match(nxt.strip()))
             else:
                 split = _kind(_rewrite(nxt)) != Kind.UNKNOWN
-                if not split:                       # "open Chrome, WhatsApp and Gmail"
+                if not split:  # "open Chrome, WhatsApp and Gmail"
                     verb = _CARRY.match(current)
                     first = (nxt.split() or [""])[0].lower()
-                    if verb and first not in _VERBISH and len(nxt.split()) <= 4 \
-                            and _kind(f"{verb.group(1)} {nxt}") != Kind.UNKNOWN:
+                    if (
+                        verb
+                        and first not in _VERBISH
+                        and len(nxt.split()) <= 4
+                        and _kind(f"{verb.group(1)} {nxt}") != Kind.UNKNOWN
+                    ):
                         nxt = f"{verb.group(1)} {nxt}"
                         split = True
             if split:
@@ -97,11 +165,11 @@ def split_steps(text: str) -> list[str] | None:
         steps.append(current)
     out: list[str] = []
     for s in (_rewrite(s) for s in steps if s.strip()):
-        m = _READ_RESULT.match(s)                   # "read the first result" = open + read
+        m = _READ_RESULT.match(s)  # "read the first result" = open + read
         out += [f"open the {m.group(1).lower()} result", "read the page"] if m else [s]
     steps = out
     if len(steps) < 2:
         return None
     if any(_kind(s) == Kind.UNKNOWN for s in steps):
-        return None                                  # not all commands: not a sequence
+        return None  # not all commands: not a sequence
     return steps

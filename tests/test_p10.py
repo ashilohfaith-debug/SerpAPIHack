@@ -42,7 +42,7 @@ def test_dispatch_whitelist_and_routing():
     assert srv.dispatch("handle", {"text": "open notepad"})["ok"]
     assert ("handle", "open notepad") in fs.calls
     assert not srv.dispatch("handle", {"text": ""})["ok"]
-    assert not srv.dispatch("click_at", {"x": 1})["ok"]     # raw automation refused
+    assert not srv.dispatch("click_at", {"x": 1})["ok"]  # raw automation refused
 
 
 # ---- live server: auth enforced on every route + event fan-out ----
@@ -51,8 +51,12 @@ def _get(url):
 
 
 def _post(url, obj):
-    req = urllib.request.Request(url, data=json.dumps(obj).encode(),
-                                 headers={"Content-Type": "application/json"}, method="POST")
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(obj).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     return urllib.request.urlopen(req, timeout=5)
 
 
@@ -60,7 +64,7 @@ def test_live_server_auth_and_events():
     fs = FakeSession()
     bus = EventBus()
     srv = IpcServer(fs, bus, port=0)
-    url = srv.start()                       # http://127.0.0.1:PORT/?token=TOK
+    url = srv.start()  # http://127.0.0.1:PORT/?token=TOK
     base, token = url.split("/?")[0], url.split("token=")[1]
     try:
         # panel without a token -> 403

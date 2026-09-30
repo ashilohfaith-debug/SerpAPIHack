@@ -50,15 +50,20 @@ def _shorten(text: str, n: int = 110) -> str:
 
 
 class Palette:
-    def __init__(self, status: Callable[[], str], on_toggle: Callable[[], None],
-                 on_talk: Callable[[], None], on_quit: Callable[[], None]) -> None:
-        self._status = status              # returns a key of STATES, polled
+    def __init__(
+        self,
+        status: Callable[[], str],
+        on_toggle: Callable[[], None],
+        on_talk: Callable[[], None],
+        on_quit: Callable[[], None],
+    ) -> None:
+        self._status = status  # returns a key of STATES, polled
         self._on_toggle, self._on_talk, self._on_quit = on_toggle, on_talk, on_quit
         self._q: "queue.Queue[tuple[str, str]]" = queue.Queue()
         self._thread: threading.Thread | None = None
         self._ready = threading.Event()
         self.visible = True
-        self.ok = False                    # False if Tk isn't available (headless etc.)
+        self.ok = False  # False if Tk isn't available (headless etc.)
 
     # ---- called from any thread ----
     def heard(self, text: str) -> None:
@@ -94,7 +99,7 @@ class Palette:
             return
         try:
             root = tk.Tk()
-        except Exception as e:                   # no display
+        except Exception as e:  # no display
             log.info("palette unavailable: %s", e)
             self._ready.set()
             return
@@ -115,26 +120,36 @@ class Palette:
         light.pack(side="left")
         name = tk.Label(top, text="RELAY", bg=_BG, fg=_FG, font=("Segoe UI Semibold", 10))
         name.pack(side="left", padx=(6, 6))
-        status = tk.Label(top, text=STATES["ready"][1], bg=_BG, fg=_DIM,
-                          font=("Segoe UI", 10), anchor="w")
+        status = tk.Label(
+            top, text=STATES["ready"][1], bg=_BG, fg=_DIM, font=("Segoe UI", 10), anchor="w"
+        )
         status.pack(side="left", fill="x", expand=True)
 
         def button(text, cmd, width):
-            b = tk.Label(top, text=text, bg="#21262d", fg=_FG, font=("Segoe UI", 9),
-                         width=width, padx=4, pady=1, cursor="hand2")
+            b = tk.Label(
+                top,
+                text=text,
+                bg="#21262d",
+                fg=_FG,
+                font=("Segoe UI", 9),
+                width=width,
+                padx=4,
+                pady=1,
+                cursor="hand2",
+            )
             b.bind("<Button-1>", lambda e: cmd())
             b.bind("<Enter>", lambda e: b.configure(bg="#30363d"))
             b.bind("<Leave>", lambda e: b.configure(bg="#21262d"))
             b.pack(side="left", padx=(4, 0))
             return b
+
         toggle = button("Off", self._on_toggle, 4)
         button("Talk", self._on_talk, 5)
         button("✕", self._on_quit, 2)
 
         you = tk.Label(root, text="", bg=_BG, fg=_FG, font=("Segoe UI", 10), anchor="w")
         you.pack(fill="x", padx=12)
-        relay = tk.Label(root, text="", bg=_BG, fg="#a5d6ff", font=("Segoe UI", 10),
-                         anchor="w")
+        relay = tk.Label(root, text="", bg=_BG, fg="#a5d6ff", font=("Segoe UI", 10), anchor="w")
         relay.pack(fill="x", padx=12, pady=(0, 6))
 
         # size and place: top centre of the main screen
@@ -148,8 +163,7 @@ class Palette:
             hwnd = ctypes.windll.user32.GetParent(root.winfo_id()) or root.winfo_id()
             gwl_exstyle, noactivate, toolwindow = -20, 0x08000000, 0x00000080
             style = ctypes.windll.user32.GetWindowLongW(hwnd, gwl_exstyle)
-            ctypes.windll.user32.SetWindowLongW(hwnd, gwl_exstyle,
-                                                style | noactivate | toolwindow)
+            ctypes.windll.user32.SetWindowLongW(hwnd, gwl_exstyle, style | noactivate | toolwindow)
         except Exception as e:
             log.debug("palette window style: %s", e)
 
@@ -160,6 +174,7 @@ class Palette:
 
         def move(e):
             root.geometry(f"+{e.x_root - drag['x']}+{e.y_root - drag['y']}")
+
         for wdg in (root, top, name, status, you, relay):
             wdg.bind("<ButtonPress-1>", press)
             wdg.bind("<B1-Motion>", move)
