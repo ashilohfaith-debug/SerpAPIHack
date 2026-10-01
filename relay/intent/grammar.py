@@ -152,6 +152,13 @@ class Kind:
     WORKSPACE_TEST = "workspace_test"
     WORKSPACE_STATUS = "workspace_status"
     WORKSPACE_DIFF = "workspace_diff"
+    # text editing engine
+    TEXT_SELECT = "text_select"
+    TEXT_NAV = "text_nav"
+    TEXT_EDIT = "text_edit"
+    TEXT_FORMAT = "text_format"
+    TEXT_INSPECT = "text_inspect"
+    COMPOSE = "compose"
     UNKNOWN = "unknown"
 
 
@@ -380,12 +387,20 @@ def _control(low: str) -> str | None:
         "continue",
         "carry",
         "go",
+        "back",
+        "navigate",
         "resume",
         "keep",
         "repeat",
         "say",
         "again",
         "one",
+        "start",
+        "reset",
+        "make",
+        "simpler",
+        "explain",
+        "why",
     )
     return cmd if words[0] in starts else None
 
@@ -1178,6 +1193,11 @@ def parse(utterance: str) -> Intent:
         if m.group(2):
             slots["app"] = m.group(2).strip()
         return Intent(Kind.REMEMBER, slots, raw)
+    m = re.match(r"(?:call|alias)\s+(.+?)\s+(?:as|alias|to)\s+(.+)", low)
+    if not m:
+        m = re.match(r"call\s+(.+?)\s+([a-zA-Z0-9_-]+)$", low)
+    if m:
+        return I(Kind.REMEMBER, alias_target=m.group(1).strip(), alias_name=m.group(2).strip())
     m = re.match(r"remember (?:that )?(.+)", keep)
     if m:
         fact = payload_after(raw, r"remember(?:\s+that)?") or m.group(1).strip()
@@ -1247,6 +1267,71 @@ def parse(utterance: str) -> Intent:
     if re.search(r"\b(?:show workspace diff|what did i change in workspace|workspace diff)\b", low):
         return I(Kind.WORKSPACE_DIFF)
 
+    # ---- content generation vs literal typing (Point 49) ----
+    if re.search(r"\b(?:draft|compose)\b", low) or re.search(
+        r"\bwrite (?:an?|the)?\s*(?:email|essay|letter|story|paragraph|code|function|script|summary|response|message|assignment|draft|outline)\b",
+        low,
+    ):
+        return I(Kind.COMPOSE, prompt=raw.strip())
+
+    # ---- text editing & cursor navigation (Points 30-37) ----
+    # 1. Selection
+    if re.search(r"\bselect (?:all|everything|the entire document|the document)\b", low):
+        return I(Kind.TEXT_SELECT, unit="all")
+    m = re.search(r"\bselect (?:the )?(prev|previous|next|back)?\s*(\d+)?\s*(word|line|paragraph)s?\b", low)
+    if m:
+        dir_val = m.group(1) or "next"
+        count_val = int(m.group(2)) if m.group(2) else 1
+        return I(Kind.TEXT_SELECT, unit=m.group(3), count=count_val, direction=dir_val)
+    if re.search(r"\bselect to (?:the )?(?:start|beginning) of (?:the )?line\b", low):
+        return I(Kind.TEXT_SELECT, unit="to start of line")
+    if re.search(r"\bselect to (?:the )?end of (?:the )?line\b", low):
+        return I(Kind.TEXT_SELECT, unit="to end of line")
+    if re.search(r"\bselect to (?:the )?(?:top|beginning) of (?:the )?document\b", low):
+        return I(Kind.TEXT_SELECT, unit="to top")
+    if re.search(r"\bselect to (?:the )?(?:bottom|end) of (?:the )?document\b", low):
+        return I(Kind.TEXT_SELECT, unit="to bottom")
+
+    # 2. Cursor navigation
+    m = re.search(r"\bmove (left|right|up|down|back|forward)\s*(\d+)?\s*(character|char|letter|word|line|paragraph)?s?\b", low)
+    if m:
+        dir_val = m.group(1)
+        count_val = int(m.group(2)) if m.group(2) else 1
+        unit_val = m.group(3) or ("line" if dir_val in ("up", "down") else "character")
+        return I(Kind.TEXT_NAV, unit=unit_val, count=count_val, direction=dir_val)
+
+    # 3. Text transformations
+    if re.search(r"\bcapitalize (?:that|this|the selection|selection)\b", low):
+        return I(Kind.TEXT_EDIT, action="capitalize")
+    if re.search(r"\buppercase (?:that|this|the selection|selection)\b", low):
+        return I(Kind.TEXT_EDIT, action="uppercase")
+    if re.search(r"\blowercase (?:that|this|the selection|selection)\b", low):
+        return I(Kind.TEXT_EDIT, action="lowercase")
+    if re.search(r"\bduplicate (?:this |the |current )?line\b", low):
+        return I(Kind.TEXT_EDIT, action="duplicate_line")
+    m = re.search(r"\bdelete (?:the )?(?:last |previous |next )?(word|line|character|char)\b", low)
+    if m:
+        return I(Kind.TEXT_EDIT, action="delete", unit=m.group(1))
+
+    # 4. Document structure
+    m = re.search(r"\b(?:make|apply|format as) heading (\d)\b", low)
+    if m:
+        return I(Kind.TEXT_FORMAT, style=f"heading {m.group(1)}")
+    if re.search(r"\b(?:make|toggle|insert) bullet list\b", low):
+        return I(Kind.TEXT_FORMAT, style="bullet list")
+    if re.fullmatch(r"indent", low):
+        return I(Kind.TEXT_FORMAT, style="indent")
+    if re.fullmatch(r"(?:outdent|decrease indent)", low):
+        return I(Kind.TEXT_FORMAT, style="outdent")
+    if re.fullmatch(r"(?:insert link|add link)", low):
+        return I(Kind.TEXT_FORMAT, style="link")
+
+    # 5. Inspection
+    if re.search(r"\b(?:word count|count words|how many words)\b", low):
+        return I(Kind.TEXT_INSPECT, action="word_count")
+    if re.search(r"\bread (?:around cursor|current line|this line)\b", low):
+        return I(Kind.TEXT_INSPECT, action="read_around_cursor")
+
     # ---- actions ----
     m = re.match(r"(?:open|launch|start|run)\s+(?:up\s+)?(?:the\s+)?(.+)", low)
     if m and not re.search(r"\b(?:result|link|button)\b", m.group(1)):
@@ -1254,9 +1339,9 @@ def parse(utterance: str) -> Intent:
     m = re.match(r"(?:switch to|go to|focus(?: on)?|bring up|show me)\s+(?:the\s+)?(.+)", low)
     if m and not re.search(r"\b(?:result|link|button|field)\b", m.group(1)):
         return I(Kind.SWITCH_APP, app=m.group(1).strip())
-    m = re.match(r"(?:type|write|enter|dictate|insert)\s+(?:in\s+)?(.+)", keep)
+    m = re.match(r"(?:type|enter|dictate|insert)\s+(?:in\s+)?(.+)", keep)
     if m:
-        text = payload_after(raw, r"type(?:\s+in)?|write|enter|dictate|insert") or m.group(1)
+        text = payload_after(raw, r"type(?:\s+in)?|enter|dictate|insert") or m.group(1)
         return I(Kind.TYPE, text=text.strip())
     m = re.match(r"^save(?: (?:this|it|the file|the document))?\s+as\s+(.+)$", low)
     if m:

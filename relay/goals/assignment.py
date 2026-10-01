@@ -134,9 +134,34 @@ class AssignmentWorkflow:
             except Exception:
                 pass
 
-        if not raw_text.strip():
-            raw_text = (
-                "Standard academic assignment with required rubric, analysis, and references."
+        # 3. Check for genuine LMS or academic assignment keywords
+        lms_markers = (
+            "canvas",
+            "blackboard",
+            "moodle",
+            "classroom",
+            "brightspace",
+            "d2l",
+            "schoology",
+            "assignment",
+            "rubric",
+            "due date",
+            "points possible",
+            "submission",
+            "homework",
+            "lab report",
+        )
+        has_lms = any(marker in raw_text.lower() for marker in lms_markers)
+        if session.worker:
+            snap = getattr(session.worker, "live", None)
+            if snap and any(m in (snap.foreground_title or "").lower() for m in lms_markers):
+                has_lms = True
+
+        if not raw_text.strip() or not has_lms:
+            return (
+                "I could not detect an assignment on your screen or in your clipboard. "
+                "Please open your assignment in Canvas, Blackboard, Moodle, or Google Classroom, "
+                "or copy the assignment instructions, and try again."
             )
 
         assignment = self.parse_instructions(raw_text)
@@ -215,12 +240,19 @@ class AssignmentWorkflow:
                 missing.append(item.criterion)
         return missing
 
-    def prepare_submission_confirmation(self, assignment: Assignment, file_path: Path) -> str:
+    def prepare_submission_confirmation(
+        self, assignment: Assignment, file_path: Path, attempt: Optional[int] = None
+    ) -> str:
         """Construct exact readback confirmation question as specified in contract:
-
-        e.g. 'Submit Operating_Systems_Assignment.pdf to Operating Systems Assignment 3 now?'
+        states course, assignment, filename, attempt number, and irreversible consequence.
         """
-        return f"Submit {file_path.name} to {assignment.course} {assignment.title} now?"
+        base = f"Submit {file_path.name} to {assignment.course} {assignment.title} now?"
+        if attempt is not None:
+            return (
+                f"{base} This is attempt {attempt}. "
+                "Please note: submitting is irreversible. Say 'confirm submission' to submit, or say 'cancel'."
+            )
+        return base
 
     def verify_submission_receipt(self, receipt_text: str, expected_filename: str) -> dict:
         """Inspect and verify submission receipt evidence from LMS response.

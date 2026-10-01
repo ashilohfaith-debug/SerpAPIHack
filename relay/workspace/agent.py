@@ -259,3 +259,63 @@ class WorkspaceAgent:
             return ok, spoken
         except Exception as e:
             return False, f"Test execution failed: {e}"
+
+    def auto_detect_test_command(self) -> list[str]:
+        """Detect project test framework dynamically based on repository files."""
+        if (self.root / "package.json").is_file():
+            return ["npm", "test"]
+        if (self.root / "Cargo.toml").is_file():
+            return ["cargo", "test"]
+        if (self.root / "go.mod").is_file():
+            return ["go", "test", "./..."]
+        if (
+            (self.root / "pytest.ini").is_file()
+            or (self.root / "pyproject.toml").is_file()
+            or (self.root / "tests").is_dir()
+        ):
+            return ["pytest", "-q"]
+        return ["pytest", "-q"]
+
+    def explain_git_status(self) -> str:
+        """Run git status and explain branch, changes, and conflicts in spoken language."""
+        try:
+            br_proc = subprocess.run(
+                ["git", "branch", "--show-current"],
+                cwd=str(self.root),
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+            branch = br_proc.stdout.strip() or "detached"
+
+            st_proc = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=str(self.root),
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+            lines = [line.strip() for line in st_proc.stdout.splitlines() if line.strip()]
+            if not lines:
+                return f"On branch {branch}. Working tree clean, no uncommitted changes."
+
+            conflicts = [line[3:] for line in lines if line.startswith(("UU", "AA", "UD", "DU"))]
+            modified = [line[3:] for line in lines if line.startswith(("M", " M"))]
+            untracked = [line[3:] for line in lines if line.startswith("??")]
+
+            parts = [f"On branch {branch}."]
+            if conflicts:
+                parts.append(
+                    f"Warning: {len(conflicts)} merge conflict{'s' if len(conflicts) > 1 else ''} in: {', '.join(conflicts[:2])}."
+                )
+            if modified:
+                parts.append(
+                    f"{len(modified)} modified file{'s' if len(modified) > 1 else ''}: {', '.join(modified[:3])}."
+                )
+            if untracked:
+                parts.append(
+                    f"{len(untracked)} new untracked file{'s' if len(untracked) > 1 else ''}."
+                )
+            return " ".join(parts)
+        except Exception as e:
+            return f"Git is not available in this workspace: {e}"

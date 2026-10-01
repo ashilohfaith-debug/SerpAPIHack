@@ -96,6 +96,36 @@ def resolve_reference(
 
     if target:
         t = target.strip().lower()
+        if t in ("previous field", "the previous field", "last field", "prior field"):
+            fields = [e for e in current.elements if e.role in ("Edit", "ComboBox") and e.name]
+            fields = reading_order(fields)
+            if current.focus and current.focus in fields:
+                idx = fields.index(current.focus)
+                if idx > 0:
+                    el = fields[idx - 1]
+                    ctx.remember("last", el, current.observation_version)
+                    return el, None
+            elif fields:
+                el = fields[-1]
+                ctx.remember("last", el, current.observation_version)
+                return el, None
+            return None, "not_found"
+
+        if t in ("next field", "the next field", "following field"):
+            fields = [e for e in current.elements if e.role in ("Edit", "ComboBox") and e.name]
+            fields = reading_order(fields)
+            if current.focus and current.focus in fields:
+                idx = fields.index(current.focus)
+                if idx < len(fields) - 1:
+                    el = fields[idx + 1]
+                    ctx.remember("last", el, current.observation_version)
+                    return el, None
+            elif fields:
+                el = fields[0]
+                ctx.remember("last", el, current.observation_version)
+                return el, None
+            return None, "not_found"
+
         if t in _DEMONSTRATIVES:
             ref = ctx.references.get(ctx.last_ref_key) if ctx.last_ref_key else None
             if ref is None:
@@ -115,6 +145,9 @@ def resolve_reference(
             if bare and bare != t:
                 matches = current.find(bare)
         if matches:
+            if len(matches) > 1 and (len({m.name for m in matches}) > 1 or len({m.bbox for m in matches}) > 1):
+                # Ambiguous match among distinct elements
+                return None, "ambiguous"
             ctx.remember("last", matches[0], current.observation_version)
             return matches[0], None
         return None, "not_found"

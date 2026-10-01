@@ -102,7 +102,11 @@ def set_autostart(on: bool) -> Path:
     return link
 
 
-def uninstall() -> list[Path]:
+def uninstall(remove_data: bool = False) -> list[Path]:
+    import shutil
+
+    from relay.config import user_data_dir
+
     removed = []
     for p in (
         desktop_dir() / f"{APP_NAME}.lnk",
@@ -114,4 +118,18 @@ def uninstall() -> list[Path]:
             removed.append(p)
         except FileNotFoundError:
             pass
+
+    if remove_data:
+        data_dir = user_data_dir()
+        if data_dir.is_dir():
+            shutil.rmtree(data_dir, ignore_errors=True)
+            removed.append(data_dir)
     return removed
+
+
+def repair() -> list[Path]:
+    """Verify and recreate missing shortcuts, directories, and data folders."""
+    from relay.config import user_data_dir
+
+    user_data_dir().mkdir(parents=True, exist_ok=True)
+    return install(desktop=True, start_menu=True)

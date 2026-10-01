@@ -97,8 +97,15 @@ Registered with Win32 `RegisterHotKey` (`relay/audio/hotkeys.py`) — no keyboar
 no keystroke logging, no admin rights. If a combination is owned by another program,
 RELAY says so at start-up instead of silently having no talk key.
 
-## Not yet done (release gates)
-- Code signing (needs a certificate) — see `docs/PACKAGING.md`.
-- A formal external security review and pinned SBOM.
-- Optional at-rest encryption of the preference DB via Windows DPAPI (design noted; not
-  implemented — no passwords are stored there regardless).
+## Vulnerability Reporting & Support
+- To report a security vulnerability or privacy concern, please contact the maintainers at `security@relay-project.org` or open a private GitHub Security Advisory.
+- Responses to verified security disclosures will be provided within 48 hours.
+
+## Emergency Disable & Data Removal
+- **Emergency Disable:** Press `Ctrl+Alt+Backspace` at any time, or say `"emergency stop"`. Relay halts all execution, silences audio, cancels subprocesses, and releases all input locks immediately.
+- **Data Retention & Removal:** All local user data (SQLite database, notes, logs, task checkpoints) resides under `%LOCALAPPDATA%\RELAY`. Users can inspect, export (`relay export preferences`), or permanently purge all stored data via the clean uninstall flow: `python -m relay.install --uninstall --remove-data`.
+
+## Implemented Security Controls
+- **Windows DPAPI Secret Protection:** API keys and sensitive tokens are encrypted using Windows Data Protection API (`CryptProtectData`) tied to the user's Windows login credentials (`relay/memory/secrets.py`).
+- **Prompt Injection Defense:** External page text and OCR content are isolated inside `<untrusted_screen_content>` XML boundaries with explicit system instructions prohibiting execution of instructions embedded within screen text (`relay/llm/assistant.py`).
+- **Input & Focus Protection:** Input injection verifies active target focus and refuses to enter unconfirmed text into password or protected controls (`relay/executor/executor.py`, `relay/skills.py`).

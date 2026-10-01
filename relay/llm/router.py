@@ -92,6 +92,7 @@ class Router:
         max_tokens: int = 300,
         temperature: float = 0.3,
         cancel: threading.Event | None = None,
+        allow_hedging: bool = True,
     ) -> Iterator[str]:
         routes = self.ordered()
         if not routes:
@@ -100,6 +101,11 @@ class Router:
         cancels: dict[str, threading.Event] = {}
         started: list[str] = []
         t0 = time.monotonic()
+
+        # Privacy protection (Point 62): never hedge/broadcast screen text to multiple providers concurrently
+        has_screen = any("<untrusted_screen_content>" in str(m.get("content", "")) for m in messages)
+        if has_screen:
+            allow_hedging = False
 
         by_name = {r.name: r for r in routes}
 
@@ -128,7 +134,11 @@ class Router:
         start(pending.pop(0))
         winner = None
         ended: set[str] = set()  # routes whose stream is over
-        hedge_at = t0 + max(self.min_hedge, 1.5 * self.health[started[0]].ttft)
+        hedge_at = (
+            (t0 + max(self.min_hedge, 1.5 * self.health[started[0]].ttft))
+            if allow_hedging
+            else float("inf")
+        )
         deadline = t0 + self.first_token_timeout
         try:
             while winner is None:

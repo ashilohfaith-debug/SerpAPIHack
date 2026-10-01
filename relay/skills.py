@@ -915,6 +915,12 @@ class Skills:
         from relay.system import files, web, windows
 
         target = (i.slots.get("app") or "").strip()
+        try:
+            alias_val = self.s.store.get_pref(f"alias:{target.lower()}")
+            if alias_val:
+                target = str(alias_val)
+        except Exception:
+            pass
         if (
             re.search(r"\b(?:first|second|third|fourth|fifth|last|one|number \d+)\b", target)
             and self.recent_list()
@@ -1066,6 +1072,12 @@ class Skills:
         from relay.system import web, windows
 
         target = (i.slots.get("app") or "").strip()
+        try:
+            alias_val = self.s.store.get_pref(f"alias:{target.lower()}")
+            if alias_val:
+                target = str(alias_val)
+        except Exception:
+            pass
         rl = self.recent_list()
         if (
             rl

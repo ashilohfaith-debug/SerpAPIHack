@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Callable
 
 from relay.accessibility import (
@@ -89,6 +90,14 @@ _WORKSPACE_KINDS = {
     Kind.WORKSPACE_TEST,
     Kind.WORKSPACE_STATUS,
     Kind.WORKSPACE_DIFF,
+}
+_TEXT_KINDS = {
+    Kind.TEXT_SELECT,
+    Kind.TEXT_NAV,
+    Kind.TEXT_EDIT,
+    Kind.TEXT_FORMAT,
+    Kind.TEXT_INSPECT,
+    Kind.COMPOSE,
 }
 log = get_logger("session")
 _REQ = pol.Priority.REQUESTED
@@ -189,6 +198,10 @@ class Session:
 
         self.screen_reader = ScreenReaderWatch()
         self.skills = Skills(self)
+        from relay.editing.editor import TextEditor
+
+        self.editor = TextEditor(self.executor, self.worker)
+        self.mode = "general"
         self.speech_rate = 1.0
         try:
             self.set_speech_rate(
@@ -481,6 +494,8 @@ class Session:
             return self._handle_assignment(intent)
         if intent.kind in _WORKSPACE_KINDS:
             return self._handle_workspace(intent)
+        if intent.kind in _TEXT_KINDS:
+            return self._handle_text_editing(intent)
         self.cancel.clear()
         handled = self.skills.handle(intent)
         if handled is not None:
@@ -764,6 +779,12 @@ class Session:
     def _handle_memory(self, intent):
         k, s = intent.kind, intent.slots
         if k == Kind.REMEMBER:
+            if "alias_target" in s and "alias_name" in s:
+                target = s["alias_target"]
+                alias = s["alias_name"]
+                self.store.set_pref(f"alias:{alias.lower()}", target)
+                self.say(f"Saved alias. I will remember that {alias} means {target}.", _REQ)
+                return []
             if "mode" in s:
                 scope = self._app_key(s.get("app", ""))
                 self.store.set_pref("narration_mode", s["mode"], scope=scope)
@@ -924,14 +945,35 @@ class Session:
                     _CONF,
                 )
             file_name = f"{a.title.replace(' ', '_')}.pdf"
-            readback = f"Submit {file_name} to {a.course} {a.title} now?"
+            readback = self.assignment.prepare_submission_confirmation(a, Path(file_name))
 
             def do_submit():
+                # Attempt to click active submission button on screen if present
                 snap = self.worker.live or self.worker.observe(2.0)
+                if snap:
+                    sub_btns = [
+                        e
+                        for e in snap.elements
+                        if e.role in ("Button", "Hyperlink")
+                        and any(
+                            w in e.name.lower()
+                            for w in ("submit", "turn in", "submit assignment")
+                        )
+                    ]
+                    if sub_btns:
+                        self.executor.click_coord(
+                            sub_btns[0].bbox[0] + 5,
+                            sub_btns[0].bbox[1] + 5,
+                            label=sub_btns[0].name,
+                        )
+                        time.sleep(1.0)
+
+                snap = self.worker.live or self.worker.observe(3.0)
                 screen_text = " ".join(e.name for e in snap.elements) if snap else ""
                 receipt = self.assignment.verify_submission_receipt(screen_text, file_name)
                 if receipt["verified"]:
-                    self.say(f"Assignment submitted! Confirmed receipt for {file_name}.", _REQ)
+                    ts = f" at {receipt['timestamp']}" if receipt.get("timestamp") else ""
+                    self.say(f"Assignment submitted! Confirmed receipt for {file_name}{ts}.", _REQ)
                 else:
                     self.say(
                         f"Submission recorded, but receipt verification was uncertain: {receipt['status']}.",
@@ -946,20 +988,65 @@ class Session:
     def _handle_workspace(self, intent):
         k = intent.kind
         if k == Kind.WORKSPACE_TEST:
-            self.say("Running workspace tests.", _REQ)
-            ok, summary = self.workspace.run_tests(["uv", "run", "pytest", "-q"])
+            self.say("Running project tests.", _REQ)
+            cmd = self.workspace.auto_detect_test_command()
+            ok, summary = self.workspace.run_tests(cmd)
             self.say(f"Test results: {summary}", _REQ)
             return []
         if k == Kind.WORKSPACE_STATUS:
+            git_summary = self.workspace.explain_git_status()
             files = self.workspace.list_files()
             self.say(
-                f"Workspace contains {len(files)} files. Root is {self.workspace.root.name}.", _REQ
+                f"{git_summary} Workspace contains {len(files)} files.", _REQ
             )
             return []
         if k == Kind.WORKSPACE_DIFF:
             diff_text = self.workspace.get_recent_diff_summary()
             self.say(diff_text, _REQ)
             return []
+        return []
+
+    # ---- text editing engine ----
+    def _handle_text_editing(self, intent):
+        k, s = intent.kind, intent.slots
+        if k == Kind.TEXT_SELECT:
+            ok, msg = self.editor.select(s.get("unit", "word"), s.get("count", 1), s.get("direction", "next"))
+            self.say(msg, _REQ)
+            return []
+        if k == Kind.TEXT_NAV:
+            ok, msg = self.editor.move_cursor(s.get("unit", "word"), s.get("count", 1), s.get("direction", "forward"))
+            self.say(msg, _REQ)
+            return []
+        if k == Kind.TEXT_EDIT:
+            act = s.get("action", "")
+            if act in ("capitalize", "uppercase", "lowercase"):
+                ok, msg = self.editor.change_case(act)
+            elif act == "duplicate_line":
+                ok, msg = self.editor.duplicate_line()
+            elif act == "delete":
+                ok, msg = self.editor.delete_unit(s.get("unit", "word"))
+            else:
+                ok, msg = False, "Unknown editing action."
+            self.say(msg, _REQ)
+            return []
+        if k == Kind.TEXT_FORMAT:
+            ok, msg = self.editor.format_structure(s.get("style", ""))
+            self.say(msg, _REQ)
+            return []
+        if k == Kind.TEXT_INSPECT:
+            act = s.get("action", "")
+            if act == "word_count":
+                msg = self.editor.word_count()
+            elif act == "read_around_cursor":
+                msg = self.editor.read_around_cursor()
+            else:
+                msg = "Unknown inspection command."
+            self.say(msg, _REQ)
+            return []
+        if k == Kind.COMPOSE:
+            prompt = s.get("prompt", "")
+            self.say("Drafting content.", _REQ)
+            return self.ask(f"Please compose the following content: {prompt}")
         return []
 
     @staticmethod
@@ -1035,6 +1122,39 @@ class Session:
                 self.reader.repeat()
             else:
                 self.say(self.runner.last_said or "I haven't said anything yet.", _REQ)
+        elif command == Command.GO_BACK:
+            self.executor.hotkey("alt", "left")
+            self.say("Going back.", _CONF)
+        elif command == Command.START_AGAIN:
+            self.cancel.set()
+            self._pending = None
+            self._offer = None
+            self._capture = None
+            self.reader.stop()
+            self.say("Starting again. What would you like to do?", _REQ)
+            self.capture_next(lambda u: self.handle(u))
+        elif command == Command.SIMPLER:
+            if self.runner.last_said:
+                self.say("Explaining in simpler terms.", _REQ)
+                return self.ask(f"Please explain this in simpler, plainer terms for a non-technical user: {self.runner.last_said}")
+            self.say("There is nothing to simplify yet.", _REQ)
+        elif command == Command.EXPLAIN:
+            if self.runner.last_said:
+                self.say("Explaining in more detail.", _REQ)
+                return self.ask(f"Please explain this in more detail: {self.runner.last_said}")
+            self.say("There is nothing to explain yet.", _REQ)
+        elif command == Command.WHY:
+            # Check if there is an explicit provenance recorded for the last action or preference
+            why_text = None
+            if hasattr(self, "_last_pref") and self._last_pref:
+                scope, key = self._last_pref
+                why_text = self.store.why(key, scope)
+            if why_text:
+                self.say(f"I did that because: {why_text}.", _REQ)
+            elif self.runner.last_said:
+                return self.ask(f"Why did you say or do this: {self.runner.last_said}?")
+            else:
+                self.say("No recent action to explain.", _REQ)
         return []
 
     def close(self) -> None:

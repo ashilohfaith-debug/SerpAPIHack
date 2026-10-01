@@ -21,6 +21,7 @@ _CONFIGURED = False
 _SECRET_PATTERNS = [
     re.compile(r"(?i)\b(password|passwd|pwd|otp|pin|cvv|token|secret|api[_-]?key)\b\s*[:=]\s*\S+"),
     re.compile(r"\b\d{4,8}\b(?=\s*(otp|code|pin))", re.IGNORECASE),
+    re.compile(r"<untrusted_screen_content>[\s\S]*?</untrusted_screen_content>", re.IGNORECASE),
 ]
 
 

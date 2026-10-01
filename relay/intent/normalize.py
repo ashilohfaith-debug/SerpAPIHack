@@ -46,6 +46,22 @@ def normalize(text: str, strip_trailing: bool = True) -> str:
     # thousands separator between digits ("1,200")
     t = re.sub(r"\s*(?:(?<!\d),|,(?!\d)|;)\s*", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
+    # Self-correction handling: "open edge no wait open chrome" -> "open chrome"
+    splits = re.split(
+        r"\b(?:no wait|scratch that|actually no|wait no|nevermind that|correction)\b",
+        t,
+        flags=re.IGNORECASE,
+    )
+    if len(splits) > 1 and splits[-1].strip():
+        t = splits[-1].strip()
+
+    # Common STT recognition slips and acoustic confusions
+    t = re.sub(r"\bno\s+pad\b", "notepad", t)
+    t = re.sub(r"\byou\s+tube\b", "youtube", t)
+    t = re.sub(r"\bfire\s+fox\b", "firefox", t)
+    t = re.sub(r"\bwhats\s+app\b", "whatsapp", t)
+    t = re.sub(r"\b(?:my computer|this pc|file manager)\b", "file explorer", t)
+
     prev = None
     while prev != t:  # strip stacked fillers: "um so can you please ..."
         prev = t

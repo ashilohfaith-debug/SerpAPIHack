@@ -133,6 +133,16 @@ class Dispatcher:
             except Exception as e:
                 log.warning("control command failed: %s", e)
             return
+        if self._busy.is_set():
+            try:
+                from relay.narration import policy as pol
+
+                self.session.say(
+                    "I'm finishing the previous task; your request is next.",
+                    priority=pol.Priority.BACKGROUND,
+                )
+            except Exception:
+                pass
         self._q.put(text)
 
     def _worker(self) -> None:
@@ -410,6 +420,13 @@ class VoiceLoop:
                 self._say("Yes? What would you like to do?")
                 self.rearm()
                 return
+            if self.speech is not None:
+                try:
+                    from relay.audio.earcons import earcon
+
+                    self.speech.play(*earcon("heard"))
+                except Exception:
+                    pass
             self.dispatch(rest if woke else text)
             return
         if self._open_mic():

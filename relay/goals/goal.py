@@ -166,7 +166,7 @@ class GoalStore:
         cur = self.conn.execute(
             """
             SELECT goal_id FROM goals
-            WHERE status = 'active'
+            WHERE status IN ('active', 'paused')
             ORDER BY updated_at DESC LIMIT 1
             """
         )
@@ -219,15 +219,18 @@ class GoalManager:
             self.bus.emit("goal.paused", goal_id=self.active_goal.goal_id)
         return self.active_goal
 
-    def resume_goal(self) -> Optional[Goal]:
-        if not self.active_goal:
-            self.active_goal = self.store.load_active_goal()
-        if self.active_goal:
-            self.active_goal.status = "active"
-            self.store.save_goal(self.active_goal)
-            if self.bus is not None:
-                self.bus.emit("goal.resumed", goal_id=self.active_goal.goal_id)
-        return self.active_goal
+    def resume_goal(self, goal_id: Optional[str] = None) -> Optional[Goal]:
+        goal = self.store.load_goal(goal_id) if goal_id else self.active_goal
+        if not goal:
+            goal = self.store.load_active_goal()
+        if not goal:
+            return None
+        goal.status = "active"
+        self.active_goal = goal
+        self.store.save_goal(goal)
+        if self.bus is not None:
+            self.bus.emit("goal.resumed", goal_id=goal.goal_id)
+        return goal
 
     def advance_step(self, evidence: str = "") -> Optional[Goal]:
         if not self.active_goal:

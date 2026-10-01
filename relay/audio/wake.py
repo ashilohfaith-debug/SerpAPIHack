@@ -80,6 +80,11 @@ class Command:
     CONTINUE = "continue"
     CANCEL_TASK = "cancel_task"
     REPEAT = "repeat"
+    GO_BACK = "go_back"
+    START_AGAIN = "start_again"
+    SIMPLER = "simpler"
+    EXPLAIN = "explain"
+    WHY = "why"
 
 
 _COMMAND_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
@@ -88,7 +93,12 @@ _COMMAND_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     (Command.STOP_TALKING, ("stop talking", "be quiet", "quiet", "stop", "shush")),
     (Command.PAUSE, ("pause", "wait", "hold on", "one moment")),
     (Command.CONTINUE, ("continue", "carry on", "go on", "resume", "keep going")),
+    (Command.GO_BACK, ("go back", "navigate back", "back")),
+    (Command.START_AGAIN, ("start again", "start over", "reset")),
     (Command.REPEAT, ("repeat that", "repeat", "say that again", "again")),
+    (Command.SIMPLER, ("make it simpler", "simpler", "in plain english", "explain simply")),
+    (Command.EXPLAIN, ("explain that", "explain this", "what does that mean")),
+    (Command.WHY, ("why did you do that", "why", "why is that")),
 ]
 
 
