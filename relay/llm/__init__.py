@@ -25,16 +25,22 @@ __all__ = [
 
 def routes_from_config(cfg) -> list[Route]:
     """Routes from config.toml / environment / DPAPI secrets. RELAY_LLM_URL and RELAY_LLM_KEY
-    (or FREELLMAPI_KEY/URL) override the file. Multiple providers and backup endpoints
-    are supported with automatic racing and failover. Empty URL = assistant off."""
+    (or FREELLMAPI_KEY/URL, GROQ_API_KEY, OPENAI_API_KEY) override the file. Multiple providers
+    and backup endpoints are supported with automatic racing and failover. Empty URL = assistant off."""
     from relay.envfile import offline_forced
     from relay.memory.secrets import get_secret
 
     key = (
         os.environ.get("RELAY_LLM_KEY", "").strip()
         or get_secret("RELAY_LLM_KEY", "").strip()
+        or os.environ.get("GEMINI_API_KEY", "").strip()
+        or get_secret("GEMINI_API_KEY", "").strip()
         or os.environ.get("FREELLMAPI_KEY", "").strip()
         or get_secret("FREELLMAPI_KEY", "").strip()
+        or os.environ.get("GROQ_API_KEY", "").strip()
+        or get_secret("GROQ_API_KEY", "").strip()
+        or os.environ.get("OPENAI_API_KEY", "").strip()
+        or get_secret("OPENAI_API_KEY", "").strip()
         or (cfg.llm_key or "").strip()
     )
     url = (
@@ -44,12 +50,32 @@ def routes_from_config(cfg) -> list[Route]:
         or get_secret("FREELLMAPI_URL", "").strip()
         or (cfg.llm_url or "").strip()
     )
-    if not url and key:
-        url = "http://127.0.0.1:31415/v1"
+    if key.startswith("#") or "REDACTED" in key:
+        key = ""
+    if url.startswith("#") or "REDACTED" in url:
+        url = ""
+    if (not url or url.startswith("http://127.0.0.1:31415")) and key:
+        if key.startswith(("AIzaSy", "AQ.")):
+            url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+        elif key.startswith("gsk_"):
+            url = "https://api.groq.com/openai/v1"
+        elif key.startswith("sk-"):
+            url = "https://api.openai.com/v1"
+        else:
+            url = "http://127.0.0.1:31415/v1"
     if not url or offline_forced():
         return []
     url = _local_router(url)
-    models = [m for m in (cfg.llm_models or []) if m] or ["auto:fast"]
+    models = [m for m in (cfg.llm_models or []) if m]
+    if not models or models == ["auto:fast", "auto"]:
+        if "googleapis.com" in url.lower():
+            models = ["gemini-2.0-flash", "gemini-1.5-flash"]
+        elif "groq.com" in url.lower():
+            models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        elif "openai.com" in url.lower():
+            models = ["gpt-4o-mini", "gpt-3.5-turbo"]
+        else:
+            models = ["auto:fast", "auto"]
     hints: dict[str, float] = {}
     if models == ["auto:fast", "auto"]:  # default: use the tuned ranking
         from relay.llm.tune import best_models
@@ -97,6 +123,19 @@ def routes_from_config(cfg) -> list[Route]:
                     ttft_hint=hints.get(m, 0.0) + 2.0,  # try primary first
                 )
             )
+    gemini_k = os.environ.get("GEMINI_API_KEY", "").strip() or get_secret("GEMINI_API_KEY", "").strip()
+    if gemini_k and "googleapis.com" not in url.lower():
+        routes.append(
+            Route(
+                name="gemini-backup",
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                api_key=gemini_k,
+                model="gemini-flash-latest",
+                timeout=float(cfg.llm_timeout),
+                extra_headers=headers,
+                ttft_hint=1.5,
+            )
+        )
     return routes
 
 

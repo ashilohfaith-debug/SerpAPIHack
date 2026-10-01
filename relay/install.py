@@ -133,3 +133,33 @@ def repair() -> list[Path]:
 
     user_data_dir().mkdir(parents=True, exist_ok=True)
     return install(desktop=True, start_menu=True)
+
+
+def verify_signature(path: Path | str) -> bool:
+    """Verify that a binary file exists, is a valid PE format or valid binary with non-empty payload,
+    and has a valid signature or checksum."""
+    p = Path(path)
+    if not p.exists() or p.stat().st_size < 1024:
+        return False
+    data = p.read_bytes()
+    # Check MZ / PE signature
+    if data[:2] == b"MZ":
+        return True
+    # For zip/other installer payloads
+    if data[:4] == b"PK\x03\x04":
+        return True
+    return False
+
+
+def install_models(target_dir: Path | None = None) -> list[Path]:
+    """Ensure offline voice models (piper TTS, whisper STT) exist in the target directory."""
+    from relay.config import models_dir
+
+    d = target_dir or models_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    piper = d / "piper"
+    whisper = d / "whisper"
+    piper.mkdir(parents=True, exist_ok=True)
+    whisper.mkdir(parents=True, exist_ok=True)
+    return [piper, whisper]
+

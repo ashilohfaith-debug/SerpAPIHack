@@ -301,7 +301,17 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="safe offline demo of everyday skills (time, battery, maths, notes...)",
     )
+    p.add_argument(
+        "--update",
+        action="store_true",
+        help="check for updates from GitHub and update relay.exe in place",
+    )
     args = p.parse_args(argv)
+    if args.update:
+        from relay.update import handle_update_command
+
+        handle_update_command(speak_cb=print)
+        return 0
     if args.selftest:
         return _selftest()
     if args.voice_selftest:

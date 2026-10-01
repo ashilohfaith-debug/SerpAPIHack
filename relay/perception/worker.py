@@ -201,6 +201,11 @@ class UIAWorker:
         """Current L1 snapshot (may be stale between observes)."""
         return self._current
 
+    @live.setter
+    def live(self, val: ScreenSnapshot | None) -> None:
+        self._current = val
+
+
     def is_stale(self, snap: ScreenSnapshot | None) -> bool:
         """True if the given snapshot is not the current observation — callers
         must re-observe before acting on its elements."""

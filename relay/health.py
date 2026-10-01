@@ -8,6 +8,7 @@ the result is also spoken so a blind user hears it.
 
 from __future__ import annotations
 
+import os
 import socket
 import threading
 import time
@@ -124,7 +125,29 @@ def _hotkeys():
     hk.stop()
     taken = [spoken_combo(c) for c in combos if not got.get(c)]
     if taken:
-        return False, ("in use by another program (is Relay already running?): " + ", ".join(taken))
+        from relay.core.single_instance import SingleInstance
+
+        si = SingleInstance()
+        is_free = si.acquire()
+        if not is_free:
+            return True, ("registered by active Relay instance: " + ", ".join(taken))
+        si.release()
+        try:
+            import psutil
+
+            my_pid = os.getpid()
+            relay_procs = [
+                p
+                for p in psutil.process_iter(["name", "pid"])
+                if p.info["name"]
+                and p.info["name"].lower() in ("relay.exe", "relay-cli.exe")
+                and p.info["pid"] != my_pid
+            ]
+            if relay_procs:
+                return True, ("registered by active Relay instance: " + ", ".join(taken))
+        except Exception:
+            pass
+        return False, ("in use by another program: " + ", ".join(taken))
     return True, ", ".join(spoken_combo(c) for c in combos) + " available"
 
 
@@ -318,7 +341,9 @@ def run_checks(speak: bool = True) -> list[Check]:
 
 def main(speak: bool = True) -> int:
     from relay import __version__
+    from relay.envfile import load_env
 
+    load_env()
     print(f"RELAY {__version__} — checking this computer\n")
     results = run_checks(speak=speak)
     for r in results:

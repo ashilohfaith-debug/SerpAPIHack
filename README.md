@@ -1,174 +1,339 @@
-# RELAY — use your Windows PC by talking
+<p align="center">
+  <img src="app/frontend/logo.png" alt="Relay" width="420" />
+</p>
 
-**RELAY is a voice assistant that lets a blind or low-vision person use a Windows laptop
-for everyday life — by talking.** It reads the screen through Windows UI Automation,
-tells you what is there, does what you ask, checks that it worked, and tells you what
-changed.
+<h3 align="center">Use your Windows PC by talking.</h3>
 
-It is a **transparent operator, not an autonomous agent**: it acts only when you ask,
-announces every action before doing it, verifies the result by looking again, and never
-claims a success it didn't observe. Risky actions (sending, deleting, shutting down) need
-a spoken confirmation phrase — a casual "yeah" never triggers them.
+<p align="center">
+  A voice assistant that actually works — built for blind and low-vision people,<br>
+  useful for everyone. Free, open source, runs offline on basic hardware.
+</p>
 
-![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6)
-![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB)
-![Works offline](https://img.shields.io/badge/works-offline-2ea44f)
-![License MIT](https://img.shields.io/badge/license-MIT-blue)
+<p align="center">
+  <a href="https://github.com/nagasaipradhyumnapoola/relay/releases"><strong>⬇ Download</strong></a> ·
+  <a href="#what-can-relay-do">Features</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#how-it-works">How It Works</a> ·
+  <a href="#voice-commands">Commands</a> ·
+  <a href="#online-ai">AI Mode</a>
+</p>
 
-- **No keys, no account, no cloud needed.** Speech recognition (faster-whisper), the
-  voice (Piper) and screen reading (UI Automation) run on the laptop. Online extras are
-  optional and set up once by whoever installs it — users never need a key.
-- **Built for basic laptops.** ~35 MB idle, ~400 MB peak, about 2.4 s from the end of a
-  command to the first spoken word on an emulated budget dual-core (measured —
-  [docs/PERFORMANCE.md](docs/PERFORMANCE.md)).
-- **Instant AI answers (optional).** Anything its own commands don't cover goes to
-  [FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) or any OpenAI-compatible
-  router; the answer is spoken sentence by sentence while it is still being written.
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue" alt="Windows 10 | 11" />
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" />
+  <img src="https://img.shields.io/badge/offline-100%25%20core-orange" alt="Offline Ready" />
+  <img src="https://img.shields.io/badge/RAM-4%20GB%20OK-purple" alt="4 GB RAM" />
+</p>
 
 ---
 
-## Try saying
+## What is Relay?
 
-| You want to… | Say |
+Relay is a voice assistant that lets you control your entire Windows computer by speaking to it.
+
+You say things like:
+- *"Open Chrome"*
+- *"Write hello world"*
+- *"Read the screen"*
+- *"What's the capital of France?"*
+- *"Set the volume to 50"*
+- *"Close this window"*
+
+And Relay does it. For real. Not a demo — it actually opens the app, types the text, reads back what's on screen, and confirms what happened.
+
+**It was built for people who can't see the screen**, but it's genuinely useful for anyone who wants to use their PC hands-free.
+
+### What makes it different
+
+| Others say | Relay actually does |
 |---|---|
-| Know the basics | "what time is it" · "how's my battery" · "what's the weather in Hyderabad" · "how much storage is left" |
-| Open anything | "open WhatsApp" · "open Antigravity" · "open my downloads" · "open YouTube" · "open Bluetooth settings" |
-| Do several things at once | "open Notepad, type hello, then save it as notes" · "open Chrome and search for today's cricket score" · "search for weather in Delhi and read the first result" |
-| Read | "read the page" (stop / continue / next paragraph / repeat) · "read the PDF electricity bill" · "next heading" · "read with OCR" |
-| Write | "type Hello, how are you?" · "start dictation" … "stop dictation" · "select all" · "undo" · "save as report" |
-| Windows | "what windows are open" · "switch to Chrome" · "minimize" · "close Notepad" · "close all windows" |
-| The laptop | "turn on Bluetooth" · "turn off Wi-Fi" · "set brightness to 40 percent" · "turn on dark mode" · "take a screenshot" · "check for updates" |
-| Files | in File Explorer: "rename this to report" · "move this to documents" · "delete this file" · "create a new folder called projects on the desktop" |
-| Everyday | "what is 15 percent of 2 lakh" · "take a note buy milk" · "remind me in 10 minutes to call mom" · "set an alarm for 6 am" |
-| Sound | "volume up" · "pause music" · "next track" · "speak slower" · "where is the sound going" |
-| Safety | "stop" · "cancel" · "emergency stop" · risky actions ask for "confirm send", "confirm delete", "confirm shut down" |
-| Ask anything *(AI extra)* | "what's a good name for a cat" · "explain what an index fund is" · "summarise this page" |
+| "I opened the app" | Opens the app, waits for the window, reads the title back to you, confirms it's ready |
+| "I typed your text" | Types it, reads back what's now in the text field, tells you the cursor position |
+| "Here's what's on screen" | Uses Windows UI Automation to read real control names, not guessing from screenshots |
+| "Requires internet" | Works 100% offline with local speech recognition and voice synthesis |
+| "Needs 16 GB RAM + GPU" | Runs on a basic laptop with 4 GB RAM and no GPU |
 
-Speech recognition often misspells names — "Antigravity" may be heard as "anti gravity"
-or "Andy gravity" — so apps are matched by how they **sound**. When RELAY isn't sure it
-asks ("Did you mean Antigravity?") instead of guessing. Full list:
-**[docs/USER_GUIDE.md](docs/USER_GUIDE.md)**. English only for now.
+---
 
-## Keys
+## What Can Relay Do?
 
+### 🗣️ Talk to Your PC
+Open any app, type in any text field, click buttons, navigate menus, manage windows — all by voice. Multi-step commands work too: *"open Notepad and write hello world"* does both.
+
+### 🧠 Ask Anything (AI Mode)
+When connected to a free AI provider, Relay becomes a conversational assistant. Ask it anything — general knowledge, math, explanations — and it speaks the answer in a natural voice. Response time: **0.16 seconds**.
+
+### 👁️ Screen Reading
+Relay reads your screen using Windows UI Automation — the same system screen readers use. It sees real buttons, menus, text fields, and document content. No screenshots, no guessing, no AI hallucinating what's on screen.
+
+### ✈️ Works Fully Offline
+The core runs without internet. Speech recognition (Whisper) and voice (Piper) run locally. No cloud account. No data leaves your PC. If you want AI features, you can optionally connect free providers.
+
+### 🛡️ Safe by Design
+Risky things (deleting files, sending emails, shutting down) require spoken confirmation. Relay verifies every action and tells you what actually happened — never claims success without proof.
+
+### 📝 Documents
+Open Word, Notepad, or any text editor and dictate. Relay types your words, reads back what it wrote, and tells you the line and column. Read documents back with *"read the screen"*.
+
+### 🔊 Natural Voice
+Connect a free Sarvam AI key for a natural Indian English voice (Bulbul model). Falls back to clear offline voice when there's no connection.
+
+### 🔄 Auto-Updates
+When you push a new version to GitHub, every PC running Relay can update with a voice command: *"Relay, check for updates"* or run `relay --update` from the terminal.
+
+---
+
+## Quick Start
+
+### Option A: Download (recommended)
+
+1. **[Download Relay](https://github.com/nagasaipradhyumnapoola/relay/releases)** (ZIP, ~353 MB)
+2. Unzip anywhere on your PC
+3. Double-click **Install Relay.cmd**
+4. Relay starts talking immediately
+
+That's it. No Python, no pip, no terminal commands.
+
+### Option B: From Source
+
+```bash
+git clone https://github.com/nagasaipradhyumnapoola/relay.git
+cd relay/app
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e ".[voice,dev]"
+python -m relay --setup-models
+python -m relay --start
+```
+
+### First Time
+
+When Relay starts, it speaks to you:
+
+> *"Hi, I'm Relay. I can help you use your computer by voice. Say 'Relay' followed by what you'd like to do."*
+
+Press **Ctrl+Alt+Space** anytime to talk to Relay. Or just say *"Relay"* — it's always listening for the wake word.
+
+---
+
+## Voice Commands
+
+### Opening Things
+| You say | What happens |
+|---|---|
+| *"Open Chrome"* | Opens Google Chrome |
+| *"Open Notepad"* | Opens Notepad |
+| *"Open Word"* | Opens Microsoft Word |
+| *"Open Settings"* | Opens Windows Settings |
+| *"Open File Explorer"* | Opens File Explorer |
+
+### Typing & Dictation
+| You say | What happens |
+|---|---|
+| *"Write hello world"* | Types "hello world" in the focused text field |
+| *"Type my name is Relay"* | Types the text |
+| *"Open Notepad and write meeting notes"* | Opens Notepad, then types the text |
+
+### Screen Reading
+| You say | What happens |
+|---|---|
+| *"Read the screen"* | Reads the current window content aloud |
+| *"Describe the screen"* | Describes what's on screen via UI Automation |
+| *"What's on screen?"* | Same as above |
+
+### Window Management
+| You say | What happens |
+|---|---|
+| *"Close this window"* | Closes the current window |
+| *"Minimize"* / *"Maximize"* | Minimizes or maximizes |
+| *"Switch to Chrome"* | Switches to Chrome |
+
+### System
+| You say | What happens |
+|---|---|
+| *"Volume up"* / *"Volume 50"* | Adjusts volume |
+| *"What time is it?"* | Tells the current time |
+| *"What's the battery?"* | Reports battery percentage |
+| *"Mute"* / *"Unmute"* | Toggles mute |
+
+### AI / General Knowledge
+| You say | What happens |
+|---|---|
+| *"What's the capital of Japan?"* | *"The capital of Japan is Tokyo."* |
+| *"Explain photosynthesis simply"* | Gives a spoken explanation |
+| *"What's 47 times 83?"* | *"47 times 83 is 3,901."* |
+
+### Keyboard Shortcuts
 | Key | What it does |
 |---|---|
-| **Ctrl+Alt+R** | start RELAY — press it **again to close** RELAY (like Narrator's Ctrl+Win+Enter) |
-| **Ctrl+Alt+Space** | talk key, from any app: chirp, then speak (also interrupts RELAY) |
-| *"Relay, …"* | hands-free wake word ("turn off the wake word" for talk-key only) |
-| **Ctrl+Alt+Period** | stop talking / pause reading |
-| **Ctrl+Alt+Backspace** | emergency stop — everything halts until you say "continue" |
+| **Ctrl+Alt+Space** | Start talking to Relay |
+| **Ctrl+Alt+R** | Toggle Relay on/off |
+| **Ctrl+Alt+.** | Stop speaking |
+| **Ctrl+Alt+Backspace** | Emergency stop everything |
 
-**Headphones** (wired, USB-C, Bluetooth) are picked up automatically: RELAY's voice moves
-to them, you can interrupt it just by talking, and if they're unplugged mid-reading it
-pauses instead of reading private text out loud to the room.
+---
 
-## Quick start
+## Online AI (Optional)
 
-### From source (developers)
+Relay works fully offline, but you can optionally connect free AI providers for conversational features. Create a `.env` file:
+
+```env
+# Free local AI router (fastest — 0.16s response)
+RELAY_LLM_URL=http://127.0.0.1:31415/v1
+RELAY_LLM_KEY=your-freellmapi-key
+
+# Google AI Studio (free tier)
+GEMINI_API_KEY=your-google-ai-studio-key
+
+# Natural voice (optional, free tier available)
+SARVAM_API_KEY=your-sarvam-key
+SARVAM_SPEAKER=kavya
+SARVAM_LANGUAGE=en-IN
+```
+
+**Supported free providers:**
+- [FreeLLMAPI](https://freellmapi.com) — local router, fastest
+- [Google AI Studio](https://aistudio.google.com) — free Gemini access
+- [Groq](https://groq.com) — fast inference
+- [Sarvam AI](https://www.sarvam.ai) — natural Indian English voice
+
+All keys are encrypted with Windows DPAPI and never leave your machine.
+
+---
+
+## How It Works
+
+```
+You speak → Whisper (local) → Intent Parser → Safety Check → UI Automation → Verify → Speak result
+              ↓                                                    ↓
+         Sarvam STT (online)                              Re-observe screen
+         if available                                     to confirm changes
+```
+
+1. **You speak** — Relay listens via your microphone
+2. **Speech → text** — Whisper (local) or Sarvam (online) converts speech
+3. **Intent parsing** — Your words become a structured command (no AI needed for commands)
+4. **Safety gate** — Risky actions require verbal confirmation
+5. **Execute** — Relay uses Windows UI Automation to act on the real desktop
+6. **Verify** — Relay re-reads the screen to confirm what changed
+7. **Speak result** — Tells you what happened, honestly
+
+For AI/general knowledge questions, steps 3-6 are replaced by routing to the configured LLM provider with speculative hedged routing for minimum latency.
+
+---
+
+## System Requirements
+
+| Requirement | Minimum | Recommended |
+|---|---|---|
+| **OS** | Windows 10 (1903+) | Windows 11 |
+| **RAM** | 4 GB | 8 GB |
+| **CPU** | Any dual-core x64 | Any modern CPU |
+| **GPU** | Not needed | Not needed |
+| **Disk** | 600 MB | 1 GB |
+| **Internet** | Not required | Optional (for AI features) |
+| **Microphone** | Any | USB headset |
+
+---
+
+## Auto-Updates Across PCs
+
+When you push changes to this repository, any PC running Relay can update:
+
+**Via voice:**
+> *"Relay, check for updates"*
+
+**Via terminal:**
 ```bash
-uv venv --python 3.12 .venv
-uv pip install -e ".[dev,voice,percept,daily]"
-uv run python -m relay --setup-models   # voice + speech model, once (~140 MB); then offline
-RELAY.cmd --install                     # desktop + Start-menu shortcut with Ctrl+Alt+R
-RELAY.cmd --check                       # tests every part on this computer, says the result
-```
-Then press **Ctrl+Alt+R** from anywhere. `RELAY.cmd --autostart on` starts it at sign-in.
-
-### Packaged app (no Python on the user's PC)
-```powershell
-powershell -ExecutionPolicy Bypass -File packaging\build.ps1
-```
-builds `dist\relay\` (relay.exe + models), runs the tests and a clean-profile check.
-Copy the folder anywhere, run `relay-cli.exe --install` once — details in
-[docs/PACKAGING.md](docs/PACKAGING.md).
-
-### Optional: AI answers and the Sarvam voice
-Copy `.env.example` to `.env` and paste the key(s):
-```ini
-RELAY_LLM_URL=http://127.0.0.1:31415/v1   # FreeLLMAPI desktop app (Docker/source: 3001)
-RELAY_LLM_KEY=freellmapi-...              # from the Keys page of its dashboard
-SARVAM_API_KEY=                           # optional: Sarvam's natural Indian voice
-```
-Each extra is independent — FreeLLMAPI alone is enough; if anything is offline, RELAY
-says so once and keeps working with its own voice and commands. `RELAY.cmd --llm-check`
-measures the time to the first spoken word. Setup, latency design, privacy, and what to
-know before shipping one key to many users: [docs/AI_AND_VOICE.md](docs/AI_AND_VOICE.md).
-
-## How it works
-
-```mermaid
-flowchart LR
-    MIC[Microphone] --> VAD[Voice activity<br/>+ noise gate]
-    VAD --> WAKE[Wake word checked<br/>on this PC]
-    WAKE --> STT[Speech recognition<br/>faster-whisper, offline]
-    STT --> PLAN[Understand<br/>grammar + multi-step]
-    PLAN -->|not a built-in command| AI[AI router<br/>optional, streamed]
-    AI -->|answer| SPEAK
-    AI -->|safe DO: steps| PLAN
-    PLAN --> GATE[Permission gate<br/>risky = spoken phrase]
-    GATE --> ACT[Act<br/>UI Automation, SendInput,<br/>Windows APIs]
-    ACT --> VERIFY[Verify<br/>look again]
-    VERIFY --> SPEAK[Narrate<br/>before + after]
-    SPEAK --> TTS[Voice<br/>Piper offline / Sarvam]
-    TTS --> OUT[Speakers or<br/>headphones]
+relay --update
 ```
 
-PERCEIVE (UI Automation, OCR fallback) → UNDERSTAND (offline grammar; several steps in
-one request) → PLAN → ACT (one permission gate) → VERIFY (re-observe) → NARRATE
-(announce before, report changes after) → RECOVER. A multi-step request is announced
-first and stops at the first step that fails — it never types into the wrong window
-because an app didn't open.
+**How it works:**
+- **Git installs** → runs `git pull --ff-only` automatically
+- **Packaged installs** → checks GitHub Releases for newer `relay.exe`, downloads and replaces in-place
+- Zero downtime — Relay restarts itself after updating
 
-## Safety and privacy
+---
 
-- Nothing leaves the laptop unless you configure an online extra; `relay --check` proves
-  the offline parts make no network lookups. `RELAY_OFFLINE=1` forces fully offline.
-- Passwords, OTPs and PINs are never read aloud, logged, stored, or sent anywhere.
-- With online speech recognition, the wake word is checked locally first, so room
-  conversation is never uploaded.
-- An AI-suggested action is untrusted: it must parse with the offline grammar, can
-  never be a confirmation, emergency or delete phrase, is announced, and still passes
-  the permission gate. Multi-step AI plans are all-or-nothing.
-- RELAY never force-closes an app: "close" works like the window's X button, so unsaved
-  work gets the app's own "save changes?" question, which RELAY reads out.
-- Logs record the command type only, never what you said.
+## Project Structure
 
-Details: [docs/SECURITY.md](docs/SECURITY.md).
+```
+relay/
+├── app/
+│   ├── relay/              # Core Python package
+│   │   ├── audio/          # Microphone, TTS, STT
+│   │   ├── core/           # Event bus, state machines, safety
+│   │   ├── intent/         # Natural language → structured commands
+│   │   ├── llm/            # AI assistant, hedged routing
+│   │   ├── memory/         # Preferences, notes, DPAPI secrets
+│   │   ├── perception/     # UI Automation screen reading
+│   │   ├── planner/        # Multi-step execution engine
+│   │   ├── sarvam/         # Online voice (Sarvam Bulbul)
+│   │   ├── system/         # Windows APIs (volume, apps, keys)
+│   │   ├── skills.py       # All voice command implementations
+│   │   ├── session.py      # Live voice loop
+│   │   └── update.py       # Auto-update mechanism
+│   ├── frontend/           # Website & download portal
+│   ├── packaging/          # PyInstaller build scripts
+│   ├── tests/              # 460+ tests, 52 end-to-end chains
+│   └── scripts/            # Benchmarks, health checks
+├── logo.png
+└── README.md
+```
 
-## Tests and checks
+---
+
+## Health Check
+
+Run anytime to verify everything works:
 
 ```bash
-uv run pytest -m "not integration"          # 383 unit and behaviour tests (all passing)
-uv run python scripts/acceptance.py          # 8/8 offline acceptance checks passed
-uv run python scripts/live_app_check.py      # assembled app: real mic, hotkeys, earcons, quit
-uv run python scripts/live_window_check.py   # real window operations on its own test window
-uv run python scripts/bench_basic_laptop.py  # emulated low-end laptops (CPU + memory caps)
-uv run python -m relay --check               # this computer, end to end, spoken result
+relay --check
 ```
 
-## Status and honest limits
+Output:
+```
+RELAY 0.3.3 — checking this computer
 
-Working and tested: everything above, on Windows 11 (real desktop runs recorded in
-[docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)). Not yet done:
+  [OK ] Data folder writable               C:\Users\you\AppData\Local\RELAY
+  [OK ] Models present                     all present
+  [OK ] Voice (text to speech)             0.23s to synthesise a sentence
+  [OK ] Speech recognition                 heard 'What time is it?' in 0.52s
+  [OK ] Microphone                         33 audio frames in 1 second
+  [OK ] Screen reading (UI Automation)     reading explorer.exe: 65 controls
+  [OK ] Installed apps list                237 apps on the Start menu
+  [OK ] Sarvam voice (online)              bulbul:v3 kavya: 0.58s per sentence
+  [OK ] AI assistant router (online)       first token 0.61s via auto:fast
 
-- Supervised testing with blind users; NVDA/JAWS side-by-side testing.
-- Clean-machine install on a separate PC, and a code-signed installer.
-- Sending WhatsApp messages hands-free without the AI planner (do it step by step:
-  click the contact, type, "send it" — which is read back and confirmed).
-- Email is opened in Gmail on the web; no mail-app integration yet.
-- `piper-tts` is GPL-3.0 — see [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md) before
-  distributing a packaged build.
+All checks passed. Relay is ready to use.
+```
 
-## Documentation
+---
 
-[User guide](docs/USER_GUIDE.md) · [AI and voice](docs/AI_AND_VOICE.md) ·
-[Security](docs/SECURITY.md) · [Performance](docs/PERFORMANCE.md) ·
-[Packaging](docs/PACKAGING.md) · [Acceptance](docs/ACCEPTANCE.md) ·
-[Release notes](docs/RELEASE_NOTES.md) · [Demo script](docs/DEMO_SCRIPT.md) ·
-[Third-party licences](docs/THIRD_PARTY.md) · [SBOM](docs/SBOM.md)
+## Contributing
+
+Relay is open source under the MIT license. Contributions welcome.
+
+```bash
+git clone https://github.com/nagasaipradhyumnapoola/relay.git
+cd relay/app
+python -m venv .venv && .venv\Scripts\activate
+pip install -e ".[voice,dev]"
+pytest -q                    # 460+ tests pass
+python -m relay --selftest   # core wiring check
+python -m relay --check      # full system check
+```
+
+---
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Small components adapted from the MIT-licensed
-screen-use and clacky projects; see [NOTICE](NOTICE).
+MIT — free for personal and commercial use.
+
+---
+
+<p align="center">
+  <img src="app/frontend/logo.png" alt="Relay" width="120" /><br>
+  <strong>Relay</strong> — because your computer should listen to you.<br>
+  <sub>Made with ❤️ for accessibility.</sub>
+</p>

@@ -466,22 +466,35 @@ class Skills:
         from relay.memory.secrets import get_secret, save_secret
 
         if action == "status":
-            key = get_secret("RELAY_LLM_KEY") or get_secret("FREELLMAPI_KEY")
+            key = (
+                get_secret("RELAY_LLM_KEY")
+                or get_secret("FREELLMAPI_KEY")
+                or get_secret("GROQ_API_KEY")
+                or get_secret("OPENAI_API_KEY")
+            )
             url = get_secret("RELAY_LLM_URL") or get_secret("FREELLMAPI_URL")
             if key and url:
-                self.say("Your AI API key is configured and connected.")
+                prov = "Groq" if (key.startswith("gsk_") or "groq" in url.lower()) else ("OpenAI" if key.startswith("sk-") else "Free LLM")
+                self.say(f"Your {prov} API key is configured and connected.")
             elif key:
-                self.say("Your API key is saved, using the local router endpoint.")
+                prov = "Groq" if key.startswith("gsk_") else ("OpenAI" if key.startswith("sk-") else "Free LLM")
+                self.say(f"Your {prov} API key is saved.")
             else:
-                self.say("No API key is currently saved. Copy your Free LLM API key, then say save API key.")
+                self.say("No API key is currently saved. Copy your Free LLM or Groq API key, then say save API key.")
             return
 
         import pyperclip
 
-        try:
-            raw = pyperclip.paste().strip()
-        except Exception:
-            raw = ""
+        raw = (i.slots.get("key") or "").strip()
+        if not raw:
+            try:
+                raw = pyperclip.paste().strip()
+            except Exception:
+                raw = ""
+        else:
+            m_orig = re.search(re.escape(raw), getattr(i, "raw", "") or "", re.IGNORECASE)
+            if m_orig:
+                raw = m_orig.group(0)
 
         if len(raw) < 10 or " " in raw:
             self.say(
@@ -491,16 +504,32 @@ class Skills:
 
         save_secret("RELAY_LLM_KEY", raw)
         save_secret("FREELLMAPI_KEY", raw)
-        if not get_secret("RELAY_LLM_URL"):
-            save_secret("RELAY_LLM_URL", "http://127.0.0.1:31415/v1")
-        if not get_secret("FREELLMAPI_URL"):
-            save_secret("FREELLMAPI_URL", "http://127.0.0.1:31415/v1")
+
+        low_key = raw.lower()
+        prov = "AI"
+        if low_key.startswith("aizasy"):
+            prov = "Google Gemini"
+            save_secret("GEMINI_API_KEY", raw)
+            save_secret("RELAY_LLM_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
+        elif low_key.startswith("gsk_"):
+            prov = "Groq"
+            save_secret("GROQ_API_KEY", raw)
+            save_secret("RELAY_LLM_URL", "https://api.groq.com/openai/v1")
+        elif low_key.startswith("sk-"):
+            prov = "OpenAI"
+            save_secret("OPENAI_API_KEY", raw)
+            save_secret("RELAY_LLM_URL", "https://api.openai.com/v1")
+        else:
+            if not get_secret("RELAY_LLM_URL"):
+                save_secret("RELAY_LLM_URL", "http://127.0.0.1:31415/v1")
+            if not get_secret("FREELLMAPI_URL"):
+                save_secret("FREELLMAPI_URL", "http://127.0.0.1:31415/v1")
 
         reloaded = self.s.reload_assistant()
         if reloaded:
-            self.say("Your API key has been securely saved with Windows encryption, and the AI assistant is now online.")
+            self.say(f"Your {prov} API key has been securely saved with Windows encryption, and the AI assistant is now online.")
         else:
-            self.say("Your API key was saved, but the local model proxy could not be reached right now.")
+            self.say(f"Your {prov} API key was saved, but the model endpoint could not be reached right now.")
 
     def k_settings_page(self, i):
         topic = i.slots.get("topic", "")
@@ -1432,10 +1461,11 @@ class Skills:
         idx = n - 1 if n > 0 else len(items) - 1
         if not 0 <= idx < len(items):
             self.say(f"There are only {len(items)} in that list.")
-            return
         item = items[idx]
         if kind == "files":
-            return self._use_file(item.path, "read" if verb == "read" else "open")
+            from pathlib import Path
+            p = item.path if hasattr(item, "path") else (Path(item) if not isinstance(item, Path) else item)
+            return self._use_file(p, "read" if verb in ("read", "say") else "open")
         if kind == "windows":
             return self.run(
                 Step(
@@ -1732,6 +1762,9 @@ class Skills:
         payload = dict(s)
         payload["deep_find"] = deep
         return self.run(Step("activate", f"click {target}", payload))
+
+
+
 
 
 def _ord(text: str) -> int:

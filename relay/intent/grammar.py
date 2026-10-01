@@ -551,12 +551,16 @@ def _laptop_control(low: str, keep: str):
     ):
         return Kind.CHECK_UPDATES, {}
     # api key management
-    if re.search(
-        r"\b(?:save|add|set|update|paste|store)\s+(?:the\s+|my\s+)?(?:free\s+)?(?:llm\s+|ai\s+)?api\s*key\b|"
+    m_key = re.search(
+        r"\b(?:save|add|set|update|paste|store)\s+(?:the\s+|my\s+)?(?:free\s+)?(?:llm\s+|ai\s+)?api\s*key(?:\s+(?P<key>[a-zA-Z0-9_\-]+))?\b|"
         r"\bread\s+(?:the\s+)?api\s*key\s+(?:from\s+)?(?:the\s+)?clipboard\b",
         low,
-    ):
-        return Kind.API_KEY, {"action": "save"}
+    )
+    if m_key:
+        slots = {"action": "save"}
+        if m_key.groupdict().get("key"):
+            slots["key"] = m_key.group("key")
+        return Kind.API_KEY, slots
     if re.search(
         r"\b(?:check|what\s+is|status\s+of|do\s+i\s+have)\s+(?:the\s+|my\s+)?(?:free\s+)?(?:llm\s+|ai\s+)?api\s*key\b|"
         r"^api\s*key\s+status$",
@@ -811,7 +815,7 @@ def parse(utterance: str) -> Intent:
         low,
     ):
         return I(Kind.STATUS)
-    if re.search(
+    if not low.startswith("remember ") and re.search(
         r"\b(?:am i|are we|is (?:the )?(?:internet|wi-?fi|network|computer))\s+"
         r"(?:connected|online|working|on)\b|\binternet (?:status|connection)\b|"
         r"\bwi-?fi (?:status|name|network)\b|\bwhich wi-?fi\b|"
@@ -987,8 +991,8 @@ def parse(utterance: str) -> Intent:
     ):
         return I(Kind.LIST_OPTIONS)
     if re.search(
-        r"\b(read (this|it|that|the selection|the focus|selected text)|"
-        r"what('?s| is) selected)\b",
+        r"\b(read (?:this|it|that|the selection|(?:the\s+)?focus|selected text)|"
+        r"what('?s| is) (?:selected|focused))\b",
         low,
     ):
         return I(Kind.READ_FOCUS)
@@ -1333,15 +1337,16 @@ def parse(utterance: str) -> Intent:
         return I(Kind.TEXT_INSPECT, action="read_around_cursor")
 
     # ---- actions ----
-    m = re.match(r"(?:open|launch|start|run)\s+(?:up\s+)?(?:the\s+)?(.+)", low)
+    m = re.match(r"(?:open|launch|start|run)\s+(?:up\s+)?(?:the\s+)?(?:a\s+new\s+)?(.+)", low)
     if m and not re.search(r"\b(?:result|link|button)\b", m.group(1)):
-        return I(Kind.OPEN_APP, app=m.group(1).strip())
+        target = re.sub(r"\s+(?:for\s+it|for\s+this|document|doc|window|tab)?$", "", m.group(1).strip()).strip()
+        return I(Kind.OPEN_APP, app=target or m.group(1).strip())
     m = re.match(r"(?:switch to|go to|focus(?: on)?|bring up|show me)\s+(?:the\s+)?(.+)", low)
     if m and not re.search(r"\b(?:result|link|button|field)\b", m.group(1)):
         return I(Kind.SWITCH_APP, app=m.group(1).strip())
-    m = re.match(r"(?:type|enter|dictate|insert)\s+(?:in\s+)?(.+)", keep)
+    m = re.match(r"(?:type|enter|dictate|insert|write)\s+(?:in\s+|out\s+)?(.+)", keep)
     if m:
-        text = payload_after(raw, r"type(?:\s+in)?|enter|dictate|insert") or m.group(1)
+        text = payload_after(raw, r"type(?:\s+in)?|enter|dictate|insert|write(?:\s+in)?") or m.group(1)
         return I(Kind.TYPE, text=text.strip())
     m = re.match(r"^save(?: (?:this|it|the file|the document))?\s+as\s+(.+)$", low)
     if m:

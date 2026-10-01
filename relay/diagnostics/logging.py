@@ -25,15 +25,21 @@ _SECRET_PATTERNS = [
 ]
 
 
+def redact(text: str) -> str:
+    """Mask values that look like secrets, passwords, tokens, or untrusted content."""
+    res = text
+    for pat in _SECRET_PATTERNS:
+        res = pat.sub("[REDACTED]", res)
+    return res
+
+
 class _RedactionFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         try:
             msg = record.getMessage()
         except Exception:
             return True
-        for pat in _SECRET_PATTERNS:
-            msg = pat.sub("[REDACTED]", msg)
-        record.msg = msg
+        record.msg = redact(msg)
         record.args = ()
         return True
 

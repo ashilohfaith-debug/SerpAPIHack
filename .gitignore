@@ -29,3 +29,7 @@ review-receipts/
 .env
 @AutomationLog.txt
 *.log
+# packaged binaries (distributed via GitHub Releases, not committed)
+frontend/downloads/
+*.exe
+*.spec

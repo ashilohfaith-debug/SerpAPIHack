@@ -22,24 +22,21 @@
   <header class="app-header" role="banner">
     <div class="header-inner">
       <a href="#" class="brand" aria-label="RELAY Home">
-        <div class="brand-symbol" aria-hidden="true">R</div>
-        <div class="brand-title">
-          <span>RELAY</span>
-          <span class="sharp-badge live" id="ipcConnBadge">
-            <span class="square-pulse" aria-hidden="true"></span>
-            Simulator
-          </span>
-        </div>
+        <img src="logo.png" alt="RELAY Logo" class="brand-logo-img" />
+        <span class="sharp-badge live" id="ipcConnBadge">
+          <span class="square-pulse" aria-hidden="true"></span>
+          Live
+        </span>
       </a>
 
       <!-- Navigation -->
       <nav class="nav-links" aria-label="Main Navigation">
+        <a href="#download" class="nav-link" style="color:#ffffff; font-weight:700;">Download</a>
+        <a href="#features" class="nav-link">Features</a>
         <a href="#how-to-use" class="nav-link">How to Use</a>
         <a href="#simulator" class="nav-link">Simulator</a>
-        <a href="#pipeline" class="nav-link">Pipeline</a>
         <a href="#commands" class="nav-link">Commands</a>
         <a href="#soundboard" class="nav-link">Earcons</a>
-        <a href="#mirror" class="nav-link">Terminal</a>
       </nav>
 
       <!-- Accessibility Toolset -->
@@ -118,6 +115,151 @@
               <span><strong>Offline Sovereignty:</strong> Whisper speech recognition and Piper voice run locally on basic 4 GB dual-core laptops. No cloud required.</span>
             </li>
           </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         DOWNLOAD PORTAL
+         ============================================================ -->
+    <section class="download-section" id="download" aria-labelledby="dl-heading">
+      <div class="mono-tag">Free &amp; Open Source · MIT License · No Account Required</div>
+      <h2 id="dl-heading" style="font-size:var(--text-3xl); font-weight:800; color:#ffffff; margin:12px 0;">
+        Download Relay
+      </h2>
+      <p style="color:var(--text-secondary); max-width:640px; line-height:1.7;">
+        One download. No installer wizards. No accounts. Just unzip and double-click
+        <strong style="color:#fff">Install Relay.cmd</strong> — it creates your shortcuts and starts talking immediately.
+        Relay updates itself automatically when you push new versions to GitHub.
+      </p>
+
+      <div class="download-grid">
+        <!-- Primary Download Card -->
+        <div class="download-hero-card">
+          <div style="display:flex; align-items:center; gap:14px;">
+            <img src="logo.png" alt="" class="hero-logo-img" style="max-height:36px;" />
+            <div>
+              <div style="font-size:var(--text-xl); font-weight:800; color:#fff;">Relay for Windows</div>
+              <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); margin-top:4px;">
+                v0.3.3 · Windows 10/11 · x64 · ~353 MB · Offline-ready
+              </div>
+            </div>
+          </div>
+
+          <a href="downloads/Relay-v0.3.3-Windows-x64.zip" class="btn-download-primary" download>
+            ⬇ Download Relay (ZIP — 353 MB)
+          </a>
+
+          <div style="font-size:var(--text-xs); color:var(--text-muted); line-height:1.7;">
+            Contains relay.exe, offline voice models, speech recognition, and the one-click installer.
+            No Python or runtime needed — everything is bundled. Works on any Windows 10/11 PC.
+          </div>
+
+          <div style="display:flex; gap:12px; flex-wrap:wrap;">
+            <span class="sharp-badge">✓ No account</span>
+            <span class="sharp-badge">✓ No internet needed</span>
+            <span class="sharp-badge">✓ Auto-updates</span>
+            <span class="sharp-badge">✓ 4 GB RAM OK</span>
+          </div>
+        </div>
+
+        <!-- Side Options -->
+        <div class="download-side-col">
+          <div class="download-option-card">
+            <div style="font-weight:700; color:#fff;">relay.exe (standalone)</div>
+            <div style="font-size:var(--text-xs); color:var(--text-secondary);">
+              Just the voice assistant executable. Needs models folder alongside it.
+            </div>
+            <a href="downloads/relay.exe" class="btn-download-secondary" download>
+              ⬇ relay.exe (14.9 MB)
+            </a>
+          </div>
+
+          <div class="download-option-card">
+            <div style="font-weight:700; color:#fff;">Install from Source</div>
+            <div style="font-size:var(--text-xs); color:var(--text-secondary);">
+              Clone the repo and run with Python 3.12. Auto-updates via <code>git pull</code> or <code>relay --update</code>.
+            </div>
+            <a href="https://github.com/nagasaipradhyumnapoola/relay" target="_blank" class="btn-download-secondary">
+              → GitHub Repository
+            </a>
+          </div>
+
+          <div class="download-option-card">
+            <div style="font-weight:700; color:#fff;">Quick Start After Download</div>
+            <div style="font-size:var(--text-xs); color:var(--text-secondary); line-height:1.7;">
+              1. Unzip anywhere<br>
+              2. Double-click <strong>Install Relay.cmd</strong><br>
+              3. Say <em>"Relay"</em> to wake, then speak your command<br>
+              4. Press <kbd class="kbd" style="font-size:10px;">Ctrl+Alt+Space</kbd> to talk anytime
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         FEATURES SHOWCASE
+         ============================================================ -->
+    <section class="download-section" id="features" aria-labelledby="features-heading">
+      <div class="mono-tag">What Relay Can Do</div>
+      <h2 id="features-heading" style="font-size:var(--text-2xl); font-weight:800; color:#ffffff; margin:12px 0;">
+        Built for Real Life, Not Demos
+      </h2>
+
+      <div class="breakthrough-grid">
+        <div class="breakthrough-card">
+          <div class="breakthrough-icon">🗣️</div>
+          <div class="breakthrough-title">Talk to Your PC</div>
+          <div class="breakthrough-desc">
+            Open apps, type documents, browse the web, manage files — all by voice.
+            Say <em>"open Word and write a letter to my professor"</em> and watch it happen.
+          </div>
+        </div>
+
+        <div class="breakthrough-card">
+          <div class="breakthrough-icon">🧠</div>
+          <div class="breakthrough-title">Ask Anything (AI Mode)</div>
+          <div class="breakthrough-desc">
+            Connected to multiple free AI providers with 0.16s response time. Ask general knowledge,
+            get explanations, do math — all spoken aloud in a natural voice.
+          </div>
+        </div>
+
+        <div class="breakthrough-card">
+          <div class="breakthrough-icon">✈️</div>
+          <div class="breakthrough-title">Works Offline</div>
+          <div class="breakthrough-desc">
+            Core voice recognition and speech run 100% locally on basic hardware.
+            No cloud account, no subscription, no data leaves your PC unless you choose to enable AI features.
+          </div>
+        </div>
+
+        <div class="breakthrough-card">
+          <div class="breakthrough-icon">👁️</div>
+          <div class="breakthrough-title">Reads Your Screen</div>
+          <div class="breakthrough-desc">
+            Uses Windows UI Automation to actually see what's on screen — buttons, menus, text fields,
+            document content. Describes it all in plain language, not code.
+          </div>
+        </div>
+
+        <div class="breakthrough-card">
+          <div class="breakthrough-icon">🛡️</div>
+          <div class="breakthrough-title">Safe by Design</div>
+          <div class="breakthrough-desc">
+            Risky actions like deleting files or sending emails require spoken confirmation.
+            Relay verifies every action it takes and tells you honestly what happened.
+          </div>
+        </div>
+
+        <div class="breakthrough-card">
+          <div class="breakthrough-icon">🔄</div>
+          <div class="breakthrough-title">Auto-Updates</div>
+          <div class="breakthrough-desc">
+            Say <em>"Relay, check for updates"</em> or run <code>relay --update</code>.
+            When you push to GitHub, every PC running Relay can pull the latest version automatically.
+          </div>
         </div>
       </div>
     </section>

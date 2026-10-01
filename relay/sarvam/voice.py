@@ -27,8 +27,15 @@ def settings() -> dict:
     from relay.envfile import offline_forced
     from relay.memory.secrets import get_secret
 
+    raw_key = (
+        ""
+        if offline_forced()
+        else os.environ.get("SARVAM_API_KEY", "").strip() or get_secret("SARVAM_API_KEY", "").strip()
+    )
+    if raw_key.startswith("#") or "REDACTED" in raw_key:
+        raw_key = ""
     return {
-        "key": "" if offline_forced() else os.environ.get("SARVAM_API_KEY", "").strip() or get_secret("SARVAM_API_KEY", "").strip(),
+        "key": raw_key,
         "tts_model": os.environ.get("SARVAM_TTS_MODEL", "bulbul:v3").strip() or "bulbul:v3",
         "speaker": os.environ.get("SARVAM_SPEAKER", "").strip(),
         "language": os.environ.get("SARVAM_LANGUAGE", "en-IN").strip() or "en-IN",

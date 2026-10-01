@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import re
 
-_FILLER = r"(?:um+|uh+|er+|erm|hmm+|ah+|oh|so|well|okay|ok|hey|hi|hello|yo|now|just|please|kindly)"
+_FILLER = (
+    r"(?:there it is|here it is|there we go|here you go|that's it|"
+    r"um+|uh+|er+|erm|hmm+|ah+|oh|so|well|okay|ok|hey|hi|hello|yo|now|just|please|kindly)"
+)
 _VERBS = (
     r"open|switch|type|read|find|search|write|close|play|go|click|save|set|take|"
     r"remind|turn|check|start|launch|show|tell|select|copy|paste|press|minimize|"
@@ -42,9 +45,9 @@ def normalize(text: str, strip_trailing: bool = True) -> str:
     t = t.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
     t = t.lower()
     t = _EDGE_PUNCT.sub("", t)
-    # commas / semicolons inside the sentence are pauses, not meaning — except a
-    # thousands separator between digits ("1,200")
-    t = re.sub(r"\s*(?:(?<!\d),|,(?!\d)|;)\s*", " ", t)
+    # commas / semicolons / periods inside the sentence are pauses, not meaning — except a
+    # decimal/thousands separator between digits ("1,200", "1.5")
+    t = re.sub(r"\s*(?:(?<!\d)[,.]|[,.](?!\d)|;)\s*", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     # Self-correction handling: "open edge no wait open chrome" -> "open chrome"
     splits = re.split(

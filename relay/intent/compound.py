@@ -41,7 +41,7 @@ _STRONG = re.compile(
 )
 _WEAK = re.compile(r"\s*,\s*(?:and\s+)?|\s+and\s+", re.I)
 _FOLLOW_UP = re.compile(
-    r"^(?:save(?: it| the file| this| the document)?(?: as .+)?|press .+|hit enter|"
+    r"^(?:(?:type|write|enter|dictate|insert)\s+.+|save(?: it| the file| this| the document)?(?: as .+)?|press .+|hit enter|"
     r"send(?: it| the message| message)?|read it(?: out| aloud| back| to me)?|select all|"
     r"copy(?: it| that| all)?|paste(?: it)?|(?:open|click|read|play) the (?:first|second|"
     r"third|fourth|fifth|last|top) .+)$",
@@ -109,6 +109,14 @@ def _rewrite(piece: str) -> str:
     m = re.fullmatch(rf"(?:go to|goto|open up)\s+{_FOLDERS}", p, re.I)
     if m:
         return f"open my {m.group(1).lower()}"
+    m = re.fullmatch(
+        r"open(?:\s+up)?(?:\s+the)?(?:\s+a\s+new)?\s+(word|notepad|excel|calculator|chrome|edge)"
+        r"(?:\s+(?:for\s+it|for\s+this|document|doc|window|file))?",
+        p,
+        re.I,
+    )
+    if m:
+        return f"open {m.group(1).lower()}"
     return p
 
 

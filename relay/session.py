@@ -438,7 +438,7 @@ class Session:
                 return []
         if self._capture is not None:
             consumer, self._capture = self._capture, None
-            if is_cancel(low) and len(low.split()) <= 3:
+            if re.search(r"\b(?:cancel|never\s?mind|abort|forget it)\b", low) and len(low.split()) <= 3:
                 self.say("Okay, cancelled.", _REQ)
                 return []
             return consumer(utterance.strip()) or []
