@@ -14,6 +14,14 @@
       "use": "@vercel/static"
     },
     {
+      "src": "logo.png",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "downloads/**",
+      "use": "@vercel/static"
+    },
+    {
       "src": "frontend/**",
       "use": "@vercel/static"
     }
@@ -21,6 +29,10 @@
   "routes": [
     {
       "handle": "filesystem"
+    },
+    {
+      "src": "/downloads/(.*)",
+      "dest": "/downloads/$1"
     },
     {
       "src": "/(.*)",

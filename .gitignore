@@ -29,7 +29,11 @@ review-receipts/
 .env
 @AutomationLog.txt
 *.log
-# packaged binaries (distributed via GitHub Releases, not committed)
-frontend/downloads/
+# packaged binaries (distributed via website and releases)
 *.exe
+!downloads/relay.exe
+!frontend/downloads/relay.exe
+*.zip
+!downloads/relay-windows-x64.zip
+!frontend/downloads/relay-windows-x64.zip
 *.spec

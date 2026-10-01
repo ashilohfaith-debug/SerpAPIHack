@@ -37,7 +37,7 @@
   --badge-border: #e4e4e7;
 
   --logo-text-fill: #09090b;
-  --header-bg: rgba(255, 255, 255, 0.82);
+  --header-bg: rgba(255, 255, 255, 0.85);
   --header-border: #e4e4e7;
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
@@ -74,7 +74,7 @@
   --badge-border: #27272a;
 
   --logo-text-fill: #f4f4f5;
-  --header-bg: rgba(9, 9, 11, 0.82);
+  --header-bg: rgba(9, 9, 11, 0.85);
   --header-border: #27272a;
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
@@ -115,13 +115,13 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--header-border);
-  height: 68px;
+  height: 64px;
   display: flex;
   align-items: center;
 }
 
 .nav-container {
-  max-width: 1120px;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 0 24px;
   width: 100%;
@@ -140,7 +140,7 @@ body {
 }
 
 .relay-svg-logo {
-  height: 40px;
+  height: 38px;
   width: auto;
   overflow: visible;
 }
@@ -199,14 +199,13 @@ body {
 .nav-menu {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .nav-item {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  padding: 6px 14px;
   font-size: 14px;
   font-weight: 500;
   color: var(--fg-muted);
@@ -215,23 +214,10 @@ body {
   transition: all 0.15s ease;
 }
 
-.nav-item:hover {
+.nav-item:hover,
+.nav-item.active {
   color: var(--fg);
   background-color: var(--card-hover);
-}
-
-.nav-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 4px;
-  background-color: var(--badge-bg);
-  border: 1px solid var(--badge-border);
-  color: var(--fg);
 }
 
 /* Navbar Actions (Theme toggle + Direct CTA) */
@@ -315,19 +301,19 @@ body {
 }
 
 .btn-sm {
-  padding: 6px 12px;
+  padding: 6px 14px;
   font-size: 13px;
 }
 
 .btn-lg {
-  padding: 12px 22px;
+  padding: 12px 24px;
   font-size: 15px;
   font-weight: 600;
 }
 
 .btn-xl {
-  padding: 16px 26px;
-  font-size: 16px;
+  padding: 15px 28px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -340,16 +326,16 @@ body {
 }
 
 /* ==========================================================================
-   Page Layout & Sections (Screens 1, 2, 3)
+   Page Layout & Sections (Adjusted Spacing)
    ========================================================================== */
 .page-container {
-  max-width: 1120px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 0 24px 80px;
+  padding: 0 24px 64px;
 }
 
 .screen-section {
-  padding: 72px 0 48px;
+  padding: 56px 0 44px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -357,75 +343,51 @@ body {
   border-bottom: none;
 }
 
-/* Section Header Badges */
-.section-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  background-color: var(--badge-bg);
-  border: 1px solid var(--badge-border);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--badge-fg);
-  margin-bottom: 24px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.badge-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #00c853;
-}
-
-/* Hero Section (Screen 1) */
+/* Hero Section */
 .hero-block {
-  max-width: 780px;
-  margin-bottom: 56px;
+  max-width: 760px;
+  margin-bottom: 44px;
 }
 
 .hero-headline {
-  font-size: clamp(34px, 5vw, 54px);
+  font-size: clamp(32px, 4.5vw, 48px);
   font-weight: 700;
-  line-height: 1.12;
+  line-height: 1.15;
   letter-spacing: -0.03em;
   color: var(--fg);
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .hero-subhead {
-  font-size: 18px;
+  font-size: 17px;
   line-height: 1.6;
   color: var(--fg-muted);
-  margin-bottom: 32px;
-  max-width: 680px;
+  margin-bottom: 28px;
+  max-width: 660px;
 }
 
 .hero-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
-/* Generic Section Header Block */
+/* Section Header Block */
 .section-header-block {
-  margin-bottom: 40px;
+  margin-bottom: 32px;
 }
 
 .section-title {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--fg);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .section-desc {
-  font-size: 16px;
+  font-size: 15px;
   color: var(--fg-muted);
 }
 
@@ -435,14 +397,14 @@ body {
 .two-column-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
+  gap: 20px;
 }
 
 .card {
   background-color: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 32px;
+  padding: 28px 24px;
   box-shadow: var(--shadow-sm);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
@@ -452,18 +414,18 @@ body {
   box-shadow: var(--shadow-md);
 }
 
-/* Feature Cards (Screen 1) */
+/* Feature Cards */
 .card-header {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 14px;
+  margin-bottom: 20px;
 }
 
 .card-icon-pill {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   background-color: var(--bg-subtle);
   border: 1px solid var(--border);
   display: flex;
@@ -474,15 +436,15 @@ body {
 }
 
 .card-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--fg);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .card-subtitle {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--fg-muted);
 }
 
@@ -490,11 +452,11 @@ body {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .clean-list li {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.5;
   color: var(--fg-muted);
 }
@@ -505,10 +467,10 @@ body {
 }
 
 /* ==========================================================================
-   Screen 2: How to Use & Commands
+   Section 2: How to Use & Commands
    ========================================================================== */
 .talk-methods {
-  margin-bottom: 48px;
+  margin-bottom: 40px;
 }
 
 .method-card {
@@ -523,11 +485,11 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 4px;
   background-color: #00c853;
   color: #ffffff;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .tag-subtle {
@@ -537,33 +499,33 @@ body {
 }
 
 .method-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--fg);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .method-desc {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--fg-muted);
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 /* Key Combo */
 .key-combo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: 6px;
+  margin-bottom: 18px;
 }
 
 kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 14px;
+  padding: 6px 12px;
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   border-radius: 6px;
   background-color: var(--kbd-bg);
@@ -573,18 +535,18 @@ kbd {
 }
 
 .key-space {
-  padding: 8px 24px;
+  padding: 6px 20px;
 }
 
 .key-plus {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--fg-subtle);
 }
 
 .method-note {
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--fg-muted);
   margin-top: auto;
 }
@@ -594,13 +556,13 @@ kbd {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 18px;
+  padding: 10px 16px;
   background-color: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: 8px;
   font-family: var(--font-mono);
-  font-size: 15px;
-  margin-bottom: 20px;
+  font-size: 14px;
+  margin-bottom: 18px;
 }
 
 .wake-word {
@@ -614,36 +576,36 @@ kbd {
 
 /* Commands Grid */
 .commands-block {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .commands-header {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .commands-heading {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--fg);
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .commands-sub {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--fg-muted);
 }
 
 .command-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
 }
 
 .command-card {
   background-color: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 20px;
+  padding: 16px 18px;
   transition: all 0.15s ease;
   cursor: pointer;
 }
@@ -660,26 +622,26 @@ kbd {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--fg-subtle);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .cmd-voice {
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--fg);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   line-height: 1.4;
 }
 
 .cmd-result {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--fg-muted);
   line-height: 1.4;
 }
 
 /* ==========================================================================
-   Screen 3: Download & Setup
+   Section 3: Download & Setup
    ========================================================================== */
 .download-container {
   display: flex;
@@ -688,20 +650,20 @@ kbd {
 
 .download-main-card {
   width: 100%;
-  max-width: 820px;
+  max-width: 800px;
   background-color: var(--card);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 48px 40px;
+  padding: 40px 32px;
   text-align: center;
   box-shadow: var(--shadow-lg);
 }
 
 .download-icon-wrap {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 20px;
-  border-radius: 16px;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 14px;
   background-color: var(--bg-subtle);
   border: 1px solid var(--border);
   display: flex;
@@ -711,26 +673,26 @@ kbd {
 }
 
 .download-title {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--fg);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .download-sub {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--fg-muted);
-  margin-bottom: 36px;
+  margin-bottom: 30px;
 }
 
 .download-buttons-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
-  margin-bottom: 44px;
+  margin-bottom: 36px;
 }
 
 /* 3-Step Setup */
@@ -738,7 +700,7 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 32px;
+  padding-top: 28px;
   border-top: 1px solid var(--border);
   text-align: left;
 }
@@ -751,22 +713,22 @@ kbd {
 }
 
 .step-num {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background-color: var(--bg-subtle);
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--fg);
   flex-shrink: 0;
 }
 
 .step-text {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--fg-muted);
 }
 
@@ -776,14 +738,14 @@ kbd {
   padding: 2px 6px;
   border-radius: 4px;
   color: var(--fg);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .setup-step-divider {
-  width: 32px;
+  width: 24px;
   height: 1px;
   background-color: var(--border);
-  margin: 0 12px;
+  margin: 0 10px;
 }
 
 /* ==========================================================================
@@ -791,29 +753,29 @@ kbd {
    ========================================================================== */
 .page-footer {
   border-top: 1px solid var(--border);
-  padding: 32px 0;
+  padding: 28px 0;
   background-color: var(--bg);
 }
 
 .footer-container {
-  max-width: 1120px;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 0 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 14px;
 }
 
 .footer-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .footer-logo-text {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--fg);
 }
@@ -826,7 +788,7 @@ kbd {
 .footer-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   font-size: 13px;
   color: var(--fg-muted);
 }
@@ -845,7 +807,7 @@ kbd {
 
   .setup-steps {
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
   }
 
   .setup-step-divider {
@@ -853,7 +815,7 @@ kbd {
   }
 
   .download-main-card {
-    padding: 32px 20px;
+    padding: 28px 18px;
   }
 
   .hero-actions {
