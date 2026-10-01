@@ -428,10 +428,8 @@ def _main(argv: list[str] | None = None) -> int:
         return daily_demo()
     if args.toggle:
         return _start(panel=args.with_panel, toggle=True)
-    if args.start:
-        return _start(panel=args.with_panel)
-    p.print_help()
-    return 0
+    # Default to starting Relay (e.g. when double-clicked or launched without flags)
+    return _start(panel=args.with_panel)
 
 
 if __name__ == "__main__":
