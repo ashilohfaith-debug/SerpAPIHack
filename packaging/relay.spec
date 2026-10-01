@@ -39,7 +39,7 @@ hiddenimports += ["win32com", "win32com.client", "comtypes", "comtypes.client",
                   "uiautomation", "pywintypes", "pythoncom", "pyperclip",
                   "mss", "psutil",
                   # the on-screen palette (Tkinter) and modules imported only lazily
-                  "tkinter", "relay.ui.palette", "relay.system.control",
+                  "tkinter", "relay.ui.palette", "relay.system.control", "relay.system.knowledge",
                   "relay.intent.compound", "relay.llm.tune", "relay.audio.devices",
                   "relay.goals.goal", "relay.goals.assignment", "relay.workspace.agent"]
 

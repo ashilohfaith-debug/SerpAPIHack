@@ -1867,21 +1867,32 @@ class Skills:
             parts.append("Say read the page, list the headings, or list the links.")
             self.say(" ".join(parts))
             return
-        self.say(pol.describe(snap, self.s.narration_mode))
+        desc = pol.describe(snap, self.s.narration_mode)
+        if (not snap.elements or len(snap.elements) <= 2) and self.s.ocr is not None:
+            try:
+                ocr_elements = self.s.ocr.read_screen()
+                if ocr_elements:
+                    texts = [e.name for e in ocr_elements if len(e.name.strip()) > 3][:6]
+                    if texts:
+                        desc += f" By visual scan, I see: {', '.join(texts)}."
+            except Exception:
+                pass
+        self.say(desc)
+
+    def _ocr_text(self) -> str:
+        if self.s.ocr is None:
+            return ""
+        try:
+            regions = self.s.ocr.read_screen()
+            return "\n".join(r.name for r in regions if r.name.strip())
+        except Exception:
+            return ""
 
     # ---------------------------------------------------------------- AI assistant
     def k_ask(self, i):
         return self.s.ask(i.slots.get("text", ""))
 
     def k_summarize(self, i):
-        if self.s.assistant is None:
-            self.say(
-                "Summaries need the AI assistant, which isn't set up on this computer. "
-                "Do you want me to read the page instead? Say yes or no."
-            )
-            self.s.offer(lambda: self.k_read_all(type(i)(Kind.READ_ALL, {"language": ""})))
-            return
-        self.say("Getting the text.", pol.Priority.FOCUS)
         title, body = self._document()
         if not body:
             body = self._ocr_text()
@@ -1892,6 +1903,14 @@ class Skills:
 
         body = "\n".join(ln for ln in body.splitlines() if not looks_sensitive(ln))
         request = i.slots.get("request") or "Summarise this page."
+
+        if self.s.assistant is None:
+            summary = self.s.knowledge.summarize_text(body)
+            page_info = f" of {_short_title(title)}" if title else ""
+            self.say(f"Here is a summary{page_info}: {summary}")
+            return
+
+        self.say("Getting the text.", pol.Priority.FOCUS)
         return self.s.ask(f"{request} (Page title: {_short_title(title)})", page_text=body)
 
     # ---------------------------------------------------------------- typing / saving

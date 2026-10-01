@@ -166,6 +166,9 @@ class Session:
             apps = AppCatalog(entries=[])
         self.apps = apps
         self.ocr = OCR()
+        from relay.system.knowledge import KnowledgeEngine
+
+        self.knowledge = KnowledgeEngine()
         self.executor = Executor(
             self.engine,
             self.worker,
@@ -507,10 +510,7 @@ class Session:
         if intent.kind == Kind.ASK:
             return self.ask(intent.slots.get("text") or utterance)
         if intent.kind == Kind.SUMMARIZE:
-            page_text = ""
-            if self.worker and self.worker.live:
-                page_text = "\n".join(e.name for e in self.worker.live.elements if e.name)
-            return self.ask(utterance, page_text=page_text)
+            return self.skills.k_summarize(intent)
         self.cancel.clear()
         handled = self.skills.handle(intent)
         if handled is not None:
@@ -574,6 +574,19 @@ class Session:
         if self.assistant is None:
             self.reload_assistant()
         if self.assistant is None:
+            # Perplexity Computer voice answering fallback: knowledge & web synthesis
+            if page_text:
+                summary = self.knowledge.summarize_text(page_text)
+                self.say(f"Here is a summary of the page: {summary}", _REQ)
+                self.runner.last_said = summary
+                self.last_activity = "answer"
+                return []
+            ans = self.knowledge.answer(question)
+            if ans:
+                self.say(ans, _REQ)
+                self.runner.last_said = ans
+                self.last_activity = "answer"
+                return []
             self.say(
                 "The AI assistant isn't set up on this computer, so I can only do "
                 "my built-in commands. Say help to hear them.",
@@ -642,6 +655,19 @@ class Session:
                 "built-in commands. Say help to hear them.",
                 _REQ,
             )
+            # Perplexity Computer voice answering fallback: knowledge & web synthesis
+            if page_text:
+                summary = self.knowledge.summarize_text(page_text)
+                self.say(f"Here is a summary of the page: {summary}", _REQ)
+                self.runner.last_said = summary
+                self.last_activity = "answer"
+                return []
+            ans = self.knowledge.answer(question)
+            if ans:
+                self.say(f"From my knowledge base: {ans}", _REQ)
+                self.runner.last_said = ans
+                self.last_activity = "answer"
+                return []
         elif payload:
             self.runner.last_said = payload  # so "repeat" repeats the answer
         self.last_activity = "answer"

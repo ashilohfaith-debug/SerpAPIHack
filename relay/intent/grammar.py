@@ -1461,4 +1461,15 @@ def parse(utterance: str) -> Intent:
             slots["role"] = rm.group(1).replace("check box", "checkbox")
         return Intent(Kind.ACTIVATE, slots, raw)
 
+    # Perplexity voice assistant inquiry / research / entity lookups
+    if (
+        re.search(
+            r"^(?:research|google|search for|look up|define)\b|"
+            r"^(?:who (?:is|was|were|are))\b|"
+            r"^(?:what (?:is|are|was|were) (?:the |a )?(?:capital|population|meaning|definition|speed|height|distance|difference|formula|symbol|currency|president|prime minister|ceo|founder|history|origin))\b",
+            low,
+        )
+    ):
+        return I(Kind.ASK, text=raw.strip())
+
     return I(Kind.UNKNOWN)
