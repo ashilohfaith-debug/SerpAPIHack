@@ -106,7 +106,7 @@ _NEVER = {Kind.UNKNOWN, Kind.CONTROL, Kind.QUIT, Kind.DELETE_NOTES, Kind.CLEAR_H
 # streaming, "It costs 3." may still become "It costs 3.5 lakh."
 _SENTENCE_END = re.compile(r"[.!?।…]+[\"')\]]*\s")
 _MIN_CHUNK = 12  # merge a very short opener ("Sure.") into the next sentence
-_MAX_STEPS = 8  # longest plan the assistant may propose
+_MAX_STEPS = 20  # longest plan the assistant may propose (supports 10+ steps)
 
 
 def validate_command(line: str) -> str | None:

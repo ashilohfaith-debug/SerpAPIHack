@@ -196,6 +196,7 @@ def split_steps(text: str) -> list[str] | None:
     steps = out
     if len(steps) < 2:
         return None
-    if any(_kind(s) == Kind.UNKNOWN for s in steps):
+    has_strong = bool(_STRONG.search(raw))
+    if not has_strong and any(_kind(s) == Kind.UNKNOWN for s in steps):
         return None  # not all commands: not a sequence
     return steps
