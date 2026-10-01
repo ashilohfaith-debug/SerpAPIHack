@@ -394,6 +394,47 @@ def test_push_to_talk_times_out_with_earcon():
     assert earcons[-1] == "nothing" and not loop._armed
 
 
+def test_push_to_talk_ignores_transient_noise_and_keeps_listening():
+    from relay.loop import VoiceLoop
+
+    clock = {"t": 10.0}
+    said = []
+    dispatched = []
+
+    loop = VoiceLoop(
+        dispatched.append,
+        stt=object(),
+        speech=FakeSpeechQ(),
+        wake_required=False,
+        say=said.append,
+        clock=lambda: clock["t"],
+        threaded=False,
+    )
+    loop.push_to_talk()
+    assert loop._armed
+
+    # Simulate a brief noise blip (only 2 voiced frames = 60ms) ending within armed window
+    loop._in_utt = True
+    loop._voiced = 2
+    loop._buf = bytearray(b"\x05\x00" * 200)
+
+    class EndSeg:
+        last_speech = False
+
+        def push(self, f):
+            return "end"
+
+    loop.seg = EndSeg()
+    clock["t"] = 11.0  # only 1s has elapsed of the generous 8.5s window
+    loop.on_frame(_frame())
+
+    # Must NOT disarm, must NOT say "I didn't catch that", must still be armed!
+    assert loop._armed is True
+    assert loop._in_utt is False
+    assert said == []
+
+
+
 def test_immediate_control_and_dispatcher_order():
     from relay.loop import Dispatcher, immediate_control
 

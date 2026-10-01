@@ -44,9 +44,10 @@ log = get_logger("loop")
 FRAME_S = 0.03
 PREROLL_FRAMES = 10  # 300 ms kept before speech onset
 MAX_UTTERANCE_S = 15.0
-PTT_WAIT_S = 6.0  # after the chirp, how long to wait for speech to start
-SPEAKING_TAIL_S = 0.35  # ignore the mic this long after RELAY stops talking
+PTT_WAIT_S = 8.0  # after the chirp, how long to wait for speech to start (generous window)
+SPEAKING_TAIL_S = 0.45  # ignore the mic this long after RELAY stops talking
 MIN_VOICED_S = 0.45  # "Relay, …" has at least this much actual voice
+MIN_ARMED_VOICED_S = 0.24  # actual spoken commands have at least ~240 ms of voiced frames
 MIN_RMS = 0.004  # absolute floor (~ -48 dBFS)
 NOISE_MARGIN = 2.5  # speech must be this much louder than the room noise
 
@@ -234,10 +235,10 @@ class VoiceLoop:
     def _reset(self) -> None:
         if self._custom_seg:
             self.seg = self._seg_factory()
-        elif self._armed:  # talk key: sensitive VAD, and end the command after 0.45 s quiet
-            self.seg = SpeechSegmenter(aggressiveness=2, end_frames=15)
-        else:  # waiting for the wake word: aggressive, noise-proof, 0.6 s
-            self.seg = SpeechSegmenter(aggressiveness=3, end_frames=20)
+        elif self._armed:  # talk key: sensitive VAD, 4 frames start (no click triggers), 36 frames (~1.1 s) quiet hangover
+            self.seg = SpeechSegmenter(aggressiveness=2, start_frames=4, end_frames=36)
+        else:  # waiting for the wake word: aggressive, noise-proof, 0.75 s
+            self.seg = SpeechSegmenter(aggressiveness=3, start_frames=3, end_frames=25)
         self._preroll: collections.deque[bytes] = collections.deque(maxlen=PREROLL_FRAMES)
         self._buf = bytearray()
         self._in_utt = False
@@ -274,7 +275,7 @@ class VoiceLoop:
         with self._lock:
             self._armed = True
             self._reset()
-            self._armed_until = self._clock() + PTT_WAIT_S + 0.4
+            self._armed_until = self._clock() + PTT_WAIT_S + 0.5
         self._earcon("listen")
         self._state("listening")
 
@@ -318,8 +319,20 @@ class VoiceLoop:
                     self._buf.extend(frame)
                     self._voiced += 1 if voiced else 0
                     if ev == "end" or len(self._buf) >= MAX_UTTERANCE_S / FRAME_S * FRAME_BYTES:
-                        pcm = bytes(self._buf)
+                        candidate_pcm = bytes(self._buf)
                         was_armed = self._armed
+                        if was_armed and not self._custom_seg:
+                            is_too_brief = (self._voiced * FRAME_S < MIN_ARMED_VOICED_S)
+                            is_too_quiet = (self._rms(candidate_pcm) < MIN_RMS)
+                            if is_too_brief or is_too_quiet:
+                                if now < self._armed_until:
+                                    self._preroll.clear()
+                                    self._buf = bytearray()
+                                    self._in_utt = False
+                                    self._voiced = 0
+                                    self.seg = SpeechSegmenter(aggressiveness=2, start_frames=4, end_frames=36)
+                                    return
+                        pcm = candidate_pcm
                         if (
                             not was_armed
                             and not self._open_mic()
@@ -410,7 +423,7 @@ class VoiceLoop:
         wake word (or arrive in open-mic dictation); prompted speech (talk key, or
         after a bare 'Relay') is a command as-is."""
         text = (text or "").strip()
-        if not text or (not prompted and is_hallucination(text)):
+        if not text or is_hallucination(text):
             if prompted:
                 self._say("I didn't catch that.")
             return
@@ -473,7 +486,7 @@ class VoiceLoop:
         with self._lock:
             self._armed = True
             self._reset()
-            self._armed_until = self._clock() + PTT_WAIT_S + 1.5
+            self._armed_until = self._clock() + PTT_WAIT_S + 2.0
         self._earcon("listen")
         self._state("listening")
 
