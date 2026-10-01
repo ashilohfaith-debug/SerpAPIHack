@@ -101,17 +101,22 @@ def spoken_combo(combo: str) -> str:
 
 class HotkeyManager:
     def __init__(self) -> None:
-        self._bindings: dict[int, tuple[str, Callable[[], None]]] = {}
+        self._bindings: dict[int, tuple[str, Callable[[], None], Callable[[], None] | None]] = {}
         self._registered: dict[str, bool] = {}
         self._thread: threading.Thread | None = None
         self._tid = 0
         self._ready = threading.Event()
 
-    def add(self, combo: str, callback: Callable[[], None]) -> None:
+    def add(
+        self,
+        combo: str,
+        callback: Callable[[], None],
+        on_release: Callable[[], None] | None = None,
+    ) -> None:
         if self._thread is not None:
             raise RuntimeError("add hotkeys before start()")
         parse_combo(combo)  # validate early
-        self._bindings[len(self._bindings) + 1] = (combo, callback)
+        self._bindings[len(self._bindings) + 1] = (combo, callback, on_release)
 
     def start(self, timeout: float = 3.0) -> dict[str, bool]:
         """Register all hotkeys; returns {combo: registered_ok}."""
@@ -123,7 +128,8 @@ class HotkeyManager:
     def _run(self) -> None:
         user32 = ctypes.windll.user32
         self._tid = ctypes.windll.kernel32.GetCurrentThreadId()
-        for hid, (combo, _cb) in self._bindings.items():
+        for hid, binding in self._bindings.items():
+            combo = binding[0]
             mods, vk = parse_combo(combo)
             ok = bool(user32.RegisterHotKey(None, hid, mods | MOD_NOREPEAT, vk))
             self._registered[combo] = ok
@@ -136,9 +142,17 @@ class HotkeyManager:
                 if msg.message == WM_HOTKEY:
                     binding = self._bindings.get(int(msg.wParam))
                     if binding is not None:
+                        combo, cb, on_rel = binding
                         threading.Thread(
-                            target=self._safe, args=(binding[1],), name="hotkey-action", daemon=True
+                            target=self._safe, args=(cb,), name="hotkey-action", daemon=True
                         ).start()
+                        if on_rel is not None:
+                            threading.Thread(
+                                target=self._watch_release,
+                                args=(combo, on_rel),
+                                name="hotkey-release",
+                                daemon=True,
+                            ).start()
         finally:
             for hid in self._bindings:
                 user32.UnregisterHotKey(None, hid)
@@ -149,6 +163,45 @@ class HotkeyManager:
             cb()
         except Exception as e:
             log.warning("hotkey action failed: %s", e)
+
+    @staticmethod
+    def _watch_release(combo: str, on_release: Callable[[], None]) -> None:
+        import time
+
+        try:
+            user32 = ctypes.windll.user32
+            mods, vk = parse_combo(combo)
+        except Exception:
+            return
+
+        vks = [vk]
+        if mods & MOD_CONTROL:
+            vks.append(0x11)  # VK_CONTROL
+        if mods & MOD_ALT:
+            vks.append(0x12)  # VK_MENU
+        if mods & MOD_SHIFT:
+            vks.append(0x10)  # VK_SHIFT
+        if mods & MOD_WIN:
+            vks.append(0x5B)  # VK_LWIN
+
+        time.sleep(0.06)
+        start = time.monotonic()
+        while True:
+            # Check if all keys in the combo are still pressed down
+            all_held = all(bool(user32.GetAsyncKeyState(k) & 0x8000) for k in vks)
+            if not all_held:
+                break
+            if time.monotonic() - start > 25.0:  # safety cap
+                break
+            time.sleep(0.03)
+
+        duration = time.monotonic() - start
+        # If user held down the 3 buttons together for at least 220ms, release immediately triggers
+        if duration >= 0.22:
+            try:
+                on_release()
+            except Exception as e:
+                log.warning("hotkey release failed: %s", e)
 
     def stop(self) -> None:
         if self._tid:

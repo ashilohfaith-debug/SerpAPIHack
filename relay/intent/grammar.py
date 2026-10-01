@@ -109,6 +109,7 @@ class Kind:
     DICTATION = "dictation"
     LANGUAGE = "language"
     WAKE_WORD = "wake_word"
+    HOLD_TO_TALK = "hold_to_talk"
     HEADPHONES = "headphones"  # "headphone mode on/off/automatic", "I'm using headphones"
     AUDIO_STATUS = "audio_status"  # "where is the sound going", "am I using headphones"
     QUIT = "quit"
@@ -748,6 +749,14 @@ def parse(utterance: str) -> Intent:
     if m:
         v = next(g for g in m.groups() if g)
         return I(Kind.WAKE_WORD, on=v in ("on", "enable"))
+    m_hold = re.search(
+        r"\b(?:turn\s+|switch\s+)?(on|off|enable|disable)\s+hold\s+to\s+talk\b|"
+        r"\bhold\s+to\s+talk\s+(on|off|enable|disable)\b",
+        low,
+    )
+    if m_hold:
+        v = next(g for g in m_hold.groups() if g)
+        return I(Kind.HOLD_TO_TALK, on=v in ("on", "enable"))
     if re.search(
         r"\b(?:cancel|delete|clear|remove|stop)\s+(?:all\s+)?(?:of\s+)?(?:my\s+|the\s+)?"
         r"(?:reminders?|timers?|alarms?)\b",
@@ -1343,7 +1352,12 @@ def parse(utterance: str) -> Intent:
         return I(Kind.OPEN_APP, app=target or m.group(1).strip())
     m = re.match(r"(?:switch to|go to|focus(?: on)?|bring up|show me)\s+(?:the\s+)?(.+)", low)
     if m and not re.search(r"\b(?:result|link|button|field)\b", m.group(1)):
-        return I(Kind.SWITCH_APP, app=m.group(1).strip())
+        tgt = m.group(1).strip()
+        if tgt.lower() in ("shorts", "youtube shorts", "yt shorts"):
+            return I(Kind.OPEN_APP, app="youtube shorts")
+        if tgt.lower() in ("youtube", "yt"):
+            return I(Kind.OPEN_APP, app="youtube")
+        return I(Kind.SWITCH_APP, app=tgt)
     m = re.match(r"(?:type|enter|dictate|insert|write)\s+(?:in\s+|out\s+)?(.+)", keep)
     if m:
         text = payload_after(raw, r"type(?:\s+in)?|enter|dictate|insert|write(?:\s+in)?") or m.group(1)

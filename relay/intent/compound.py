@@ -43,8 +43,8 @@ _WEAK = re.compile(r"\s*,\s*(?:and\s+)?|\s+and\s+", re.I)
 _FOLLOW_UP = re.compile(
     r"^(?:(?:type|write|enter|dictate|insert)\s+.+|save(?: it| the file| this| the document)?(?: as .+)?|press .+|hit enter|"
     r"send(?: it| the message| message)?|read it(?: out| aloud| back| to me)?|select all|"
-    r"copy(?: it| that| all)?|paste(?: it)?|(?:open|click|read|play) the (?:first|second|"
-    r"third|fourth|fifth|last|top) .+)$",
+    r"copy(?: it| that| all)?|paste(?: it)?|(?:open|click|read|play|go to) the (?:first|second|"
+    r"third|fourth|fifth|last|top) .+|(?:go to|goto|open|click|tap|press)\s+(?:on\s+)?(?:the\s+)?[a-z0-9 _-]+)$",
     re.I,
 )
 _CARRY = re.compile(r"^(open|close|switch to|launch|start)\s", re.I)
@@ -117,6 +117,13 @@ def _rewrite(piece: str) -> str:
     )
     if m:
         return f"open {m.group(1).lower()}"
+    m = re.fullmatch(
+        r"(?:go to|goto|open|click)\s+(?:the\s+)?(?:youtube\s+)?shorts(?:\s+(?:in|on)\s+(?:yt|youtube))?",
+        p,
+        re.I,
+    )
+    if m:
+        return "open youtube shorts"
     return p
 
 
@@ -124,6 +131,14 @@ def split_steps(text: str) -> list[str] | None:
     raw = (text or "").strip().rstrip(".!?")
     if not raw or not re.search(r"\band\b|,|\bthen\b|\bafter that\b", raw, re.I):
         return None
+    # natural two-step shapes: open yt and go to shorts -> open youtube, open youtube shorts
+    m = re.fullmatch(
+        r"(?:open|go to)\s+(?:yt|youtube)\s*,?\s+and\s+(?:go to|open|click|watch)\s+(?:the\s+)?(?:youtube\s+)?shorts(?:\s+(?:in|on)\s+(?:yt|youtube))?",
+        raw,
+        re.I,
+    )
+    if m:
+        return ["open youtube", "open youtube shorts"]
     # natural two-step shapes that are really one command
     m = re.fullmatch(
         r"(?:open|go to)\s+youtube\s*,?\s+and\s+(?:play|search for|search|find)"

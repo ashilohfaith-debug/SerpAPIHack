@@ -57,6 +57,7 @@ class Config:
     emergency_hotkey: str = "ctrl+alt+backspace"  # halt everything
     launch_hotkey: str = "ctrl+alt+r"  # desktop shortcut (relay --install)
     speech_rate: float = 1.0
+    hold_to_talk: bool = True
     voice: str = "default"
     language: str = "en"
     # narration

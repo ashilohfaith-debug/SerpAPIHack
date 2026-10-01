@@ -46,10 +46,10 @@ PREROLL_FRAMES = 10  # 300 ms kept before speech onset
 MAX_UTTERANCE_S = 15.0
 PTT_WAIT_S = 8.0  # after the chirp, how long to wait for speech to start (generous window)
 SPEAKING_TAIL_S = 0.45  # ignore the mic this long after RELAY stops talking
-MIN_VOICED_S = 0.45  # "Relay, …" has at least this much actual voice
-MIN_ARMED_VOICED_S = 0.24  # actual spoken commands have at least ~240 ms of voiced frames
+MIN_VOICED_S = 0.50  # "Relay, …" has at least this much actual voice
+MIN_ARMED_VOICED_S = 0.26  # actual spoken commands have at least ~260 ms of voiced frames
 MIN_RMS = 0.004  # absolute floor (~ -48 dBFS)
-NOISE_MARGIN = 2.5  # speech must be this much louder than the room noise
+NOISE_MARGIN = 3.2  # speech must be this much louder than the room noise
 
 _HALLUCINATIONS = {
     "",
@@ -278,6 +278,36 @@ class VoiceLoop:
             self._armed_until = self._clock() + PTT_WAIT_S + 0.5
         self._earcon("listen")
         self._state("listening")
+
+    def finish_push_to_talk(self) -> None:
+        """Called immediately when talk keys are released during hold-to-talk.
+        Finalizes captured speech without waiting for silence timeouts or picking up room noise."""
+        pcm = None
+        was_armed = False
+        with self._lock:
+            if not self._armed:
+                return
+            was_armed = True
+            self._armed = False
+            # Grab all captured audio
+            if len(self._buf) >= int(0.18 / FRAME_S * FRAME_BYTES) or (self._in_utt and len(self._buf) > 0):
+                pcm = bytes(self._buf)
+            elif self._preroll:
+                pcm = bytes(b"".join(self._preroll))
+            self._reset()
+
+        if pcm is not None and len(pcm) >= int(0.24 / FRAME_S * FRAME_BYTES):
+            self._silent_tries = 0
+            self._earcon("heard")
+            self._state("transcribing")
+            if self._threaded:
+                threading.Thread(
+                    target=self.on_utterance, args=(pcm, True), name="stt", daemon=True
+                ).start()
+            else:
+                self.on_utterance(pcm, True)
+        else:
+            self._state("idle")
 
     # ---- audio ----
     def on_frame(self, frame: bytes) -> None:

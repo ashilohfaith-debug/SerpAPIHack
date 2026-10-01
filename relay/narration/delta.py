@@ -63,7 +63,8 @@ def diff(old: ScreenSnapshot | None, new: ScreenSnapshot | None) -> list[str]:
     for t in sorted(new_dlg - old_dlg):
         dlg = next((d for d in new.dialogs if d.title == t), None)
         btns = f" Options: {', '.join(dlg.buttons)}." if dlg and dlg.buttons else ""
-        changes.append(f"A dialog opened: {t}.{btns}")
+        next_step = f" Say click {dlg.buttons[0]} to proceed." if dlg and dlg.buttons else " Say what you'd like to do."
+        changes.append(f"A dialog opened: {t}.{btns}{next_step}")
     for t in sorted(old_dlg - new_dlg):
         changes.append(f"The {t} dialog closed.")
 
@@ -72,19 +73,14 @@ def diff(old: ScreenSnapshot | None, new: ScreenSnapshot | None) -> list[str]:
     if nf and nf != of:
         name, role = nf
         if name and not (switched and name == new.foreground_title):
-            changes.append(f"Focus is now on {role} '{name}'.")
+            action_hint = ""
+            if role in ("Edit", "Document"):
+                action_hint = " You can start typing."
+            elif role in ("Button", "MenuItem", "TabItem", "Hyperlink"):
+                action_hint = f" Say click {name} to select it."
+            changes.append(f"Focus is now on {role} '{name}'.{action_hint}")
         elif not name and role not in _GENERIC_ROLES:
             changes.append(f"Focus is now on a {role}.")
-
-    if not switched:  # a whole new window: its controls aren't "changes" to list
-        old_named = {(e.name, e.role) for e in meaningful(old.elements) if e.name}
-        new_named = {(e.name, e.role) for e in meaningful(new.elements) if e.name}
-        appeared = [n for (n, _) in sorted(new_named - old_named)][:_MAX_LISTED]
-        if appeared:
-            changes.append("New: " + ", ".join(appeared) + ".")
-        disappeared = [n for (n, _) in sorted(old_named - new_named)][:_MAX_LISTED]
-        if disappeared:
-            changes.append("No longer there: " + ", ".join(disappeared) + ".")
 
     # value change on the focused element (e.g. text field content)
     if (

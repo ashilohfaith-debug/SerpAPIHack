@@ -61,6 +61,8 @@ def normalize(text: str, strip_trailing: bool = True) -> str:
     # Common STT recognition slips and acoustic confusions
     t = re.sub(r"\bno\s+pad\b", "notepad", t)
     t = re.sub(r"\byou\s+tube\b", "youtube", t)
+    t = re.sub(r"\byt\b", "youtube", t, flags=re.IGNORECASE)
+    t = re.sub(r"\bgo\s+tp\b", "go to", t, flags=re.IGNORECASE)
     t = re.sub(r"\bfire\s+fox\b", "firefox", t)
     t = re.sub(r"\bwhats\s+app\b", "whatsapp", t)
     t = re.sub(r"\b(?:my computer|this pc|file manager)\b", "file explorer", t)

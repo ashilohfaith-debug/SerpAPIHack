@@ -125,15 +125,29 @@ def routes_from_config(cfg) -> list[Route]:
             )
     gemini_k = os.environ.get("GEMINI_API_KEY", "").strip() or get_secret("GEMINI_API_KEY", "").strip()
     if gemini_k and "googleapis.com" not in url.lower():
+        for gm in ["gemini-3.8-flash", "gemini-flash-latest"]:
+            routes.append(
+                Route(
+                    name=f"gemini-{gm}",
+                    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                    api_key=gemini_k,
+                    model=gm,
+                    timeout=float(cfg.llm_timeout),
+                    extra_headers=headers,
+                    ttft_hint=1.2,
+                )
+            )
+    groq_k = os.environ.get("GROQ_API_KEY", "").strip() or get_secret("GROQ_API_KEY", "").strip()
+    if groq_k and "groq.com" not in url.lower():
         routes.append(
             Route(
-                name="gemini-backup",
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                api_key=gemini_k,
-                model="gemini-flash-latest",
+                name="groq-fast",
+                base_url="https://api.groq.com/openai/v1",
+                api_key=groq_k,
+                model="qwen/qwen3.8-27b",
                 timeout=float(cfg.llm_timeout),
                 extra_headers=headers,
-                ttft_hint=1.5,
+                ttft_hint=0.8,
             )
         )
     return routes

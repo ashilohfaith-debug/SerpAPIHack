@@ -344,6 +344,18 @@ class Skills:
             else f"Wake word off. I'll only listen when you press {key}."
         )
 
+    def k_hold_to_talk(self, i):
+        on = bool(i.slots.get("on"))
+        self.s.hold_to_talk = on
+        self.s.store.set_pref("hold_to_talk", "1" if on else "0")
+        if self.s.bus is not None:
+            self.s.bus.emit("config.changed", key="hold_to_talk", value=on)
+        self.say(
+            "Hold to talk enabled. Press and hold Control, Alt, and Space while speaking, then release to execute."
+            if on
+            else "Hold to talk disabled. Control, Alt, and Space will work with a single tap."
+        )
+
     def k_headphones(self, i):
         if self.s.audio is None:
             self.say("I can't change headphone mode here.")

@@ -210,6 +210,12 @@ class Session:
         except ValueError:
             pass
 
+        self.hold_to_talk = True
+        try:
+            self.hold_to_talk = self.store.get_pref("hold_to_talk", default="1") in ("1", "true", "True")
+        except Exception:
+            pass
+
         self._last_snapshot = None
         if self.bus is not None:
             def _on_perception_change(e):
@@ -498,6 +504,13 @@ class Session:
             return self._handle_workspace(intent)
         if intent.kind in _TEXT_KINDS:
             return self._handle_text_editing(intent)
+        if intent.kind == Kind.ASK:
+            return self.ask(intent.slots.get("text") or utterance)
+        if intent.kind == Kind.SUMMARIZE:
+            page_text = ""
+            if self.worker and self.worker.live:
+                page_text = "\n".join(e.name for e in self.worker.live.elements if e.name)
+            return self.ask(utterance, page_text=page_text)
         self.cancel.clear()
         handled = self.skills.handle(intent)
         if handled is not None:

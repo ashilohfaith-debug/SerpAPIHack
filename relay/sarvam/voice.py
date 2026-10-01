@@ -88,7 +88,9 @@ class SarvamTTS:
         self.language = language
         self.speaker = speaker
         self.model = model
-        self.rate = getattr(offline_tts, "rate", 1.0)
+        self.rate = getattr(offline_tts, "rate", 0.88)
+        if abs(self.rate - 1.0) < 1e-3:
+            self.rate = 0.88
         self._fb = _Fallback(on_fallback)
 
     def set_rate(self, rate: float) -> None:

@@ -189,7 +189,16 @@ class RelayApp:
             "narration.say", lambda e: self.palette and self.palette.said(e.data.get("text", ""))
         )
         self.hotkeys = HotkeyManager()
-        self.hotkeys.add(self.cfg.push_to_talk_hotkey, self.loop.push_to_talk)
+
+        def _on_talk_release():
+            if getattr(self.cfg, "hold_to_talk", True) or getattr(self.session, "hold_to_talk", True):
+                self.loop.finish_push_to_talk()
+
+        self.hotkeys.add(
+            self.cfg.push_to_talk_hotkey,
+            self.loop.push_to_talk,
+            on_release=_on_talk_release,
+        )
         self.hotkeys.add(self.cfg.stop_hotkey, self.session.stop_speaking)
         self.hotkeys.add(self.cfg.emergency_hotkey, self.session.emergency_stop)
         self.ipc = None
