@@ -67,6 +67,37 @@ def site_url(name: str) -> str | None:
     return None
 
 
+SEARCH_SITES = {
+    "gmail": "https://mail.google.com/mail/u/0/#search/{q}",
+    "mail": "https://mail.google.com/mail/u/0/#search/{q}",
+    "google": "https://www.google.com/search?q={q}",
+    "youtube": "https://www.youtube.com/results?search_query={q}",
+    "yt": "https://www.youtube.com/results?search_query={q}",
+    "twitter": "https://x.com/search?q={q}",
+    "x": "https://x.com/search?q={q}",
+    "github": "https://github.com/search?q={q}",
+    "reddit": "https://www.reddit.com/search/?q={q}",
+    "amazon": "https://www.amazon.in/s?k={q}",
+    "flipkart": "https://www.flipkart.com/search?q={q}",
+    "linkedin": "https://www.linkedin.com/search/results/all/?keywords={q}",
+    "instagram": "https://www.instagram.com/explore/tags/{q}",
+    "maps": "https://maps.google.com/maps?q={q}",
+    "google maps": "https://maps.google.com/maps?q={q}",
+    "wikipedia": "https://en.wikipedia.org/wiki/Special:Search?search={q}",
+    "news": "https://news.google.com/search?q={q}",
+    "google news": "https://news.google.com/search?q={q}",
+    "spotify": "https://open.spotify.com/search/{q}",
+    "netflix": "https://www.netflix.com/search?q={q}",
+}
+
+
+def search_site_url(site_name: str, query: str) -> str | None:
+    s = site_name.lower().strip()
+    if s in SEARCH_SITES:
+        return SEARCH_SITES[s].format(q=quote_plus(query.strip()))
+    return None
+
+
 def search_url(query: str) -> str:
     return "https://www.google.com/search?q=" + quote_plus(query.strip())
 

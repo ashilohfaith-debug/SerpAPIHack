@@ -129,6 +129,7 @@ class TransparentRunner:
         engine=None,
         on_confirm_needed=None,
         mode: str = "quick",
+        ocr=None,
     ) -> None:
         self.ex = executor
         self.worker = worker
@@ -140,6 +141,7 @@ class TransparentRunner:
         self.engine = engine
         self._on_confirm_needed = on_confirm_needed
         self.mode = mode
+        self.ocr = ocr
         self.last_said = ""
         # when NVDA/JAWS/Narrator is running it already announces focus moves; saying
         # them again would talk over it (RELAY still reports everything else)
@@ -513,6 +515,10 @@ class TransparentRunner:
             el = p["deep_find"]()
             if el is not None:
                 err = None
+        if el is None and self.ocr is not None and p.get("target"):
+            el = self._find_via_ocr(p.get("target"), ordinal=p.get("ordinal"))
+            if el is not None:
+                err = None
         if el is None:
             return None, _REF_ERROR_SPEECH.get(err, "I couldn't do that.")
         if self.engine is not None and self._on_confirm_needed is not None:
@@ -562,6 +568,83 @@ class TransparentRunner:
             payload: dict = {}
 
         return self._narrate_outcome(_S, outcome, "", deltas)
+
+    def _find_via_ocr(self, target: str, ordinal: int | None = None) -> UIElement | None:
+        if not target or self.ocr is None:
+            return None
+        import re
+        raw_target = (target or "").strip()
+        cleaned = re.sub(
+            r"\b(?:the|button|link|icon|tab|menu|field|result|on|named|called)\b",
+            " ",
+            raw_target,
+            flags=re.I,
+        ).strip()
+        cleaned = " ".join(cleaned.split()).lower()
+        if not cleaned:
+            cleaned = raw_target.lower()
+
+        from relay.system import windows
+        import ctypes
+        from ctypes import wintypes
+        fg = windows.foreground()
+        region = None
+        hwnd = None
+        if fg is not None:
+            try:
+                hwnd = fg.hwnd
+                r = wintypes.RECT()
+                if ctypes.windll.user32.GetWindowRect(fg.hwnd, ctypes.byref(r)):
+                    region = (max(0, r.left), max(0, r.top), r.right, r.bottom)
+            except Exception:
+                pass
+
+        try:
+            regions = self.ocr.read_screen(region=region, hwnd=hwnd)
+            if not regions and region is not None:
+                regions = self.ocr.read_screen()
+        except Exception as e:
+            log.debug("OCR find in runner failed: %s", e)
+            return None
+
+        if not regions:
+            return None
+
+        candidates = []
+        for e in regions:
+            name = (e.name or "").strip().lower()
+            if not name:
+                continue
+            score = 0
+            if name == cleaned:
+                score = 100
+            elif cleaned in name:
+                score = 80
+            elif name in cleaned:
+                score = 75
+            else:
+                target_words = cleaned.split()
+                name_words = name.split()
+                overlap = sum(1 for w in target_words if w in name_words or any(w in nw for nw in name_words))
+                if overlap > 0:
+                    score = 50 + int(20 * (overlap / len(target_words)))
+            if score > 0:
+                candidates.append((score, e))
+
+        if not candidates:
+            return None
+
+        if ordinal is not None and ordinal > 0:
+            top_score = max(c[0] for c in candidates)
+            pool = [c[1] for c in candidates if c[0] >= top_score - 20]
+            pool.sort(key=lambda el: (el.bbox[1], el.bbox[0]))
+            idx = ordinal - 1
+            if 0 <= idx < len(pool):
+                return pool[idx]
+            return pool[0] if pool else None
+
+        candidates.sort(key=lambda c: (c[0], c[1].states.get("ocr_confidence", 0)), reverse=True)
+        return candidates[0][1]
 
     # --- answering intents (no OS action) ---
     def _answer(self, step) -> StepResult:

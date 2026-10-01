@@ -793,22 +793,27 @@ class Skills:
 
     def k_email(self, i):
         from relay.system import web
+        from urllib.parse import quote
 
         if i.slots.get("action") == "compose":
             to = i.slots.get("to", "")
+            subject = i.slots.get("subject", "")
+            body = i.slots.get("body", "")
             addr = to.replace(" at ", "@").replace(" dot ", ".").replace(" ", "")
-            url = "https://mail.google.com/mail/?view=cm&fs=1" + (
-                f"&to={addr}" if "@" in addr else ""
-            )
-            self.say(
-                "Opening a new email in Gmail."
-                + (
-                    ""
-                    if "@" in addr
-                    else " Say type, and the email address, to fill in who it's to."
-                )
-            )
-            return self._open_site(url, "a new email")
+            params = []
+            if "@" in addr or addr:
+                params.append(f"to={quote(addr)}")
+            if subject:
+                params.append(f"su={quote(subject)}")
+            if body:
+                params.append(f"body={quote(body)}")
+            query_str = ("&" + "&".join(params)) if params else ""
+            url = f"https://mail.google.com/mail/?view=cm&fs=1{query_str}"
+            desc = "a new email"
+            if addr:
+                desc += f" to {addr}"
+            self.say(f"Opening a new email in Gmail{f' to {addr}' if addr else ''}.")
+            return self._open_site(url, desc)
         url = web.site_url("gmail") or "https://mail.google.com"
         return self._open_site(url, "Gmail")
 
@@ -1240,13 +1245,134 @@ class Skills:
         self.s._on_confirm_needed(dec, "send", retry)
         return True
 
+    def _ocr_find(self, target: str, ordinal: int | None = None) -> UIElement | None:
+        if not target or self.s.ocr is None:
+            return None
+        import re
+        raw_target = (target or "").strip()
+        cleaned = re.sub(
+            r"\b(?:the|button|link|icon|tab|menu|field|result|on|named|called)\b",
+            " ",
+            raw_target,
+            flags=re.I,
+        ).strip()
+        cleaned = " ".join(cleaned.split()).lower()
+        if not cleaned:
+            cleaned = raw_target.lower()
+
+        from relay.system import windows
+        import ctypes
+        from ctypes import wintypes
+        fg = windows.foreground()
+        region = None
+        hwnd = None
+        if fg is not None:
+            try:
+                hwnd = fg.hwnd
+                r = wintypes.RECT()
+                if ctypes.windll.user32.GetWindowRect(fg.hwnd, ctypes.byref(r)):
+                    region = (max(0, r.left), max(0, r.top), r.right, r.bottom)
+            except Exception:
+                pass
+
+        try:
+            regions = self.s.ocr.read_screen(region=region, hwnd=hwnd)
+            if not regions and region is not None:
+                regions = self.s.ocr.read_screen()
+        except Exception as e:
+            log.debug("OCR find failed: %s", e)
+            return None
+
+        if not regions:
+            return None
+
+        candidates = []
+        for e in regions:
+            name = (e.name or "").strip().lower()
+            if not name:
+                continue
+            score = 0
+            if name == cleaned:
+                score = 100
+            elif cleaned in name:
+                score = 80
+            elif name in cleaned:
+                score = 75
+            else:
+                target_words = cleaned.split()
+                name_words = name.split()
+                overlap = sum(1 for w in target_words if w in name_words or any(w in nw for nw in name_words))
+                if overlap > 0:
+                    score = 50 + int(20 * (overlap / len(target_words)))
+            if score > 0:
+                candidates.append((score, e))
+
+        if not candidates:
+            return None
+
+        if ordinal is not None and ordinal > 0:
+            top_score = max(c[0] for c in candidates)
+            pool = [c[1] for c in candidates if c[0] >= top_score - 20]
+            pool.sort(key=lambda el: (el.bbox[1], el.bbox[0]))
+            idx = ordinal - 1
+            if 0 <= idx < len(pool):
+                return pool[idx]
+            return pool[0] if pool else None
+
+        candidates.sort(key=lambda c: (c[0], c[1].states.get("ocr_confidence", 0)), reverse=True)
+        return candidates[0][1]
+
     def k_send(self, i):
-        step = Step(
-            "press", "send the message", {"key": "enter", "announce": "Sending.", "done_text": ""}
+        from relay.system import windows
+        fg = windows.foreground()
+        app = (fg.app or "").lower() if fg else ""
+
+        # 1. Browser / Web clients (Gmail, Outlook Web, etc.) or desktop mail clients
+        if app in BROWSERS or app in ("outlook.exe", "olk.exe", "thunderbird.exe", "hxoutlook.exe"):
+            send_btn = self._ocr_find("send")
+            if send_btn is not None:
+                return self.run(
+                    Step(
+                        "activate",
+                        "click Send",
+                        {"target": "send", "deep_find": lambda: send_btn, "announce": "Sending."},
+                    )
+                )
+            return self.run(
+                Step(
+                    "hotkey",
+                    "send the email",
+                    {"keys": ["ctrl", "enter"], "announce": "Sending.", "done_text": "Sent."},
+                )
+            )
+
+        # 2. Chat apps (WhatsApp, Telegram, Teams, Slack, Discord, Signal)
+        if app in MESSAGING:
+            step = Step(
+                "press", "send the message", {"key": "enter", "announce": "Sending.", "done_text": "Sent."}
+            )
+            if self._send_guard(["enter"], lambda: self.s.runner.run([step])):
+                return []
+            return self.run(step)
+
+        # 3. Any other app: try finding Send on screen via OCR
+        send_btn = self._ocr_find("send")
+        if send_btn is not None:
+            return self.run(
+                Step(
+                    "activate",
+                    "click Send",
+                    {"target": "send", "deep_find": lambda: send_btn, "announce": "Sending."},
+                )
+            )
+
+        return self.run(
+            Step(
+                "hotkey",
+                "send",
+                {"keys": ["ctrl", "enter"], "announce": "Sending.", "done_text": "Sent."},
+            )
         )
-        if self._send_guard(["enter"], lambda: self.s.runner.run([step])):
-            return []
-        self.say("There's no message app in front. Open WhatsApp or another chat app first.")
 
     def k_press_key(self, i):
         key, count = i.slots["key"], i.slots.get("count", 1)
@@ -1345,26 +1471,36 @@ class Skills:
         )
 
     # ---------------------------------------------------------------- web
-    def _search(self, query: str):
+    def _search(self, query: str, site: str | None = None):
         from relay.system import web, windows
 
-        url = web.search_url(query)
+        if site:
+            url = web.search_site_url(site, query)
+            label = site.capitalize()
+        else:
+            url = None
+            label = "Google"
+
+        if not url:
+            url = web.search_url(query)
+            label = "Google"
+
+        announce = f"Searching {label} for {query}."
         return self.run(
             Step(
                 "open_uri",
-                f"search the web for {query}",
+                f"search {label} for {query}",
                 {
                     "uri": url,
-                    "label": "Google",
+                    "label": label,
                     "check": lambda: bool(
                         (w := windows.foreground())
                         and w.app.lower() in BROWSERS
-                        and "google" in w.title.lower()
+                        and (site.lower() in w.title.lower() if site else "google" in w.title.lower())
                     ),
-                    "announce": f"Searching the web for {query}.",
-                    "ok_text": "The search results are open. Say read the page, or list the links.",
-                    "fail_text": "I asked your browser to search, but I couldn't confirm the results "
-                    "loaded yet",
+                    "announce": announce,
+                    "ok_text": f"Search results in {label} are open. Say read the page, or list the links.",
+                    "fail_text": f"I opened {label} to search, but I couldn't confirm the results loaded yet.",
                     "speak_detail": True,
                     "timeout": 10.0,
                 },
@@ -1372,30 +1508,65 @@ class Skills:
         )
 
     def k_web_search(self, i):
-        return self._search(i.slots.get("query", ""))
+        return self._search(i.slots.get("query", ""), site=i.slots.get("site"))
 
     def k_youtube(self, i):
         from relay.system import web, windows
 
-        q = i.slots.get("query", "")
-        return self.run(
-            Step(
-                "open_uri",
-                f"search YouTube for {q}",
-                {
-                    "uri": web.youtube_url(q),
-                    "label": "YouTube",
-                    "check": lambda: bool(
-                        (w := windows.foreground()) and "youtube" in w.title.lower()
-                    ),
-                    "announce": f"Searching YouTube for {q}.",
-                    "ok_text": "YouTube results are open. Say list the links, then open the first "
-                    "link to play one.",
-                    "speak_detail": True,
-                    "timeout": 10.0,
-                },
-            )
+        q = i.slots.get("query", "").strip()
+        if not q:
+            url = web.site_url("youtube") or "https://www.youtube.com"
+            return self._open_site(url, "YouTube")
+
+        def _play_first_video():
+            time.sleep(1.8)
+            # 1. Try OCR to click the first video title in search results
+            if self.s.ocr is not None:
+                regions = self.s.ocr.read_screen()
+                header_words = {"youtube", "search", "filters", "explore", "subscriptions", "all", "shorts"}
+                for el in regions:
+                    name_low = el.name.lower().strip()
+                    if name_low not in header_words and el.bbox[1] > 130 and len(name_low) > 3:
+                        self.s.executor.invoke_element(el)
+                        return True, f"Playing {q}."
+            # 2. Try links
+            links = self._items("links")
+            if links:
+                for lnk in links:
+                    if len(lnk.name) > 5 and lnk.name.lower() not in ("youtube", "home", "shorts", "subscriptions"):
+                        el = UIElement(uid=0, name=lnk.name, role="Hyperlink", bbox=lnk.bbox)
+                        self.s.executor.invoke_element(el)
+                        return True, f"Playing {q}."
+            # 3. Fallback: hit Enter to activate
+            self.s.executor.press("enter")
+            return True, f"Opened {q} on YouTube."
+
+        step1 = Step(
+            "open_uri",
+            f"open YouTube for {q}",
+            {
+                "uri": web.youtube_url(q),
+                "label": "YouTube",
+                "check": lambda: bool(
+                    (w := windows.foreground()) and "youtube" in w.title.lower()
+                ),
+                "announce": f"Playing {q} on YouTube.",
+                "ok_text": f"Playing {q} on YouTube.",
+                "speak_detail": True,
+                "timeout": 10.0,
+            },
         )
+        step2 = Step(
+            "system",
+            "start video playback",
+            {
+                "what": "YouTube playback",
+                "do": _play_first_video,
+                "label": "Play first video",
+                "check": lambda: (True, f"Playing {q}."),
+            },
+        )
+        return self.run(step1, step2)
 
     # ---------------------------------------------------------------- files
     def k_find_file(self, i):
@@ -1750,7 +1921,7 @@ class Skills:
             if role in ("link", "result"):
                 items = self._items("links")
                 if not items:
-                    return None
+                    return self._ocr_find(target or "link", ordinal)
                 if ordinal is not None:
                     idx = ordinal - 1 if ordinal > 0 else len(items) - 1
                     it = items[idx] if 0 <= idx < len(items) else None
@@ -1760,7 +1931,7 @@ class Skills:
                 if it is not None:
                     self.remember_list("links", items)
                     return UIElement(uid=0, name=it.name, role="Hyperlink", bbox=it.bbox)
-                return None
+                return self._ocr_find(target or "link", ordinal)
             if target and ordinal is None:
                 from relay.perception import text as ptext
 
@@ -1769,6 +1940,9 @@ class Skills:
                 if ok and found:
                     it = found[0]
                     return UIElement(uid=0, name=it.name, role=it.role, bbox=it.bbox)
+                return self._ocr_find(bare, ordinal)
+            if target and ordinal is not None:
+                return self._ocr_find(target, ordinal)
             return None
 
         payload = dict(s)

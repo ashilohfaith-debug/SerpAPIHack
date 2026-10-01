@@ -42,9 +42,12 @@ _STRONG = re.compile(
 _WEAK = re.compile(r"\s*,\s*(?:and\s+)?|\s+and\s+", re.I)
 _FOLLOW_UP = re.compile(
     r"^(?:(?:type|write|enter|dictate|insert)\s+.+|save(?: it| the file| this| the document)?(?: as .+)?|press .+|hit enter|"
-    r"send(?: it| the message| message)?|read it(?: out| aloud| back| to me)?|select all|"
-    r"copy(?: it| that| all)?|paste(?: it)?|(?:open|click|read|play|go to) the (?:first|second|"
-    r"third|fourth|fifth|last|top) .+|(?:go to|goto|open|click|tap|press)\s+(?:on\s+)?(?:the\s+)?[a-z0-9 _-]+)$",
+    r"send(?: (?:the|this|my)?\s*(?:email|mail|message|reply|text|it))?|"
+    r"read (?:it|the page|the screen|the document|the text|all|this)(?: out| aloud| back| to me)?|"
+    r"select all|copy(?: it| that| all)?|paste(?: it)?|"
+    r"(?:open|click|read|play|go to) the (?:first|second|third|fourth|fifth|last|top) .+|"
+    r"(?:go to|goto|open|click|tap|press)\s+(?:on\s+)?(?:the\s+)?[a-z0-9 _-]+|"
+    r"play\s+.+)$",
     re.I,
 )
 _CARRY = re.compile(r"^(open|close|switch to|launch|start)\s", re.I)

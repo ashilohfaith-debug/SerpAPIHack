@@ -653,13 +653,34 @@ def _laptop_control(low: str, keep: str):
         low,
     ):
         return Kind.EMAIL, {"action": "check"}
-    m = re.search(
-        r"\b(?:send|write|compose|new)\s+(?:an?\s+)?(?:e-?mail|mail)"
-        r"(?:\s+to\s+(.+))?$",
+    # email (compose to someone with optional subject and body)
+    m = re.match(
+        r"^(?:send|write|compose|new)\s+(?:an?\s+)?(?:e-?mail|mail)\s+to\s+(.+)$",
         low,
     )
     if m:
-        return Kind.EMAIL, {"action": "compose", "to": (m.group(1) or "").strip()}
+        rest = m.group(1).strip()
+        to_part = rest
+        subject = ""
+        body = ""
+        sub_m = re.search(
+            r"\b(?:with subject|subject|about)\s+(.+?)(?:\s+(?:saying|and message|message|and body|body)\s+(.+))?$",
+            rest,
+            re.I,
+        )
+        if sub_m:
+            to_part = rest[:sub_m.start()].strip()
+            subject = sub_m.group(1).strip()
+            body = (sub_m.group(2) or "").strip()
+        else:
+            body_m = re.search(r"\b(?:saying|and message|message|and body|body)\s+(.+)$", rest, re.I)
+            if body_m:
+                to_part = rest[:body_m.start()].strip()
+                body = body_m.group(1).strip()
+        return Kind.EMAIL, {"action": "compose", "to": to_part, "subject": subject, "body": body}
+
+    if re.fullmatch(r"(?:compose|write|new)\s+(?:an?\s+)?(?:e-?mail|mail)", low):
+        return Kind.EMAIL, {"action": "compose", "to": "", "subject": "", "body": ""}
     return None
 
 
@@ -1080,16 +1101,48 @@ def parse(utterance: str) -> Intent:
     if re.search(r"\b(?:auto(?:matic)?|same) language\b|\breply in the language i speak\b", low):
         return I(Kind.LANGUAGE, language="auto")
 
-    # ---- web ----
+    if re.search(
+        r"\b(?:go to|goto|open|watch|click)\s+(?:the\s+)?(?:youtube\s+)?shorts(?:\s+(?:in|on)\s+(?:yt|youtube))?\b|^shorts$",
+        low,
+    ):
+        return I(Kind.OPEN_APP, app="youtube shorts")
     m = re.match(
         r"^(?:search|look up|find)\s+(?:on\s+)?youtube\s+(?:for\s+)?(.+)$|"
         r"^youtube\s+(?:search\s+)?(?:for\s+)?(.+)$|"
-        r"^(?:play|watch|search|find|open)\s+(.+?)\s+on\s+youtube$",
+        r"^(?:play|watch|search|find|open)\s+(.+?)\s+on\s+youtube$|"
+        r"^(?:play|watch)\s+(.+)$",
         keep,
     )
     if m:
         q = re.sub(r"\s+please$", "", next(g for g in m.groups() if g).strip())
-        return I(Kind.YOUTUBE, query=q)
+        if q.lower() not in ("music", "song", "songs", "video", "media", "playback", "track", "audio", "pause"):
+            return I(Kind.YOUTUBE, query=q)
+    # Platform-targeted searches (Gmail, Twitter, GitHub, Reddit, Amazon, etc.)
+    _PLATFORMS = r"gmail|mail|twitter|x|github|reddit|amazon|flipkart|linkedin|instagram|youtube|yt|google|maps|wikipedia|spotify|netflix"
+    m_plat1 = re.match(
+        rf"^(?:search|look up|find)\s+(?:for\s+)?(.+?)\s+(?:in|on)\s+({_PLATFORMS})$",
+        keep,
+        re.I,
+    )
+    if m_plat1:
+        q = re.sub(r"\s+please$", "", m_plat1.group(1).strip())
+        site = m_plat1.group(2).lower().strip()
+        if site in ("youtube", "yt"):
+            return I(Kind.YOUTUBE, query=q)
+        return I(Kind.WEB_SEARCH, query=q, site=site)
+
+    m_plat2 = re.match(
+        rf"^(?:search|look up|find)\s+({_PLATFORMS})\s+(?:for\s+)?(.+)$",
+        keep,
+        re.I,
+    )
+    if m_plat2:
+        site = m_plat2.group(1).lower().strip()
+        q = re.sub(r"\s+please$", "", m_plat2.group(2).strip())
+        if site in ("youtube", "yt"):
+            return I(Kind.YOUTUBE, query=q)
+        return I(Kind.WEB_SEARCH, query=q, site=site)
+
     m = re.match(
         r"^(?:search|google|look up|web search|search online|search the (?:web|internet))"
         r"(?:\s+(?:the web|google|online|the internet|on google|in google))?"
@@ -1137,7 +1190,10 @@ def parse(utterance: str) -> Intent:
         if rx.match(low):
             return I(Kind.SHORTCUT, keys=list(keys), description=desc)
 
-    if re.fullmatch(r"send(?: (?:the|this|my|that))?(?: (?:message|reply|text|it))?(?: now)?", low):
+    if re.fullmatch(
+        r"send(?: (?:the|this|my|that))?(?: (?:email|mail|message|reply|text|it))?(?: now)?",
+        low,
+    ):
         return I(Kind.SEND)
 
     # ---- keys ----
@@ -1281,11 +1337,21 @@ def parse(utterance: str) -> Intent:
         return I(Kind.WORKSPACE_DIFF)
 
     # ---- content generation vs literal typing (Point 49) ----
-    if re.search(r"\b(?:draft|compose)\b", low) or re.search(
-        r"\bwrite (?:an?|the)?\s*(?:email|essay|letter|story|paragraph|code|function|script|summary|response|message|assignment|draft|outline)\b",
-        low,
-    ):
-        return I(Kind.COMPOSE, prompt=raw.strip())
+    if not re.match(r"^(?:click|press|tap|select|open|activate)\b", low):
+        if (
+            re.search(r"\b(?:draft|compose)\b", low)
+            or re.search(
+                r"\b(?:write|generate|create)\s+(?:an?|the)?\s*(?:[a-z0-9+#.-]+\s+)?(?:code|function|script|program|class|algorithm|method)\b",
+                low,
+            )
+            or re.search(
+                r"\bwrite (?:an?|the)?\s*(?:email|essay|letter|story|paragraph|summary|response|message|assignment|draft|outline)\b",
+                low,
+            )
+            or re.search(r"\bwrite code\b", low)
+        ):
+            is_c = bool(re.search(r"\bcode|function|script|program|class|algorithm|method\b", low))
+            return I(Kind.COMPOSE, prompt=raw.strip(), is_code=is_c)
 
     # ---- text editing & cursor navigation (Points 30-37) ----
     # 1. Selection
@@ -1353,7 +1419,7 @@ def parse(utterance: str) -> Intent:
     m = re.match(r"(?:switch to|go to|focus(?: on)?|bring up|show me)\s+(?:the\s+)?(.+)", low)
     if m and not re.search(r"\b(?:result|link|button|field)\b", m.group(1)):
         tgt = m.group(1).strip()
-        if tgt.lower() in ("shorts", "youtube shorts", "yt shorts"):
+        if re.search(r"\bshorts\b", tgt.lower()):
             return I(Kind.OPEN_APP, app="youtube shorts")
         if tgt.lower() in ("youtube", "yt"):
             return I(Kind.OPEN_APP, app="youtube")
