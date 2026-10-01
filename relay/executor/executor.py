@@ -204,12 +204,17 @@ class Executor:
 
         return foreground_blocks_input()
 
-    def type_text(self, text: str) -> ActionOutcome:
-        action = Action(kind="type", text=text)
+    def type_text(self, text: str, is_password: bool = False) -> ActionOutcome:
+        action = Action(kind="type", text=text, is_password_field=is_password)
 
         def do():
             if self._input_blocked():
                 return False, INPUT_BLOCKED
+            snap = getattr(self.worker, "live", None)
+            if snap and snap.focus:
+                f_pwd = bool(snap.focus.states.get("is_password") or snap.focus.states.get("protected"))
+                if f_pwd and not is_password:
+                    return False, "focused control is a password field; refusing unconfirmed text entry"
             self.input.type_text(text)
             return True, f"typed {len(text)} chars"
 

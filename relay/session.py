@@ -197,6 +197,23 @@ class Session:
         except ValueError:
             pass
 
+        self._last_snapshot = None
+        if self.bus is not None:
+            def _on_perception_change(e):
+                if self.dictation or self._in_steps:
+                    return
+                snap = self.worker.live
+                if snap is not None and self._last_snapshot is not None:
+                    from relay.narration.delta import diff
+                    lines = diff(self._last_snapshot, snap)
+                    if lines:
+                        prio = pol.Priority.CONFIRMATION if snap.dialogs else pol.Priority.BACKGROUND
+                        if pol.should_speak(prio, self.narration_mode):
+                            self.say(" ".join(lines[:2]), prio)
+                self._last_snapshot = snap
+
+            self.bus.subscribe("perception.change", _on_perception_change)
+
     # ---- narration ----
     def say(self, text: str, priority: int = pol.Priority.TASK) -> None:
         self.runner.say(text, priority)
@@ -986,6 +1003,10 @@ class Session:
             self.say("Cancelling.", _CONF)
         elif command == Command.STOP_TALKING:
             self.stop_speaking()
+            self.cancel.set()
+            self._pending = None
+            self._offer = None
+            self._capture = None
         elif command == Command.PAUSE:
             self.cancel.set()
             was = self.reader.stop()

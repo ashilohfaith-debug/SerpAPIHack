@@ -965,8 +965,9 @@ def parse(utterance: str) -> Intent:
     if re.search(r"\bwhat(?:'s| has)? changed|what(?:'s| is)? different\b", low):
         return I(Kind.WHAT_CHANGED)
     if re.search(
-        r"\b(?:what|which)(?: are)?(?: my)? options\b|\bwhat can i (?:click|choose|press)"
-        r"\b|\bwhat buttons\b",
+        r"\b(?:what|which)(?: are)?(?: my)? (?:options|choices)\b|"
+        r"\bwhat can i (?:click|choose|press|do here|do now)\b|"
+        r"\bread (?:every|all)?\s*options\b|\blist (?:all )?options\b|\bwhat buttons\b",
         low,
     ):
         return I(Kind.LIST_OPTIONS)

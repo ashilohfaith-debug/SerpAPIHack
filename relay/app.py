@@ -97,7 +97,20 @@ class RelayApp:
         from relay.sarvam import SarvamClient, SarvamSTT, SarvamTTS, settings
 
         sv = settings()
-        if sv["key"]:
+        from relay.memory.db import connect
+        from relay.memory.store import MemoryStore
+
+        cloud_allowed = True
+        try:
+            conn = connect(str(default_db_path()))
+            store = MemoryStore(conn)
+            if store.get_pref("cloud_consent", default="1") == "0":
+                cloud_allowed = False
+            conn.close()
+        except Exception:
+            pass
+
+        if sv["key"] and cloud_allowed:
             self.sarvam = SarvamTTS(
                 SarvamClient(sv["key"], base=sv["base"]),
                 self.tts,

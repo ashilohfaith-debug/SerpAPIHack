@@ -77,19 +77,6 @@ def run_onboarding(session) -> None:
 
     def step_4():
         session.say("Should I always ask for confirmation before clicking or typing? Say yes or no.")
-        def handle_conf():
-            session.store.set_pref("confirmation", "always")
-            session.say("I will always ask before taking action.")
-            step_5()
-        def handle_no_conf():
-            session.store.set_pref("confirmation", "adaptive")
-            session.say("I'll only ask for important actions.")
-            step_5()
-        session.offer(handle_conf)
-        # We need a way to capture 'no' for the offer... wait, session.offer drops it on 'no'. 
-        # But we need to move to step_5! 
-        # Actually, capture_next is better for this.
-        session._offer = None # clear offer
         def handle_conf_capture(ans: str):
             import re
             if re.search(r"\b(?:yes|yeah|always)\b", ans, re.I):
@@ -98,8 +85,25 @@ def run_onboarding(session) -> None:
             else:
                 session.store.set_pref("confirmation", "adaptive")
                 session.say("I'll only ask for important actions.")
-            step_5()
+            step_wake()
         session.capture_next(handle_conf_capture)
+
+    def step_wake():
+        session.say("Would you like to talk by saying Relay, or use the talk key only? Say wake word, or say key only.")
+        def handle_wake(ans: str):
+            import re
+            if re.search(r"\b(?:key|push|hotkey|button)\b", ans, re.I):
+                session.store.set_pref("wake_word_enabled", "0")
+                if session.on_wake_word:
+                    session.on_wake_word(False)
+                session.say("Wake word disabled. Press Control Alt Space anytime to talk.")
+            else:
+                session.store.set_pref("wake_word_enabled", "1")
+                if session.on_wake_word:
+                    session.on_wake_word(True)
+                session.say("Wake word active. Just say Relay, then speak.")
+            step_5()
+        session.capture_next(handle_wake)
 
     def step_5():
         session.say("Do you consent to me sending snippets of your screen to cloud AI models for processing? Say yes to allow, or no to stay strictly offline.")
@@ -115,6 +119,10 @@ def run_onboarding(session) -> None:
                         if len(key) > 10:
                             from relay.memory.secrets import save_secret
                             save_secret("RELAY_LLM_KEY", key)
+                            save_secret("FREELLMAPI_KEY", key)
+                            if not session.store.get_pref("RELAY_LLM_URL"):
+                                save_secret("RELAY_LLM_URL", "http://127.0.0.1:31415/v1")
+                            session.reload_assistant()
                             session.say("Key saved securely.")
                         else:
                             session.say("I didn't find a valid key on the clipboard.")
@@ -131,7 +139,7 @@ def run_onboarding(session) -> None:
     def step_done():
         mark_onboarded()
         session.say("Setup complete. Say help at any time to hear more. What would you like to do?")
-        session._rearm_voice()
+        session.capture_next(lambda ans: session.handle(ans))
 
     # step_1
     lines = [

@@ -330,3 +330,9 @@ def main(speak: bool = True) -> int:
         else f"\n{len(failed)} check(s) failed — see above."
     )
     return 0 if not failed else 1
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main(speak=False))

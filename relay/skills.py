@@ -798,6 +798,15 @@ class Skills:
         text = re.sub(r"(?i)^relay[,.]?\s+", "", text)
         if not text.strip():
             return []
+
+        # Lock & verify focus before injecting text
+        snap = getattr(self.s.worker, "live", None)
+        if snap and snap.focus:
+            f_pwd = bool(snap.focus.states.get("is_password") or snap.focus.states.get("protected"))
+            if f_pwd:
+                self.say("Dictation paused: the focused control is a password field.", pol.Priority.CRITICAL)
+                return []
+
         if text.endswith(("\n",)):
             payload = text
         else:
@@ -808,8 +817,21 @@ class Skills:
         if o.state != ExecState.EXECUTED:
             self.say(f"I couldn't type that: {o.detail}.", pol.Priority.CRITICAL)
             return []
+
+        # Verify that the text actually reached the active focus field if a real window is active
+        from relay.executor.input_backend import WindowsInputBackend
+        is_live = isinstance(self.s.executor.input, WindowsInputBackend)
         spoken = text.strip() or "a new line"
-        self.say(f"Typed: {spoken}" if len(spoken) < 200 else "Typed your paragraph.")
+        if is_live:
+            time.sleep(0.2)
+            check_txt = text.strip()[:20]
+            verified = self.s.verifier.focus_value_contains(check_txt, timeout=1.0) if check_txt else True
+            if verified:
+                self.say(f"Typed: {spoken}" if len(spoken) < 200 else "Typed your paragraph.")
+            else:
+                self.say("Typed, but could not confirm the text in the active field.")
+        else:
+            self.say(f"Typed: {spoken}" if len(spoken) < 200 else "Typed your paragraph.")
         return []
 
     # ---------------------------------------------------------------- notes
