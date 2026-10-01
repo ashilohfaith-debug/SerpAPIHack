@@ -369,11 +369,7 @@ class Session:
         self._in_steps = True
         try:
             for k, step in enumerate(steps, 1):
-                if (
-                    self.emergency.is_engaged
-                    or self.cancel.is_set()
-                    or self._answer_cancel.is_set()
-                ):
+                if self.emergency.is_engaged or self.cancel.is_set():
                     self.say(f"Stopped before step {k}.", _REQ)
                     break
                 self._step_failed = False
@@ -442,6 +438,12 @@ class Session:
                 self.say("Okay, cancelled.", _REQ)
                 return []
             return consumer(utterance.strip()) or []
+        if not self._in_steps and not self.emergency.is_engaged:
+            # A new request gets fresh cancellation state. The talk key deliberately
+            # interrupts speech/streaming before recording, but must not cancel the
+            # command that the user is about to give.
+            self.cancel.clear()
+            self._answer_cancel.clear()
         if not self.dictation and not self._in_steps:
             from relay.intent.compound import split_steps
 

@@ -13,7 +13,35 @@ from relay.memory.db import connect
 from relay.memory.task_context import TaskContext, resolve_reference
 from relay.perception.semantic import ScreenSnapshot, UIElement
 from relay.session import Session
+from relay.system.apps import AppCatalog, AppEntry
 from relay.workspace.agent import WorkspaceAgent
+
+
+def test_talk_key_interruption_does_not_cancel_next_compound_command():
+    spoken = []
+    entry = AppEntry("Notepad", "notepad.exe")
+    s = Session(
+        speak=spoken.append,
+        apps=AppCatalog(entries=[entry]),
+        db_path=":memory:",
+    )
+    s.apps.wait_ready = MagicMock(return_value=True)
+    s.apps.find = MagicMock(return_value=entry)
+    s.runner.run = MagicMock(return_value=[MagicMock(state="verified")])
+    s._fresh_document = MagicMock(return_value=True)
+
+    # Push-to-talk silences any current speech before capturing the new request.
+    s.stop_speaking()
+    s.cancel.set()  # also simulate a task that was cancelled before this request
+    assert s._answer_cancel.is_set()
+    assert s.cancel.is_set()
+
+    s.handle("open notepad and write hi")
+
+    assert s.runner.run.call_count == 2
+    assert not any("Stopped before step 1" in line for line in spoken)
+    assert not s.cancel.is_set()
+    s.close()
 
 
 def test_speech_self_correction_normalization():
