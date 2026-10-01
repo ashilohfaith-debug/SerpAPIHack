@@ -436,6 +436,12 @@ def test_api_key_voice_command_and_colloquial_screen_matching(monkeypatch):
 
     # Test API key execution
     spoken = []
+    fake_secrets = {}
+    from relay.memory import secrets as sec_mod
+
+    monkeypatch.setattr(sec_mod, "save_secret", lambda k, v: fake_secrets.__setitem__(k, v))
+    monkeypatch.setattr(sec_mod, "get_secret", lambda k, d="": fake_secrets.get(k, d))
+
     s = Session(speak=lambda t, p=None: spoken.append(t))
     try:
         import pyperclip
