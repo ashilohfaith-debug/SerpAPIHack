@@ -1682,8 +1682,12 @@ class Skills:
     def _document(self):
         from relay.perception import text as ptext
 
-        val, ok = self.s.worker.run(ptext.document_text, timeout=8.0)
+        query = getattr(self.s.ctx, "recent_query", "") if hasattr(self.s, "ctx") else ""
+        val, ok = self.s.worker.run(lambda: ptext.clean_content_text(query=query), timeout=8.0)
         title, body = val if ok and val else ("", "")
+        if not body:
+            val, ok = self.s.worker.run(ptext.document_text, timeout=8.0)
+            title, body = val if ok and val else ("", "")
         if not body:
             val, ok = self.s.worker.run(ptext.visible_text, timeout=8.0)
             body = val if ok and val else ""
@@ -1852,22 +1856,32 @@ class Skills:
             self.say("I can't read the screen right now.")
             return
         self.s.ctx.last_narrated = snap
+        query = getattr(self.s.ctx, "recent_query", "") or getattr(self.s, "last_activity", "")
         if (snap.foreground_app or "").lower() in BROWSERS:
-            links = self._items("links")
+            from relay.perception import text as ptext
+
+            val, ok = self.s.worker.run(lambda: ptext.clean_content_text(query=query), timeout=5.0)
+            _, content = val if ok and val else ("", "")
             heads = self._items("headings")
             parts = [f"A web page: {_short_title(snap.foreground_title)}."]
-            if heads:
-                parts.append(
-                    f"It has {len(heads)} heading{'s' if len(heads) != 1 else ''}; "
-                    f"the first is {heads[0].name}."
-                )
-            parts.append(f"{len(links)} link{'s' if len(links) != 1 else ''}.")
-            if snap.focus and snap.focus.name:
+            if content:
+                paras = [p.strip() for p in content.splitlines() if len(p.strip()) > 15]
+                if paras:
+                    parts.append(f"Content: {paras[0]}.")
+                    if len(paras) > 1 and self.s.narration_mode in (pol.DETAILED, pol.GUIDED):
+                        parts.append(f"Also: {paras[1]}.")
+            elif heads:
+                parts.append(f"Main heading: {heads[0].name}.")
+            if (
+                snap.focus
+                and snap.focus.name
+                and snap.focus.name.lower() not in ("address and search bar", "new tab", "tab")
+            ):
                 parts.append(f"Focus is on {snap.focus.role} {snap.focus.name}.")
-            parts.append("Say read the page, list the headings, or list the links.")
+            parts.append("Say read the page to hear more.")
             self.say(" ".join(parts))
             return
-        desc = pol.describe(snap, self.s.narration_mode)
+        desc = pol.describe(snap, self.s.narration_mode, context=self.s.ctx, query=query)
         if (not snap.elements or len(snap.elements) <= 2) and self.s.ocr is not None:
             try:
                 ocr_elements = self.s.ocr.read_screen()

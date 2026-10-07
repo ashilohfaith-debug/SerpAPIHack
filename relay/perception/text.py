@@ -134,9 +134,20 @@ def document_text(max_chars: int = MAX_TEXT) -> tuple[str, str]:
     return title, ""
 
 
+_HEADER_CHROME = {
+    "minimize", "maximize", "restore", "close", "system", "system menu bar",
+    "application", "title bar", "restore down", "minimise", "maximise",
+    "back", "forward", "reload", "refresh", "home", "address and search bar",
+    "search or enter web address", "address bar", "new tab", "tab", "close tab",
+    "app bar", "navigation", "navigation bar", "nav bar", "menu bar", "extensions", "downloads",
+    "settings and more", "customize and control", "skip to main content",
+    "accept cookies", "accept all", "reject all", "cookie settings",
+}
+
+
 def visible_text(max_items: int = 300) -> str:
     """Fallback reading for apps without a document: the names of the visible text
-    labels in tree (reading) order, de-duplicated."""
+    labels in tree (reading) order, de-duplicated and filtered of header chrome."""
     import uiautomation as auto
 
     fg = _fg()
@@ -153,12 +164,61 @@ def visible_text(max_items: int = 300) -> str:
             name = (e.CurrentName or "").strip()
         except Exception:
             continue
+        low = name.lower()
+        if low in _HEADER_CHROME or any(low.startswith(c) for c in ("minimize", "maximize", "close tab")):
+            continue
         if name and name not in seen:
             seen.add(name)
             out.append(name)
         if len(out) >= max_items:
             break
     return "\n".join(out)
+
+
+def clean_content_text(query: str = "", max_chars: int = MAX_TEXT) -> tuple[str, str]:
+    """Extract primary content text, stripping header, navbar, and cookie boilerplate.
+    If query is provided, prioritizes paragraphs answering or matching the query (Perplexity style).
+    """
+    title, text = document_text(max_chars=max_chars)
+    if not text:
+        text = visible_text(max_items=200)
+    if not text:
+        return title, ""
+
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    # Filter leading header/nav lines
+    cleaned_lines = []
+    for ln in lines:
+        low = ln.lower()
+        if (
+            low in _HEADER_CHROME
+            or any(c in low for c in ("cookie", "terms of", "privacy policy", "accept all", "navigation bar", "nav bar"))
+            or any(low.startswith(c) for c in ("skip to", "manage cookies", "navigation"))
+        ):
+            continue
+        cleaned_lines.append(ln)
+
+    if not query:
+        return title, "\n".join(cleaned_lines)
+
+    # Contextual query matching: score paragraphs
+    q_words = [w for w in query.lower().split() if len(w) > 2]
+    if not q_words:
+        return title, "\n".join(cleaned_lines)
+
+    matched = []
+    rest = []
+    for ln in cleaned_lines:
+        low = ln.lower()
+        score = sum(1 for w in q_words if w in low)
+        if score > 0:
+            matched.append((score, ln))
+        else:
+            rest.append(ln)
+
+    matched.sort(key=lambda x: x[0], reverse=True)
+    ordered = [ln for _, ln in matched] + rest
+    return title, "\n".join(ordered)
 
 
 @dataclass(frozen=True)

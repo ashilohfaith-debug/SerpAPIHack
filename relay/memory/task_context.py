@@ -63,6 +63,8 @@ class TaskContext:
     references: dict[str, ElementRef] = field(default_factory=dict)
     last_ref_key: str | None = None
     last_narrated: ScreenSnapshot | None = None
+    recent_query: str = ""
+    recent_activity: str = ""
 
     def remember(self, key: str, el: UIElement, version: int) -> None:
         self.references[key] = ElementRef(el.name, el.role, el.bbox, version)

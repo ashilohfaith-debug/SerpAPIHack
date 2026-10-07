@@ -87,16 +87,16 @@
 
         <!-- Direct Action Bar -->
         <div class="hero-actions">
-          <a href="#download" class="btn btn-primary btn-lg">
+          <a href="downloads/Relay-Setup.exe" download="Relay-Setup.exe" class="btn btn-primary btn-lg">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="7 10 12 15 17 10"></polyline>
               <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
-            Download relay.exe
+            Download Relay Installer (8.4 MB)
           </a>
-          <a href="#commands" class="btn btn-secondary btn-lg">
-            See How to Use
+          <a href="#download" class="btn btn-secondary btn-lg">
+            All Downloads & Setup
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="5" y1="12" x2="19" y2="12"></line>
               <polyline points="12 5 19 12 12 19"></polyline>
@@ -327,30 +327,41 @@
           
           <div class="download-meta">
             <h3 class="download-title">Relay for Windows 10 & 11</h3>
-            <p class="download-sub">Version 0.3.3 · x64 Architecture · Standalone & Portable</p>
+            <p class="download-sub">Version 0.3.3 · x64 Architecture · Installer, Standalone & Portable</p>
           </div>
 
           <div class="download-buttons-row">
-            <!-- Button 1: Direct EXE Download -->
-            <a href="downloads/relay.exe" download="relay.exe" class="btn btn-primary btn-xl" id="downloadExeBtn">
+            <!-- Button 1: 1-Click Installer (Recommended) -->
+            <a href="downloads/Relay-Setup.exe" download="Relay-Setup.exe" class="btn btn-primary btn-xl" id="downloadInstallerBtn">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              Download relay.exe
+              1-Click Installer (Relay-Setup.exe)
+              <span class="btn-file-size">8.4 MB · Recommended</span>
+            </a>
+
+            <!-- Button 2: Direct Standalone EXE Download -->
+            <a href="downloads/relay.exe" download="relay.exe" class="btn btn-secondary btn-xl" id="downloadExeBtn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+              Standalone EXE (relay.exe)
               <span class="btn-file-size">16.9 MB</span>
             </a>
 
-            <!-- Button 2: Portable ZIP Download -->
+            <!-- Button 3: Portable ZIP Download -->
             <a href="downloads/relay-windows-x64.zip" download="relay-windows-x64.zip" class="btn btn-secondary btn-xl" id="downloadZipBtn">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 8v13H3V8"></path>
                 <path d="M1 3h22v5H1z"></path>
                 <path d="M10 12h4"></path>
               </svg>
-              Download Portable ZIP
-              <span class="btn-file-size">31.8 MB</span>
+              Portable ZIP Package
+              <span class="btn-file-size">33.3 MB</span>
             </a>
           </div>
 
@@ -358,12 +369,12 @@
           <div class="setup-steps">
             <div class="setup-step">
               <div class="step-num">1</div>
-              <div class="step-text">Download <code>relay.exe</code> or unzip the package.</div>
+              <div class="step-text">Run <code>Relay-Setup.exe</code> (or download <code>relay.exe</code>).</div>
             </div>
             <div class="setup-step-divider"></div>
             <div class="setup-step">
               <div class="step-num">2</div>
-              <div class="step-text">Double-click to start Relay.</div>
+              <div class="step-text">Launches Relay in system tray.</div>
             </div>
             <div class="setup-step-divider"></div>
             <div class="setup-step">
@@ -372,6 +383,7 @@
             </div>
           </div>
         </div>
+      </div>
 
       </div>
 

@@ -160,6 +160,9 @@ class Kind:
     TEXT_FORMAT = "text_format"
     TEXT_INSPECT = "text_inspect"
     COMPOSE = "compose"
+    SAVE_PASSWORD = "save_password"
+    ENTER_PASSWORD = "enter_password"
+    FORGET_PASSWORD = "forget_password"
     UNKNOWN = "unknown"
 
 
@@ -168,6 +171,9 @@ class Intent:
     kind: str
     slots: dict = field(default_factory=dict)
     raw: str = ""
+
+    def get(self, key: str, default=None):
+        return self.slots.get(key, default)
 
 
 def _ordinal_in(text: str) -> int | None:
@@ -1267,6 +1273,32 @@ def parse(utterance: str) -> Intent:
         m = re.match(r"call\s+(.+?)\s+([a-zA-Z0-9_-]+)$", low)
     if m:
         return I(Kind.REMEMBER, alias_target=m.group(1).strip(), alias_name=m.group(2).strip())
+    # ---- password manager / autofill ----
+    m = re.match(
+        r"(?:save|remember|store)\s+(?:my\s+)?password(?:\s+for\s+(.+?))?\s+(?:as|is|to)\s+(.+)",
+        keep,
+        re.I,
+    )
+    if not m:
+        m = re.match(r"set\s+(?:my\s+)?password(?:\s+for\s+(.+?))?\s+to\s+(.+)", keep, re.I)
+    if m:
+        app_name = (m.group(1) or "").strip()
+        pwd_val = payload_after(raw, r"(?:as|is|to)\s+") or m.group(2).strip()
+        return I(Kind.SAVE_PASSWORD, app=app_name, password=pwd_val)
+
+    m = re.match(
+        r"(?:paste|enter|type|fill|put|insert)(?: my)? password(?:\s+(?:for|in)\s+(.+))?",
+        low,
+    )
+    if m or low in ("password", "enter password", "paste password", "fill password"):
+        app_name = (m.group(1).strip() if m and m.group(1) else "")
+        return I(Kind.ENTER_PASSWORD, app=app_name)
+
+    m = re.match(r"(?:forget|delete|remove|clear)(?: my)? password(?:\s+(?:for|in)\s+(.+))?", low)
+    if m:
+        app_name = (m.group(1).strip() if m and m.group(1) else "")
+        return I(Kind.FORGET_PASSWORD, app=app_name)
+
     m = re.match(r"remember (?:that )?(.+)", keep)
     if m:
         fact = payload_after(raw, r"remember(?:\s+that)?") or m.group(1).strip()

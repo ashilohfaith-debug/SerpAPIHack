@@ -63,6 +63,9 @@ _MEMORY_KINDS = {
     Kind.CLEAR_HISTORY,
     Kind.EXPORT_PREFS,
     Kind.WHAT_DOING,
+    Kind.SAVE_PASSWORD,
+    Kind.ENTER_PASSWORD,
+    Kind.FORGET_PASSWORD,
 }
 _ACCESS_KINDS = {
     Kind.SET_MODE,
@@ -374,7 +377,10 @@ class Session:
         fails (never type into the wrong window because an app didn't open), on
         cancel / emergency stop, or when a step needs a spoken confirmation."""
         n = len(steps)
-        self.say(f"{n} steps: " + "; then ".join(steps) + ".", _REQ)
+        if n <= 4:
+            self.say(f"{n} steps: " + "; then ".join(steps) + ".", _REQ)
+        else:
+            self.say(f"Starting {n} steps, beginning with {steps[0]}.", _REQ)
         results: list = []
         self._in_steps = True
         try:
@@ -382,6 +388,8 @@ class Session:
                 if self.emergency.is_engaged or self.cancel.is_set():
                     self.say(f"Stopped before step {k}.", _REQ)
                     break
+                if n >= 10 and k % 10 == 0 and k < n:
+                    self.say(f"Step {k} of {n} complete.", _REQ)
                 self._step_failed = False
                 out = self.handle(step) or []
                 results.extend(out)
@@ -476,6 +484,12 @@ class Session:
                     )
                 return opened
         intent = parse(utterance)
+        if hasattr(self, "ctx") and self.ctx is not None:
+            if intent.kind == Kind.SAVE_PASSWORD:
+                self.ctx.recent_query = f"save password for {intent.get('app', '')}".strip()
+            else:
+                self.ctx.recent_query = utterance
+            self.ctx.recent_activity = intent.kind
         # the command TYPE only — never the words, which may be private (dictation, notes)
         log.info(
             "command: %s (%d words)%s",
@@ -884,6 +898,53 @@ class Session:
                 if tid
                 else "I don't have a record of a task in progress."
             )
+        elif k == Kind.SAVE_PASSWORD:
+            app = (s.get("app") or "").strip().lower()
+            if not app:
+                from relay.system.windows import foreground, _friendly_app
+                fg = foreground()
+                app = _friendly_app(fg.app).lower() if fg else "default"
+            pwd = s.get("password", "").strip()
+            if not pwd:
+                self.say("What password should I save?", _REQ)
+                self.capture(lambda p: self._save_password(app, p))
+                return []
+            self._save_password(app, pwd)
+        elif k == Kind.ENTER_PASSWORD:
+            app = (s.get("app") or "").strip().lower()
+            if not app:
+                from relay.system.windows import foreground, _friendly_app
+                fg = foreground()
+                app = _friendly_app(fg.app).lower() if fg else "default"
+            return self._enter_password(app)
+        elif k == Kind.FORGET_PASSWORD:
+            app = (s.get("app") or "").strip().lower()
+            if not app:
+                from relay.system.windows import foreground, _friendly_app
+                fg = foreground()
+                app = _friendly_app(fg.app).lower() if fg else "default"
+            from relay.memory.secrets import delete_secret
+            delete_secret(f"pwd:{app}")
+            self.say(f"I've removed your saved password for {app}.", _REQ)
+        return []
+
+    def _save_password(self, app: str, pwd: str) -> None:
+        from relay.memory.secrets import save_secret
+        save_secret(f"pwd:{app.lower()}", pwd)
+        save_secret("pwd:last", pwd)
+        self.say(f"I've securely saved your password for {app}.", _REQ)
+
+    def _enter_password(self, app: str):
+        from relay.memory.secrets import get_secret
+        pwd = get_secret(f"pwd:{app.lower()}") or get_secret("pwd:last") or get_secret("pwd:default")
+        if not pwd:
+            self.say(
+                f"I don't have a saved password for {app}. Say save password for {app} as, followed by your password.",
+                _REQ,
+            )
+            return []
+        self.executor.input.type_text(pwd)
+        self.say("Password entered.", _REQ)
         return []
 
     # ---- goal management (Gap 1) ----

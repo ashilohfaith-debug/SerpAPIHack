@@ -20,8 +20,14 @@ def print_banner():
 def speak(text: str):
     """Speak using Windows SAPI voice so blind users hear progress immediately."""
     try:
-        cmd = f'powershell -Command "Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak(\'{text}\')"'
-        subprocess.Popen(cmd, shell=True)
+        safe_text = text.replace("'", "''")
+        cmd = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            f"Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak('{safe_text}')",
+        ]
+        subprocess.Popen(cmd)
     except Exception:
         pass
 

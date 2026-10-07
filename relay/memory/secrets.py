@@ -82,7 +82,7 @@ def save_secret(key: str, value: str) -> None:
     if encrypted:
         f.write_bytes(encrypted)
 
-def get_secret(key: str, default: str = "") -> str:
+def get_secret(key: str, default: str | None = None) -> str | None:
     """Retrieve and decrypt a secret."""
     import json
     f = _get_secrets_file()

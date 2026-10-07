@@ -32,7 +32,9 @@ review-receipts/
 # packaged binaries (distributed via website and releases)
 *.exe
 !downloads/relay.exe
+!downloads/Relay-Setup.exe
 !frontend/downloads/relay.exe
+!frontend/downloads/Relay-Setup.exe
 *.zip
 !downloads/relay-windows-x64.zip
 !frontend/downloads/relay-windows-x64.zip

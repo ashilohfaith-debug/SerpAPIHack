@@ -13,7 +13,7 @@ from __future__ import annotations
 from relay.perception.semantic import ScreenSnapshot
 
 _MAX_LISTED = 3
-# window-frame controls every window has — not worth a blind user's attention
+# window-frame controls and browser navigation clutter — not worth a blind user's attention
 CHROME_NAMES = {
     "minimize",
     "maximize",
@@ -26,19 +26,87 @@ CHROME_NAMES = {
     "restore down",
     "minimise",
     "maximise",
+    # Browser and window navigation chrome
+    "back",
+    "forward",
+    "reload",
+    "refresh",
+    "home",
+    "address and search bar",
+    "search or enter web address",
+    "address bar",
+    "new tab",
+    "tab",
+    "close tab",
+    "app bar",
+    "navigation",
+    "menu bar",
+    "extensions",
+    "downloads",
+    "settings and more",
+    "customize and control",
+    # Web noise & cookie notices
+    "accept cookies",
+    "accept all cookies",
+    "reject cookies",
+    "cookie policy",
+    "privacy policy",
+    "terms of service",
+    "skip to main content",
 }
-_GENERIC_ROLES = {"Pane", "Window", "Group", "Custom", "TitleBar", ""}
+_GENERIC_ROLES = {"Pane", "Window", "Group", "Custom", "TitleBar", "ToolBar", "MenuBar", "ScrollBar", ""}
 
 
 def meaningful(elements):
-    """Elements minus window-frame buttons (Minimize/Maximize/Close/System)."""
-    return [e for e in elements if (e.name or "").strip().lower() not in CHROME_NAMES]
+    """Elements minus window-frame controls, toolbars, and navigation chrome."""
+    filtered = []
+    for e in elements:
+        name = (e.name or "").strip().lower()
+        if not name and e.role in _GENERIC_ROLES:
+            continue
+        if name in CHROME_NAMES:
+            continue
+        if any(
+            name.startswith(c) and len(name) <= len(c) + 6
+            for c in ("close", "minimize", "maximize", "restore")
+        ):
+            continue
+        filtered.append(e)
+    return filtered
 
 
-def diff(old: ScreenSnapshot | None, new: ScreenSnapshot | None) -> list[str]:
+def _score_element_relevance(el, keywords: list[str]) -> int:
+    """Score an element's importance: keyword match -> role priority -> content length."""
+    score = 0
+    name_low = (el.name or "").lower()
+    val_low = (el.value or "").lower()
+    for kw in keywords:
+        if kw in name_low or kw in val_low:
+            score += 10
+    if el.role in ("Document", "Text", "Edit"):
+        score += 5
+    elif el.role in ("ListItem", "Hyperlink"):
+        score += 3
+    elif el.role in ("Button", "MenuItem"):
+        score += 2
+    if len(el.name) > 15:
+        score += 2
+    return score
+
+
+def diff(
+    old: ScreenSnapshot | None,
+    new: ScreenSnapshot | None,
+    context=None,
+    activity: str = "",
+) -> list[str]:
     """Human-readable change lines from ``old`` to ``new``. Empty list = nothing
     task-relevant changed. ``old is None`` returns [] (first observation — the
-    caller narrates the full screen instead)."""
+    caller narrates the full screen instead).
+    
+    Grounds changes in the user's ongoing conversation/activity context, highlighting
+    what appeared or changed on screen as a direct consequence of the user's request.
+    """
     if new is None:
         return ["I can't read the screen right now."]
     if old is None:
@@ -82,13 +150,60 @@ def diff(old: ScreenSnapshot | None, new: ScreenSnapshot | None) -> list[str]:
         elif not name and role not in _GENERIC_ROLES:
             changes.append(f"Focus is now on a {role}.")
 
-    # value change on the focused element (e.g. text field content)
+    # value change on the focused element (concrete, informative narration)
     if (
         old.focus
         and new.focus
         and old.focus.name == new.focus.name
         and (old.focus.value or "") != (new.focus.value or "")
     ):
-        changes.append("The text there changed.")
+        v_new = (new.focus.value or "").strip()
+        v_old = (old.focus.value or "").strip()
+        from relay.safety import is_protected_field
+        is_pwd = is_protected_field(
+            role=new.focus.role,
+            name=new.focus.name or "",
+            is_password_field=bool(new.focus.states.get("is_password") or new.focus.states.get("protected")),
+        )
+        if is_pwd:
+            if not v_new and v_old:
+                changes.append("The password was cleared.")
+            else:
+                changes.append("Password text updated.")
+        elif not v_new and v_old:
+            changes.append("The text was cleared.")
+        elif v_new and len(v_new) <= 60:
+            changes.append(f"The text is now '{v_new}'.")
+        elif v_new:
+            changes.append(f"The text updated: '{v_new[:60]}...'.")
+        else:
+            changes.append("The text there changed.")
+
+    # Content-level diff: newly appeared or changed elements
+    old_meaningful = meaningful(old.elements)
+    new_meaningful = meaningful(new.elements)
+    old_map = {(e.name.strip().lower(), e.role): e for e in old_meaningful if e.name}
+    new_map = {(e.name.strip().lower(), e.role): e for e in new_meaningful if e.name}
+
+    added_keys = [k for k in new_map if k not in old_map]
+    if added_keys and not switched:
+        # Extract keywords from activity / context to rank new content
+        keywords = []
+        if activity:
+            keywords.extend(activity.lower().split())
+        if context and hasattr(context, "goal") and context.goal:
+            keywords.extend(context.goal.lower().split())
+        stopwords = {"the", "a", "an", "and", "or", "to", "in", "on", "for", "with", "open", "type", "click"}
+        keywords = [w for w in keywords if len(w) > 2 and w not in stopwords]
+
+        added_elements = [new_map[k] for k in added_keys]
+        added_elements.sort(key=lambda e: _score_element_relevance(e, keywords), reverse=True)
+
+        top_items = [e.name for e in added_elements[:2] if len(e.name.strip()) > 1]
+        if top_items:
+            prefix = "On screen: "
+            if any(_score_element_relevance(e, keywords) >= 10 for e in added_elements[:2]):
+                prefix = "Result: "
+            changes.append(f"{prefix}{', '.join(top_items)}.")
 
     return changes

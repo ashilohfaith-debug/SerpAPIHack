@@ -207,9 +207,10 @@ class TransparentRunner:
 
     def run(self, steps, cancel=None) -> list[StepResult]:
         results: list[StepResult] = []
+        n = len(steps)
         if steps:
             self._emit_task("acting")
-        for step in steps:
+        for k, step in enumerate(steps, 1):
             if self._stopped(cancel):
                 self.say("Stopping.", pol.Priority.CONFIRMATION)
                 results.append(StepResult(step.description, "cancelled"))
@@ -222,6 +223,8 @@ class TransparentRunner:
                     "waiting_for_confirmation" if r.state == "awaiting_confirmation" else r.state
                 )
                 break  # stop the sequence; the user decides / confirms
+            if n >= 10 and k % 10 == 0 and k < n:
+                self.say(f"Step {k} of {n} complete.", pol.Priority.TASK)
         else:
             if steps:
                 self._emit_task("completed")
@@ -242,7 +245,7 @@ class TransparentRunner:
         new = self.worker.observe(3.0)
         # system settings (volume, media keys) don't change the screen: anything that
         # moved meanwhile is unrelated background, not a result of this action
-        deltas = [] if step.payload.get("no_delta") else delta_mod.diff(prev, new)
+        deltas = [] if step.payload.get("no_delta") else delta_mod.diff(prev, new, context=self.ctx, activity=step.description)
         if self.screen_reader:
             deltas = [d for d in deltas if not d.startswith("Focus is now on")]
         self.ctx.last_narrated = new
@@ -560,7 +563,7 @@ class TransparentRunner:
         self.ex.grant_next_confirmation()
         outcome = self._invoke_verify(el, prev_snap)
         new = self.worker.observe(3.0)
-        deltas = delta_mod.diff(self.ctx.last_narrated, new)
+        deltas = delta_mod.diff(self.ctx.last_narrated, new, context=self.ctx, activity=desc)
         self.ctx.last_narrated = new
 
         class _S:
@@ -651,7 +654,7 @@ class TransparentRunner:
         ak = step.payload.get("answer_kind")
         snap = self.worker.observe(3.0)
         if ak == Kind.WHAT_CHANGED:
-            deltas = delta_mod.diff(self.ctx.last_narrated, snap)
+            deltas = delta_mod.diff(self.ctx.last_narrated, snap, context=self.ctx, activity="what changed")
             self.ctx.last_narrated = snap
             self.say(
                 "Nothing has changed." if not deltas else " ".join(deltas), pol.Priority.REQUESTED
@@ -661,7 +664,7 @@ class TransparentRunner:
             self.say("I can't read the screen right now.", pol.Priority.REQUESTED)
             return StepResult("answer", "answered")
         if ak == Kind.WHERE_AM_I:
-            self.say(pol.describe(snap, self.mode), pol.Priority.REQUESTED)
+            self.say(pol.describe(snap, self.mode, context=self.ctx), pol.Priority.REQUESTED)
         elif ak == Kind.LIST_OPTIONS:
             names = [e.name for e in _reading_order(delta_mod.meaningful(snap.elements)) if e.name][
                 :10
@@ -690,7 +693,8 @@ class TransparentRunner:
                 pol.Priority.REQUESTED,
             )
         else:  # DESCRIBE_SCREEN
-            self.say(pol.describe(snap, self.mode), pol.Priority.REQUESTED)
+            query = getattr(self.ctx, "recent_query", "")
+            self.say(pol.describe(snap, self.mode, context=self.ctx, query=query), pol.Priority.REQUESTED)
         self.ctx.last_narrated = snap
         return StepResult("answer", "answered")
 

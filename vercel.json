@@ -28,11 +28,28 @@
   ],
   "routes": [
     {
-      "handle": "filesystem"
+      "src": "/downloads/(.*)",
+      "headers": {
+        "Content-Disposition": "attachment"
+      },
+      "dest": "/downloads/$1"
     },
     {
-      "src": "/downloads/(.*)",
-      "dest": "/downloads/$1"
+      "src": "/Relay-Setup.exe",
+      "headers": {
+        "Content-Disposition": "attachment"
+      },
+      "dest": "/downloads/Relay-Setup.exe"
+    },
+    {
+      "src": "/relay.exe",
+      "headers": {
+        "Content-Disposition": "attachment"
+      },
+      "dest": "/downloads/relay.exe"
+    },
+    {
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",

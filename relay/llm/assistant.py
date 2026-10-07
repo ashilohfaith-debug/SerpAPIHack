@@ -84,7 +84,7 @@ Everything you write is spoken aloud by a speech synthesiser.
 {style}
 
 If the user wants something DONE on the computer, reply ONLY with command lines, one \
-per step, in order, each starting with "DO: " (at most 8 lines). Use only these commands:
+per step, in order, each starting with "DO: " (break complex multi-step tasks into clear sequential steps, up to 60 steps). Use only these commands:
 {_ALLOWED_COMMANDS}
 
 Example — "open notepad and write a shopping list with milk and eggs":
@@ -106,7 +106,7 @@ _NEVER = {Kind.UNKNOWN, Kind.CONTROL, Kind.QUIT, Kind.DELETE_NOTES, Kind.CLEAR_H
 # streaming, "It costs 3." may still become "It costs 3.5 lakh."
 _SENTENCE_END = re.compile(r"[.!?।…]+[\"')\]]*\s")
 _MIN_CHUNK = 12  # merge a very short opener ("Sure.") into the next sentence
-_MAX_STEPS = 20  # longest plan the assistant may propose (supports 10+ steps)
+_MAX_STEPS = 80  # longest plan the assistant may propose (supports 60+ steps)
 
 
 def validate_command(line: str) -> str | None:
@@ -138,7 +138,7 @@ class Assistant:
         speak: Callable[[str], None],
         context: str = "",
         page_text: str = "",
-        max_tokens: int = 260,
+        max_tokens: int = 1024,
         task_mode: str = "general",
         cancel: threading.Event | None = None,
     ) -> tuple[str, str]:

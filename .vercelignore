@@ -1,3 +1,8 @@
+# Vercel Deployment Ignore Rules
+# CRITICAL: Vercel static files must NOT exceed 100MB per file.
+# The 357MB full release zip must be excluded; Relay-Setup.exe (8.4MB)
+# and relay.exe (16.9MB) and portable zip (33.3MB) remain deployed and downloadable.
+
 .venv/
 models/
 build/
@@ -5,3 +10,17 @@ dist/
 *.key
 *.pfx
 RELAY.cmd
+
+# Exclude oversize 357MB binaries (> 100MB Vercel limit)
+downloads/Relay-v0.3.3-Windows-x64.zip
+frontend/downloads/Relay-v0.3.3-Windows-x64.zip
+*v0.3.3-Windows-x64.zip
+
+# Cache, tests, and internal files
+tests/
+.pytest_cache/
+__pycache__/
+*.pyc
+logs/
+.env*
+!.env.example
