@@ -38,9 +38,13 @@ def main():
     # Source directory (where installer is running or adjacent payload)
     exe_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
 
-    # Target directory: %LOCALAPPDATA%\Programs\Relay
+    # Target directory: Prefer D:\Programs\Relay if available, else %LOCALAPPDATA%\Programs\Relay
+    programs_d = Path("D:/Programs/Relay")
     local_app_data = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
-    target_dir = local_app_data / "Programs" / "Relay"
+    if programs_d.parent.exists():
+        target_dir = programs_d
+    else:
+        target_dir = local_app_data / "Programs" / "Relay"
     target_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Target folder: {target_dir}")
@@ -50,9 +54,11 @@ def main():
     if not src_payload.exists():
         src_payload = exe_dir / "relay"
     if not src_payload.exists():
+        src_payload = Path("D:/Programs/Relay")
+    if not src_payload.exists():
         src_payload = exe_dir
 
-    if (src_payload / "relay.exe").exists():
+    if (src_payload / "relay.exe").exists() and src_payload != target_dir:
         print("Copying application files...")
         for item in src_payload.iterdir():
             if item.name.lower() in ("build", ".git", ".venv", "setup.exe", "relay-setup.exe"):
@@ -79,9 +85,30 @@ def main():
     if cli_exe.exists():
         try:
             subprocess.run([str(cli_exe), "--install"], check=True, capture_output=True, timeout=15)
-            print("Shortcuts registered successfully.")
+            print("Shortcuts registered successfully via CLI.")
         except Exception as e:
-            print(f"Shortcut warning: {e}")
+            print(f"CLI shortcut note: {e}")
+
+    # Ensure desktop shortcut is created on active Desktop directly
+    try:
+        import win32com.client
+        import pythoncom
+        pythoncom.CoInitialize()
+        shell = win32com.client.Dispatch("WScript.Shell")
+        user_prof = Path(os.environ.get("USERPROFILE", str(Path.home())))
+        for dt in [user_prof / "OneDrive" / "Desktop", user_prof / "Desktop"]:
+            if dt.exists() and relay_exe.exists():
+                lnk = dt / "Relay.lnk"
+                sc = shell.CreateShortCut(str(lnk))
+                sc.TargetPath = str(relay_exe)
+                sc.Arguments = "--toggle"
+                sc.WorkingDirectory = str(target_dir)
+                sc.Description = "Relay — Accessible Voice Assistant for Windows"
+                sc.Hotkey = "CTRL+ALT+R"
+                sc.save()
+                print(f"Desktop shortcut created: {lnk}")
+    except Exception as e:
+        print(f"Direct shortcut note: {e}")
 
     # Copy .env if available
     env_src = exe_dir / ".env"

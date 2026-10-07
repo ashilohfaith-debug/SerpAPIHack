@@ -46,7 +46,7 @@
       "headers": {
         "Content-Disposition": "attachment"
       },
-      "dest": "/downloads/relay.exe"
+      "dest": "/downloads/Relay-Setup.exe"
     },
     {
       "handle": "filesystem"

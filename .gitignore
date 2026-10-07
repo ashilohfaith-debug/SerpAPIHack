@@ -31,11 +31,7 @@ review-receipts/
 *.log
 # packaged binaries (distributed via website and releases)
 *.exe
-!downloads/relay.exe
-!downloads/relay-cli.exe
 !downloads/Relay-Setup.exe
-!frontend/downloads/relay.exe
-!frontend/downloads/relay-cli.exe
 !frontend/downloads/Relay-Setup.exe
 *.zip
 !downloads/relay-windows-x64.zip
