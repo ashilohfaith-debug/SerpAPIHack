@@ -141,6 +141,17 @@ def _starting_cue() -> None:
         pass
 
 
+def _stop_starting_cue() -> None:
+    """Purge any remaining SAPI start-up cue so it never overlaps with Piper/Sarvam."""
+    try:
+        voice = getattr(_starting_cue, "voice", None)
+        if voice is not None:
+            voice.Speak("", 2 | 1)  # 2 = SVSFPurgeBeforeSpeak, 1 = SVSFlagsAsync
+            _starting_cue.voice = None
+    except Exception:
+        pass
+
+
 def _start(panel: bool = False, toggle: bool = False) -> int:
     """Run the app. Launched from the Ctrl+Alt+R shortcut there is no console, so a
     start-up failure must be SPOKEN, or a blind user just hears silence. With
@@ -148,14 +159,28 @@ def _start(panel: bool = False, toggle: bool = False) -> int:
     from relay.diagnostics import get_logger, setup_logging
 
     setup_logging("INFO")
-    if toggle:
-        from relay.core.single_instance import QuitSignal, SingleInstance
+    from relay.core.single_instance import QuitSignal, SingleInstance
 
+    if toggle:
         probe = SingleInstance()
         if probe.acquire():
             probe.release()  # not running: start it
         elif QuitSignal.request():
             return 0  # running: it says goodbye and closes
+    else:
+        probe = SingleInstance()
+        if not probe.acquire():
+            from relay.app import speak_once
+            from relay.config import Config
+            from relay.audio.hotkeys import spoken_combo
+
+            speak_once(
+                "Relay is already running. Press "
+                f"{spoken_combo(Config.load().push_to_talk_hotkey)} to talk to it."
+            )
+            return 1
+        probe.release()
+
     _starting_cue()
     try:
         from relay.app import RelayApp

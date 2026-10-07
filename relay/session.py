@@ -138,6 +138,7 @@ class Session:
         self.audio = audio  # headphone mode / audio devices (the live app)
         self._step_failed = False  # a skill couldn't do its part (multi-step runs)
         self._in_steps = False
+        self._answering = False
         self._answer_cancel = threading.Event()
         self._from_assistant = False
         self.talk_key = talk_key
@@ -226,7 +227,7 @@ class Session:
         self._last_snapshot = None
         if self.bus is not None:
             def _on_perception_change(e):
-                if self.dictation or self._in_steps:
+                if self.dictation or self._in_steps or getattr(self, "_answering", False):
                     return
                 snap = self.worker.live
                 if snap is not None and self._last_snapshot is not None:
@@ -629,6 +630,7 @@ class Session:
                 wait = 2.5
 
         threading.Thread(target=thinking_cue, name="thinking-cue", daemon=True).start()
+        self._answering = True
         try:
             mode = getattr(self, "mode", "general")
             try:
@@ -650,6 +652,7 @@ class Session:
                 )
         finally:
             done.set()
+            self._answering = False
         if kind == "command" and payload:
             self.say(f"I understood that as: {payload}.", _REQ)
             self._from_assistant = True

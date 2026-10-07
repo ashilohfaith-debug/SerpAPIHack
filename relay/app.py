@@ -217,6 +217,9 @@ class RelayApp:
 
     def _cloud_fallback(self, message: str) -> None:
         try:
+            if getattr(self.session, "_answering", False):
+                log.warning("cloud fallback during answering: %s", message)
+                return
             self.session.say(message, pol.Priority.CRITICAL)
         except AttributeError:  # during start-up, before the session exists
             pass
@@ -492,6 +495,11 @@ class RelayApp:
             if self.palette is not None:
                 self.palette.start()  # the bar at the top
             problems = self._startup_checks()
+            try:
+                from relay.__main__ import _stop_starting_cue
+                _stop_starting_cue()
+            except Exception:
+                pass
             self.session.onboard()
             if self.loop.headphones:
                 out = self.devices.output

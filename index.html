@@ -48,8 +48,13 @@
         <a href="#download" class="nav-item">Download</a>
       </nav>
 
-      <!-- Action items: Theme Toggle & Direct Download -->
+      <!-- Action items: Status Indicator, Theme Toggle & Direct Setup Download -->
       <div class="nav-actions">
+        <div class="nav-status-badge" role="status" aria-label="Testing status: Ready and Active" title="Relay v1.4.0 Live Engine Active and Fully Tested">
+          <span class="status-pulse-dot"></span>
+          <span class="status-badge-text">v1.4.0 Live &amp; Tested</span>
+        </div>
+
         <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch between light and dark mode">
           <!-- Sun Icon (shown in dark mode) -->
           <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -62,8 +67,13 @@
           </svg>
         </button>
 
-        <a href="#download" class="btn btn-primary btn-sm">
-          Download
+        <a href="downloads/Relay-Setup.exe" download="Relay-Setup.exe" class="btn btn-primary btn-sm nav-download-btn" aria-label="Download Relay Setup Installer">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Download Setup (8.4 MB)</span>
         </a>
       </div>
 

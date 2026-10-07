@@ -19,19 +19,41 @@ QUIT_EVENT = "Local\\RelayQuitRequest"
 
 class SingleInstance:
     def __init__(self, name: str = "relay") -> None:
+        self.name = name
         self.path = user_data_dir() / f"{name}.lock"
         self._fh = None
+        self._mutex = None
 
     def acquire(self) -> bool:
         """Return True if this process now holds the single-instance lock."""
+        if os.name == "nt":
+            try:
+                import ctypes
+
+                k = ctypes.windll.kernel32
+                k.SetLastError(0)
+                mutex = k.CreateMutexW(None, False, f"Local\\{self.name}_Instance_Mutex")
+                if not mutex or k.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+                    if mutex:
+                        k.CloseHandle(mutex)
+                    return False
+                self._mutex = mutex
+            except Exception:
+                pass
+
         try:
             self._fh = open(self.path, "a+")
         except OSError:
+            if self._mutex and os.name == "nt":
+                import ctypes
+                ctypes.windll.kernel32.CloseHandle(self._mutex)
+                self._mutex = None
             return False
         try:
             if os.name == "nt":
                 import msvcrt
 
+                self._fh.seek(0)
                 msvcrt.locking(self._fh.fileno(), msvcrt.LK_NBLCK, 1)
             else:
                 import fcntl
@@ -43,9 +65,22 @@ class SingleInstance:
                 self._fh.close()
             finally:
                 self._fh = None
+            if self._mutex and os.name == "nt":
+                import ctypes
+                ctypes.windll.kernel32.CloseHandle(self._mutex)
+                self._mutex = None
             return False
 
     def release(self) -> None:
+        if os.name == "nt" and self._mutex:
+            try:
+                import ctypes
+                ctypes.windll.kernel32.CloseHandle(self._mutex)
+            except Exception:
+                pass
+            finally:
+                self._mutex = None
+
         if self._fh is None:
             return
         try:

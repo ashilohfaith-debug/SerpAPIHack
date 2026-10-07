@@ -39,8 +39,16 @@ def _sounddevice_player(audio: np.ndarray, sr: int, stop: threading.Event) -> No
     import sounddevice as sd
 
     sd.play(audio, sr)
+    # Wait briefly for stream to become active to avoid race conditions
+    for _ in range(50):
+        stream = sd.get_stream()
+        if stream is not None and stream.active:
+            break
+        if stop.wait(0.005):
+            sd.stop()
+            return
+
     # Poll so a set stop_event cuts playback promptly (barge-in latency ~ one poll).
-    stream = sd.get_stream()
     while stream is not None and stream.active:
         if stop.wait(0.02):
             sd.stop()
