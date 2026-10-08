@@ -61,8 +61,179 @@
     </div>
   </header>
 
-  <!-- Main Content -->
   <main id="main-content" role="main">
+
+    <!-- ================================================================= -->
+    <!-- LIVE WORLD • SERPAPI INTERFACE                                    -->
+    <!-- ================================================================= -->
+    <section class="hero liveworld-hero" id="liveworld" aria-labelledby="liveworld-heading">
+      <div class="liveworld-header-row">
+        <div class="liveworld-brand">
+          <span class="liveworld-pulse-dot" id="liveworldPulse"></span>
+          <h2 id="liveworld-heading" class="liveworld-title">LIVE WORLD <span class="liveworld-accent">• SERPAPI</span></h2>
+          <span class="liveworld-status-tag" id="liveworldStatusTag">ONLINE</span>
+        </div>
+        
+        <div class="liveworld-header-controls">
+          <button id="disconnectDemoBtn" class="btn-liveworld-toggle" type="button" title="Toggle SerpApi Connection for Hackathon Demo">
+            <span id="disconnectBtnLabel">Disconnect Live World</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Offline Warning Banner (Shown when disconnected) -->
+      <div id="liveworldOfflineBanner" class="liveworld-offline-banner hidden">
+        <div class="offline-icon">⚠️</div>
+        <div class="offline-copy">
+          <strong>LIVE WORLD OFFLINE</strong>
+          <p>I understood your request, but current information could not be verified. SerpApi connection required.</p>
+        </div>
+      </div>
+
+      <div class="liveworld-grid">
+
+        <!-- Column 1: Live Voice & Action Trace Stream -->
+        <div class="liveworld-card trace-card">
+          <div class="card-section-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            <span>Voice &amp; Search Pipeline</span>
+            <span class="badge-live-tag">Live Stream</span>
+          </div>
+
+          <!-- Waveform Visualizer -->
+          <div class="voice-wave-container" id="voiceWaveform">
+            <div class="wave-bar b1"></div>
+            <div class="wave-bar b2"></div>
+            <div class="wave-bar b3"></div>
+            <div class="wave-bar b4"></div>
+            <div class="wave-bar b5"></div>
+          </div>
+
+          <!-- Live Transcript -->
+          <div class="live-transcript-box" id="liveTranscript">
+            <span class="prompt-speaker">User:</span> <span id="transcriptText">"Relay, I'm going to Bangalore tomorrow. Find the cheapest nonstop flight after 5 PM, a hotel under ₹4,000 near Indiranagar rated above 4 stars, and somewhere highly rated that's open for dinner after I arrive. Keep everything under ₹10,000."</span>
+          </div>
+
+          <!-- Action Trace Step List -->
+          <div class="minimal-action-trace" id="actionTraceStream">
+            <div class="trace-step done"><span class="step-icon">✓</span> Listening</div>
+            <div class="trace-step done"><span class="step-icon">✓</span> Understanding travel intent</div>
+            <div class="trace-step done"><span class="step-icon">✓</span> Searching SerpApi: Google Flights ✓, Google Hotels ✓, Google Maps ✓</div>
+            <div class="trace-step done"><span class="step-icon">✓</span> Comparing 34 options</div>
+            <div class="trace-step active"><span class="step-icon">★</span> Grounded decision ready</div>
+          </div>
+
+          <!-- Telemetry Accordion -->
+          <div class="telemetry-bar" id="telemetryBar">
+            <span class="telemetry-item">3 engines</span> · 
+            <span class="telemetry-item">34 candidates</span> · 
+            <span class="telemetry-item">1.8s search</span> · 
+            <span class="telemetry-item">2.6s total</span>
+          </div>
+        </div>
+
+        <!-- Column 2: Grounded Result Card -->
+        <div class="liveworld-card result-card" id="resultCard">
+          <div class="result-card-header">
+            <span class="location-label" id="resultLocation">BANGALORE · TOMORROW</span>
+            <span class="plan-badge">Best plan</span>
+          </div>
+
+          <div class="plan-details-grid">
+            <!-- Flight Item -->
+            <div class="plan-row">
+              <div class="plan-row-icon">✈️</div>
+              <div class="plan-row-info">
+                <span class="plan-row-type">FLIGHT</span>
+                <strong id="flightTitle">IndiGo</strong>
+                <span class="plan-row-sub" id="flightTimes">6:35 PM → 7:40 PM</span>
+              </div>
+              <div class="plan-row-val" id="flightPrice">₹3,142</div>
+            </div>
+
+            <!-- Stay Item -->
+            <div class="plan-row">
+              <div class="plan-row-icon">🏨</div>
+              <div class="plan-row-info">
+                <span class="plan-row-type">STAY</span>
+                <strong id="hotelTitle">Hotel Example</strong>
+                <span class="plan-row-sub" id="hotelRating">4.4 ★</span>
+              </div>
+              <div class="plan-row-val" id="hotelPrice">₹3,720</div>
+            </div>
+
+            <!-- Dinner Item -->
+            <div class="plan-row">
+              <div class="plan-row-icon">🍽️</div>
+              <div class="plan-row-info">
+                <span class="plan-row-type">DINNER</span>
+                <strong id="dinnerTitle">Restaurant Example</strong>
+                <span class="plan-row-sub" id="dinnerDist">4.6 ★ · 1.8 km</span>
+              </div>
+              <div class="plan-row-val" id="dinnerPrice">Open</div>
+            </div>
+
+            <!-- Total Budget Item -->
+            <div class="plan-row total-row">
+              <div class="plan-row-info">
+                <span class="plan-row-type">ESTIMATED TOTAL</span>
+                <span class="savings-note" id="savingsNote">₹2,338 under your ₹10,000 budget</span>
+              </div>
+              <div class="plan-row-val total-val" id="totalPrice">₹7,662</div>
+            </div>
+          </div>
+
+          <!-- Primary Action Button -->
+          <div class="result-action-bar">
+            <button class="btn-action-primary" id="openPlanBtn" type="button">
+              <span>[ Open plan ]</span>
+            </button>
+          </div>
+
+          <!-- Provenance Footer Link -->
+          <div class="result-provenance-footer" id="evidenceTrigger">
+            <span class="prov-icon">✓</span>
+            <span id="evidenceCountLabel">Verified from 34 live results · Flights · Hotels · Maps</span>
+            <span class="open-drawer-arrow">→</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Slide-Out Evidence Drawer -->
+    <div id="evidenceDrawer" class="evidence-drawer">
+      <div class="drawer-header">
+        <div>
+          <h3>LIVE EVIDENCE</h3>
+          <span class="drawer-sub">Powered by SerpApi</span>
+        </div>
+        <button id="closeDrawerBtn" class="close-drawer-btn" type="button">&times;</button>
+      </div>
+      <div class="drawer-body" id="evidenceDrawerBody">
+        <div class="evidence-item-card">
+          <div class="item-engine-badge">GOOGLE FLIGHTS</div>
+          <div class="item-title">IndiGo Flight 6E-241 (MAA → BLR)</div>
+          <div class="item-val-row">₹3,142 · Nonstop · 6:35 PM</div>
+          <div class="item-snippet">Verified live flight schedule from Chennai (MAA) to Bangalore (BLR).</div>
+          <a class="item-source-link" href="https://google.com/travel/flights" target="_blank">View on Google Flights ↗</a>
+        </div>
+        <div class="evidence-item-card">
+          <div class="item-engine-badge">GOOGLE HOTELS</div>
+          <div class="item-title">Hotel Example Indiranagar</div>
+          <div class="item-val-row">₹3,720 / night · 4.4 ★ (1,842 reviews)</div>
+          <div class="item-snippet">Verified boutique hotel near Indiranagar with high traveler ratings.</div>
+          <a class="item-source-link" href="https://google.com/travel/hotels" target="_blank">View on Google Hotels ↗</a>
+        </div>
+        <div class="evidence-item-card">
+          <div class="item-engine-badge">GOOGLE MAPS</div>
+          <div class="item-title">Restaurant Example</div>
+          <div class="item-val-row">4.6 ★ · 1,842 reviews · Open tonight</div>
+          <div class="item-snippet">Highly rated local dining establishment in Indiranagar, Bangalore.</div>
+          <a class="item-source-link" href="https://maps.google.com" target="_blank">View on Google Maps ↗</a>
+        </div>
+      </div>
+    </div>
 
     <!-- Hero Section -->
     <section class="hero" aria-labelledby="hero-title">

@@ -125,6 +125,72 @@ def _observe() -> int:
     return 0
 
 
+def _demo_liveworld() -> int:
+    """Execute the primary SerpApi India Hackathon 2026 travel demo."""
+    import sys
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+    from relay.diagnostics import setup_logging
+    from relay.liveworld import LiveWorldBroker
+
+    setup_logging("INFO")
+    print("==========================================================")
+    print("  RELAY — The voice interface to the live world.")
+    print("  SerpApi India Hackathon 2026 — AI Agents Track Demo")
+    print("==========================================================")
+
+    broker = LiveWorldBroker()
+    utterance = (
+        "Relay, I'm going to Bangalore tomorrow. Find the cheapest nonstop flight after 5 PM, "
+        "a hotel under ₹4,000 near Indiranagar rated above 4 stars, and somewhere highly rated "
+        "that's open for dinner after I arrive. Keep everything under ₹10,000."
+    )
+    print(f"\n[VOICE INPUT] \"{utterance}\"\n")
+
+    intent, decision, telemetry = broker.process(utterance)
+
+    print("[INTENT CLASSIFICATION]")
+    print(f"  Requires Live Data: {intent.requires_live_data}")
+    print(f"  Category:           {intent.category}")
+    print(f"  Objective:          {intent.objective}")
+    print(f"  Entities:           {intent.entities}")
+    print(f"  Constraints:        {intent.constraints}")
+
+    print("\n[GROUNDED DECISION]")
+    print(f"  Answer:             {decision.answer}")
+    print(f"  Confidence:         {decision.confidence}")
+    print(f"  Evidence Citations: {decision.evidence_ids}")
+
+    if decision.recommendation:
+        print("\n[RESULT PLAN]")
+        for k, v in decision.recommendation.items():
+            print(f"  {k:15}: {v}")
+
+    if decision.action:
+        print("\n[ACTION TARGET]")
+        print(f"  Type:   {decision.action.get('type')}")
+        print(f"  Label:  {decision.action.get('label')}")
+        print(f"  Target: {decision.action.get('target')}")
+
+    if decision.provenance:
+        print("\n[ACTION PROVENANCE]")
+        for bullet in decision.provenance.get("why", []):
+            print(f"  • {bullet}")
+        print(f"  Sources:   {', '.join(decision.provenance.get('sources', []))}")
+        print(f"  Freshness: {decision.provenance.get('freshness')}")
+
+    print("\n[SEARCH TELEMETRY]")
+    print(f"  Total Searches:  {telemetry.total_searches} engines")
+    print(f"  Candidates:      {telemetry.candidate_count} items")
+    print(f"  Search Latency:  {telemetry.time_to_first_search_ms:.1f} ms")
+    print(f"  Total Latency:   {telemetry.total_latency_ms:.1f} ms")
+    print("==========================================================")
+    return 0
+
+
 def _starting_cue() -> None:
     """Loading the voice and speech models takes 5-10 s on a basic laptop. A blind user
     who just pressed Ctrl+Alt+R must not sit in silence wondering if anything happened:
@@ -278,6 +344,12 @@ def _main(argv: list[str] | None = None) -> int:
         "--with-panel", action="store_true", help="with --start, also serve the accessible panel"
     )
     p.add_argument(
+        "--demo-liveworld",
+        "--demo-bangalore",
+        action="store_true",
+        help="run the primary SerpApi LiveWorld Bangalore trip hackathon demo",
+    )
+    p.add_argument(
         "--toggle",
         action="store_true",
         help="start RELAY, or close it if it's already running (Ctrl+Alt+R)",
@@ -337,6 +409,8 @@ def _main(argv: list[str] | None = None) -> int:
 
         handle_update_command(speak_cb=print)
         return 0
+    if args.demo_liveworld:
+        return _demo_liveworld()
     if args.selftest:
         return _selftest()
     if args.voice_selftest:

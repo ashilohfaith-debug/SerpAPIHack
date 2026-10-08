@@ -172,3 +172,110 @@
   updateActiveNav();
 
 })();
+
+
+// --------------------------------------------------------------------------
+// 6. LiveWorld Subsystem Client Logic (SerpApi & Grounded Evidence UI)
+// --------------------------------------------------------------------------
+(function () {
+  const evidenceTrigger = document.getElementById('evidenceTrigger');
+  const evidenceDrawer = document.getElementById('evidenceDrawer');
+  const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+  const disconnectDemoBtn = document.getElementById('disconnectDemoBtn');
+  const disconnectBtnLabel = document.getElementById('disconnectBtnLabel');
+  const liveworldPulse = document.getElementById('liveworldPulse');
+  const liveworldStatusTag = document.getElementById('liveworldStatusTag');
+  const liveworldOfflineBanner = document.getElementById('liveworldOfflineBanner');
+  const openPlanBtn = document.getElementById('openPlanBtn');
+
+  // Toggle Evidence Drawer
+  if (evidenceTrigger && evidenceDrawer) {
+    evidenceTrigger.addEventListener('click', () => {
+      evidenceDrawer.classList.add('open');
+    });
+  }
+
+  if (closeDrawerBtn && evidenceDrawer) {
+    closeDrawerBtn.addEventListener('click', () => {
+      evidenceDrawer.classList.remove('open');
+    });
+  }
+
+  // Handle Developer Disconnect / Reconnect Demo Toggle
+  let isDisconnected = false;
+  if (disconnectDemoBtn) {
+    disconnectDemoBtn.addEventListener('click', () => {
+      isDisconnected = !isDisconnected;
+      const cmd = isDisconnected ? 'disconnect_live_world' : 'reconnect_live_world';
+
+      // Send IPC request if running inside panel session
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+
+      if (token) {
+        fetch(`/cmd?token=${token}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: cmd, args: {} })
+        }).catch(() => {});
+      }
+
+      // Local UI update
+      if (isDisconnected) {
+        if (disconnectBtnLabel) disconnectBtnLabel.textContent = 'Reconnect Live World';
+        if (liveworldPulse) liveworldPulse.classList.add('offline');
+        if (liveworldStatusTag) {
+          liveworldStatusTag.textContent = 'OFFLINE';
+          liveworldStatusTag.classList.add('offline');
+        }
+        if (liveworldOfflineBanner) liveworldOfflineBanner.classList.remove('hidden');
+      } else {
+        if (disconnectBtnLabel) disconnectBtnLabel.textContent = 'Disconnect Live World';
+        if (liveworldPulse) liveworldPulse.classList.remove('offline');
+        if (liveworldStatusTag) {
+          liveworldStatusTag.textContent = 'ONLINE';
+          liveworldStatusTag.classList.remove('offline');
+        }
+        if (liveworldOfflineBanner) liveworldOfflineBanner.classList.add('hidden');
+      }
+    });
+  }
+
+  // Open Plan Action Button
+  if (openPlanBtn) {
+    openPlanBtn.addEventListener('click', () => {
+      window.open('https://google.com/travel/flights', '_blank');
+    });
+  }
+
+  // SSE Real-time Event Mirroring
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+  if (token) {
+    try {
+      const sse = new EventSource(`/events?token=${token}`);
+      sse.onmessage = function (e) {
+        try {
+          const payload = JSON.parse(e.data);
+          const type = payload.type;
+          const data = payload.data;
+
+          if (type === 'liveworld.trace') {
+            const stepStream = document.getElementById('actionTraceStream');
+            if (stepStream && data.data) {
+              const stepDiv = document.createElement('div');
+              stepDiv.className = 'trace-step done';
+              stepDiv.innerHTML = `<span class="step-icon">✓</span> [${data.stage}] ${data.type.replace('_', ' ')}`;
+              stepStream.appendChild(stepDiv);
+            }
+          } else if (type === 'liveworld.decision') {
+            const transcript = document.getElementById('transcriptText');
+            if (transcript && data.answer) {
+              transcript.textContent = `"${data.answer}"`;
+            }
+          }
+        } catch (err) {}
+      };
+    } catch (e) {}
+  }
+})();

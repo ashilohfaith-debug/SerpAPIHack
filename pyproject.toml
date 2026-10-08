@@ -3,7 +3,7 @@ name = "relay"
 version = "0.3.3"
 description = "RELAY — Windows-first, offline-first, voice-first accessibility assistant for blind and visually impaired people."
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.15"
 license = { text = "MIT" }
 # Essential core is pure stdlib. Voice (P3) and perception (P4) deps are added
 # behind extras once Windows/3.12 wheel compatibility is verified — the core

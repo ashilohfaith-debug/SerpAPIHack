@@ -38,9 +38,21 @@ _FORWARD_EVENTS = {
     "reading.part",
     "reading.end",
     "reminder.due",
+    "liveworld.trace",
+    "liveworld.decision",
+    "liveworld.telemetry",
+    "liveworld.status",
 }
 # Only these commands are accepted from the panel (all go through the safety pipeline).
-_ALLOWED_COMMANDS = {"handle", "set_mode", "onboard", "ping"}
+_ALLOWED_COMMANDS = {
+    "handle",
+    "set_mode",
+    "onboard",
+    "ping",
+    "disconnect_live_world",
+    "reconnect_live_world",
+    "get_live_world_status",
+}
 
 _FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
 _PANEL_HTML = _FRONTEND_DIR / "panel.html"
@@ -119,6 +131,23 @@ class IpcServer:
             # run like a spoken command, through the full safety pipeline
             self.session.handle(text)
             return {"ok": True}
+        if command == "disconnect_live_world":
+            from relay.liveworld.serpapi import SerpApiClient
+            SerpApiClient.set_disconnected(True)
+            if self.bus:
+                self.bus.publish("liveworld.status", {"connected": False})
+            return {"ok": True, "connected": False}
+        if command == "reconnect_live_world":
+            from relay.liveworld.serpapi import SerpApiClient
+            SerpApiClient.set_disconnected(False)
+            status = SerpApiClient().is_available()
+            if self.bus:
+                self.bus.publish("liveworld.status", {"connected": status})
+            return {"ok": True, "connected": status}
+        if command == "get_live_world_status":
+            from relay.liveworld.serpapi import SerpApiClient
+            status = SerpApiClient().is_available()
+            return {"ok": True, "connected": status}
         return {"ok": False, "error": "unknown command"}
 
     # --- lifecycle ---

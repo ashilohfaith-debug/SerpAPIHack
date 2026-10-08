@@ -218,6 +218,12 @@ class Session:
         except ValueError:
             pass
 
+        from relay.liveworld import LiveWorldBroker
+
+        self.live_world = LiveWorldBroker()
+        self._last_live_decision = None
+        self._last_live_action = None
+
         self.hold_to_talk = True
         try:
             self.hold_to_talk = self.store.get_pref("hold_to_talk", default="1") in ("1", "true", "True")
@@ -462,6 +468,31 @@ class Session:
             # command that the user is about to give.
             self.cancel.clear()
             self._answer_cancel.clear()
+
+        # 1. Action trigger check for opening retrieved live evidence URLs
+        open_cmd = utterance.strip().lower()
+        if re.search(r"\b(?:open|launch|show)\s+(?:the\s+)?(?:flight|hotel|stay|dinner|restaurant|plan|option|url|result|link|best)\b", open_cmd):
+            if hasattr(self, "_last_live_action") and self._last_live_action and self._last_live_action.get("target"):
+                target_url = self._last_live_action["target"]
+                label = self._last_live_action.get("label", "result")
+                self.say(f"Opening {label}.", _REQ)
+                from relay.system.web import open_url
+                try:
+                    open_url(target_url)
+                except Exception:
+                    pass
+                return [f"Opened {target_url}"]
+
+        # 2. Live-World intent routing via LiveWorldBroker
+        if not self.dictation and hasattr(self, "live_world") and self.live_world:
+            lw_intent = self.live_world.router.classify(utterance)
+            if lw_intent.requires_live_data:
+                log.info("Routing request to LiveWorldBroker (requires_live_data=True, category=%s)", lw_intent.category)
+                _, decision, telemetry = self.live_world.process(utterance, bus=self.bus)
+                self._last_live_decision = decision
+                self._last_live_action = decision.action
+                self.say(decision.answer, _REQ)
+                return [decision.answer]
         if not self.dictation and not self._in_steps:
             from relay.intent.compound import split_steps
 

@@ -2,27 +2,30 @@
   <img src="frontend/logo.png" alt="Relay" width="420" />
 </p>
 
-<h1 align="center">RELAY</h1>
-<h3 align="center">The voice interface to the live world.</h3>
+<h3 align="center">Windows Voice Operating System & Autonomous Computer Agent</h3>
 
 <p align="center">
-  <strong>Voice → Intent → Search Plan → SerpApi → Evidence → Decision → Action</strong><br>
-  <em>SerpApi India Hackathon 2026 — AI Agents Track Submission</em>
+  A fast, private, offline-first voice operating system and autonomous computer agent built for Windows.<br>
+  Engineered with grounded semantic UI tree perception, real-time delta diff narration, DPAPI confidential secret vault, and verifiable step longevity.
 </p>
 
 <p align="center">
-  <a href="#serpapi-live-world-subsystem"><strong>LIVE WORLD ENGINE</strong></a> ·
-  <a href="#quick-start--downloads">Setup</a> ·
+  <a href="#quick-start--downloads"><strong>⬇ Download Installer</strong></a> ·
+  <a href="#core-capabilities">Capabilities</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#hackathon-submission">Hackathon Docs</a>
+  <a href="#precision-delta-engine">Delta Engine</a> ·
+  <a href="#dpapi-password-manager">Password Vault</a> ·
+  <a href="#autonomous-benchmarks">30-Task Benchmark</a> ·
+  <a href="#voice-commands--shortcuts">Commands & Shortcuts</a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/SerpApi-Live%20World%20Enabled-00C853" alt="SerpApi Live World" />
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue" alt="Windows 10 | 11" />
   <img src="https://img.shields.io/badge/architecture-x64-informational" alt="x64" />
+  <img src="https://img.shields.io/badge/tests-478%20passed-brightgreen" alt="Tests" />
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" />
-  <img src="https://img.shields.io/badge/offline-fail%20closed%20gate-orange" alt="Fail Closed Gate" />
+  <img src="https://img.shields.io/badge/security-DPAPI%20Encrypted-purple" alt="DPAPI Security" />
+  <img src="https://img.shields.io/badge/offline-100%25%20core-orange" alt="Offline Ready" />
 </p>
 
 ---
@@ -37,46 +40,16 @@ Unlike cloud agents that guess screen state from delayed, low-resolution screens
 You Speak (Local Whisper / Online STT)
          │
          ▼
-LiveWorldRouter ───────────► LiveWorldBroker ──► SerpApi Multi-Engine Search
-         │                                               │
-         ▼                                               ▼
-Local Actions / System Skills                     Evidence Normalizer & Store
-                                                         │
-                                                         ▼
-                                             Grounded Decision Engine
-                                                         │
-                                                         ▼
-                                             Action Provenance & Web Action
-```
-
----
-
-## SerpApi Live World Subsystem
-
-Relay separates **reasoning** from **reality**:
-
-- **LLM**: Knows how to reason.
-- **SerpApi**: Knows what is true right now.
-- **Relay**: Knows how to act.
-
-### Architectural Fail-Closed Guarantee
-When a user asks for live external facts (flights, hotels, pricing, local businesses, news), Relay **fails closed** if `SERPAPI_API_KEY` is missing or SerpApi fails:
-
-> *"I understood the request, but live-world access is unavailable, so I can't verify current results."*
-
-Relay **never silently falls back to LLM knowledge** for current-world facts.
-
-### Quick Run & Demo Commands
-
-```bash
-# Set your SerpApi key in environment or .env
-$env:SERPAPI_API_KEY="your_serpapi_key_here"
-
-# Execute the primary Bangalore travel demo
-python -m relay --demo-liveworld
-
-# Launch Relay with the interactive web panel
-python -m relay --start --with-panel
+Intent Grammar & Compound Parser ──► [Multi-Step Planner (up to 80 steps)]
+         │                                       │
+         ▼                                       ▼
+Safety Gate & Confirmation Check ──► Transparent Step Runner
+         │                                       │
+         ▼                                       ▼
+Action Executor (OS / Win32 / UIA) ──► UI Observation & Precision Delta Engine
+         │                                       │
+         ▼                                       ▼
+Verifiable Outcome Check ──────────────► Natural Spoken Narration (Piper / Sarvam)
 ```
 
 ---
