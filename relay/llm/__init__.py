@@ -69,7 +69,7 @@ def routes_from_config(cfg) -> list[Route]:
     models = [m for m in (cfg.llm_models or []) if m]
     if not models or models == ["auto:fast", "auto"]:
         if "googleapis.com" in url.lower():
-            models = ["gemini-2.0-flash", "gemini-1.5-flash"]
+            models = ["gemini-3.8-flash", "gemini-flash-latest"]
         elif "groq.com" in url.lower():
             models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
         elif "openai.com" in url.lower():

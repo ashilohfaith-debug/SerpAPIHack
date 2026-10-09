@@ -35,6 +35,13 @@
       "dest": "/downloads/$1"
     },
     {
+      "src": "/serp-relay.exe",
+      "headers": {
+        "Content-Disposition": "attachment; filename=\"serp-relay.exe\""
+      },
+      "dest": "/downloads/serp-relay.exe"
+    },
+    {
       "src": "/Relay-Setup.exe",
       "headers": {
         "Content-Disposition": "attachment"
@@ -46,7 +53,7 @@
       "headers": {
         "Content-Disposition": "attachment"
       },
-      "dest": "/downloads/Relay-Setup.exe"
+      "dest": "/downloads/serp-relay.exe"
     },
     {
       "handle": "filesystem"
