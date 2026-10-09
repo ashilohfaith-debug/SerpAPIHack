@@ -106,6 +106,31 @@ def main():
                 else:
                     shutil.copy2(item, dest)
 
+    # Ensure _internal and models runtime folders are copied into target_dir
+    internal_candidates = [
+        exe_dir / "_internal",
+        exe_dir / "dist" / "relay" / "_internal",
+        Path("D:/Programs/Relay/_internal"),
+        local_app_data / "Programs" / "Relay" / "_internal",
+    ]
+    for ic in internal_candidates:
+        if ic.exists() and not (target_dir / "_internal").exists():
+            print(f"Installing runtime dependencies from {ic}...")
+            shutil.copytree(ic, target_dir / "_internal", dirs_exist_ok=True)
+            break
+
+    models_candidates = [
+        exe_dir / "models",
+        exe_dir / "dist" / "relay" / "models",
+        Path("D:/Programs/Relay/models"),
+        local_app_data / "Programs" / "Relay" / "models",
+    ]
+    for mc in models_candidates:
+        if mc.exists() and not (target_dir / "models").exists():
+            print(f"Installing models from {mc}...")
+            shutil.copytree(mc, target_dir / "models", dirs_exist_ok=True)
+            break
+
     print("Registering system shortcuts (Desktop & Start Menu with Ctrl+Alt+R)...")
     if cli_exe.exists():
         try:
