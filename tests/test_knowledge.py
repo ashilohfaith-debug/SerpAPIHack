@@ -1,6 +1,6 @@
 """Tests for Perplexity Computer knowledge engine and offline research fallback."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from relay.intent import Kind, parse
 from relay.session import Session

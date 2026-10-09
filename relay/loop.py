@@ -283,11 +283,9 @@ class VoiceLoop:
         """Called immediately when talk keys are released during hold-to-talk.
         Finalizes captured speech without waiting for silence timeouts or picking up room noise."""
         pcm = None
-        was_armed = False
         with self._lock:
             if not self._armed:
                 return
-            was_armed = True
             self._armed = False
             # Grab all captured audio
             if len(self._buf) >= int(0.18 / FRAME_S * FRAME_BYTES) or (self._in_utt and len(self._buf) > 0):

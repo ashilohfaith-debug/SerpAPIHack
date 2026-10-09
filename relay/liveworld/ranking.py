@@ -6,10 +6,13 @@ Ensures decisions are grounded exclusively in evidence and rejects hallucinated 
 
 from __future__ import annotations
 
+import re
+from datetime import datetime
+from datetime import time as dt_time
 from typing import Any
 
 from relay.diagnostics import get_logger
-from relay.liveworld.evidence import EvidenceStore
+from relay.liveworld.evidence import EvidenceStore, evidence_fingerprint
 from relay.liveworld.types import EvidenceItem, RelayDecision, RelayIntent
 
 log = get_logger("liveworld.ranking")
@@ -23,8 +26,13 @@ class GroundedDecisionEngine:
 
     def decide(self, intent: RelayIntent, evidence_items: list[EvidenceItem]) -> RelayDecision:
         cat = intent.category
-        constraints = intent.constraints
-        entities = intent.entities
+        evidence_items = [item for item in evidence_items if self.store.get_by_id(item.id) is not None]
+        excluded = set(intent.constraints.get("exclude_evidence_ids") or [])
+        fingerprints = set(intent.constraints.get("exclude_evidence_fingerprints") or [])
+        evidence_items = [
+            item for item in evidence_items
+            if item.id not in excluded and evidence_fingerprint(item) not in fingerprints
+        ]
 
         if not evidence_items:
             return RelayDecision(
@@ -46,53 +54,121 @@ class GroundedDecisionEngine:
             return self._decide_general(intent, evidence_items)
 
     def _decide_travel(self, intent: RelayIntent, items: list[EvidenceItem]) -> RelayDecision:
-        flights = [i for i in items if i.engine == "google_flights"]
-        hotels = [i for i in items if i.engine == "google_hotels"]
-        dinners = [i for i in items if i.engine in ("google_maps", "google")]
-
         constraints = intent.constraints
-        max_total = constraints.get("max_total_budget", 10000.0)
-        max_hotel = constraints.get("max_hotel_price", 4000.0)
+        excluded = set(constraints.get("exclude_evidence_ids") or [])
+        excluded_fingerprints = set(constraints.get("exclude_evidence_fingerprints") or [])
+
+        def included(item: EvidenceItem) -> bool:
+            return item.id not in excluded and evidence_fingerprint(item) not in excluded_fingerprints
+
+        flights = [i for i in items if i.engine == "google_flights" and included(i)]
+        hotels = [i for i in items if i.engine == "google_hotels" and included(i)]
+        dinners = [
+            i for i in items if i.engine in ("google_maps", "google") and included(i)
+        ]
+        max_total = constraints.get("max_total_budget")
+        max_hotel = constraints.get("max_hotel_price")
+        max_flight = constraints.get("max_price")
         min_rating = constraints.get("min_rating", 4.0)
+        low_objective = intent.objective.lower()
+        needs_flight = bool(
+            re.search(r"\b(?:flight|flights|fly|flying|ticket|tickets)\b", low_objective)
+            or constraints.get("wants_flight")
+        )
+        needs_hotel = bool(re.search(r"\b(?:hotel|hotels|stay|resort)\b", low_objective))
+        needs_dinner = bool(
+            re.search(r"\b(?:dinner|restaurant|restaurants|food|lunch|breakfast)\b", low_objective)
+        )
 
-        # 1. Select best flight (nonstop, cheapest or matching constraints)
-        best_flight = None
+        # 1. Filter flights without guessing about missing schedule or price data.
+        eligible_flights: list[EvidenceItem] = []
         for f in flights:
-            if constraints.get("nonstop") and "nonstop" not in f.snippet.lower():
+            is_nonstop = f.metadata.get("is_nonstop")
+            if is_nonstop is None:
+                is_nonstop = "nonstop" in f.snippet.lower()
+            if constraints.get("nonstop") and not is_nonstop:
                 continue
-            if best_flight is None or (f.price or 99999) < (best_flight.price or 99999):
-                best_flight = f
-        if not best_flight and flights:
-            best_flight = flights[0]
+            if not self._time_is_at_or_after(f.departureTime, constraints.get("departure_after")):
+                continue
+            if max_flight is not None and (f.price is None or f.price > max_flight):
+                continue
+            eligible_flights.append(f)
 
-        # 2. Select best hotel (rating > 4.0, price < max_hotel)
-        best_hotel = None
+        # 2. Filter hotels against every explicit per-night constraint.
+        eligible_hotels: list[EvidenceItem] = []
         for h in hotels:
-            if h.rating and h.rating < min_rating:
+            if h.rating is None or h.rating < min_rating:
                 continue
-            if h.price and h.price > max_hotel:
+            if h.price is None or (max_hotel is not None and h.price > max_hotel):
                 continue
-            if best_hotel is None or (h.rating or 0) > (best_hotel.rating or 0):
-                best_hotel = h
-        if not best_hotel and hotels:
-            best_hotel = hotels[0]
+            area = str(intent.entities.get("location_area") or "").casefold()
+            if area and area not in " ".join((h.title, h.address or "", h.snippet)).casefold():
+                continue
+            eligible_hotels.append(h)
+
+        best_flight = (
+            min(eligible_flights, key=lambda item: item.price or float("inf"), default=None)
+            if needs_flight
+            else None
+        )
+        best_hotel = (
+            max(eligible_hotels, key=lambda item: item.rating or 0, default=None)
+            if needs_hotel
+            else None
+        )
+
+        # A total budget is a hard constraint, not descriptive text. When a request
+        # needs both a flight and hotel, select an actual pair under the ceiling.
+        if max_total is not None and needs_flight and needs_hotel and eligible_flights and eligible_hotels:
+            pairs = [
+                (flight, hotel)
+                for flight in eligible_flights
+                for hotel in eligible_hotels
+                if flight.price is not None
+                and hotel.price is not None
+                and flight.price + hotel.price <= max_total
+            ]
+            if not pairs:
+                return RelayDecision(
+                    answer=(
+                        f"I found live travel results, but no verified flight and hotel "
+                        f"combination fits the ₹{max_total:,.0f} total budget."
+                    ),
+                    confidence=0.35,
+                    evidence_ids=[],
+                    action={"type": "none", "target": "", "label": ""},
+                )
+            best_flight, best_hotel = min(
+                pairs,
+                key=lambda pair: (
+                    (pair[0].price or 0) + (pair[1].price or 0),
+                    -(pair[1].rating or 0),
+                ),
+            )
+        if max_total is not None and needs_flight and best_flight:
+            if best_flight.price is None or best_flight.price > max_total:
+                best_flight = None
+        if max_total is not None and needs_hotel and best_hotel:
+            if best_hotel.price is None or best_hotel.price > max_total:
+                best_hotel = None
 
         # 3. Select best dinner spot (rating > 4.0)
         best_dinner = None
-        for d in dinners:
-            if d.rating and d.rating < min_rating:
+        for d in dinners if needs_dinner else []:
+            if d.rating is None or d.rating < min_rating:
+                continue
+            if re.search(r"\bopen\b", low_objective) and not self._opening_verified(intent, d):
                 continue
             if best_dinner is None or (d.rating or 0) > (best_dinner.rating or 0):
                 best_dinner = d
-        if not best_dinner and dinners:
-            best_dinner = dinners[0]
 
-        # Calculate totals
-        flight_cost = best_flight.price if (best_flight and best_flight.price) else 3142.0
-        hotel_cost = best_hotel.price if (best_hotel and best_hotel.price) else 3720.0
-        total_est = flight_cost + hotel_cost
-
-        under_budget = max_total - total_est
+        if not (best_flight or best_hotel or best_dinner):
+            return RelayDecision(
+                answer="Live results were retrieved, but none satisfied the requested travel constraints.",
+                confidence=0.35,
+                evidence_ids=[],
+                action={"type": "none", "target": "", "label": ""},
+            )
 
         evidence_ids: list[str] = []
         if best_flight:
@@ -105,68 +181,182 @@ class GroundedDecisionEngine:
         # Validate citation IDs
         valid_ids = self.store.validate_citation_ids(evidence_ids)
 
-        flight_title = best_flight.sourceName if best_flight else "IndiGo"
-        flight_time = best_flight.departureTime + " → " + best_flight.arrivalTime if (best_flight and best_flight.departureTime and best_flight.arrivalTime) else "6:35 PM → 7:40 PM"
-        
-        hotel_name = best_hotel.title if best_hotel else "Hotel Example"
-        hotel_rating = f"{best_hotel.rating} ★" if (best_hotel and best_hotel.rating) else "4.4 ★"
-        
-        dinner_name = best_dinner.title if best_dinner else "Restaurant Example"
-        dinner_rating = f"{best_dinner.rating} ★" if (best_dinner and best_dinner.rating) else "4.6 ★"
+        flight_cost = best_flight.price if best_flight and best_flight.price is not None else None
+        hotel_cost = best_hotel.price if best_hotel and best_hotel.price is not None else None
+        total_est = None
+        under_budget = None
+        if flight_cost is not None and hotel_cost is not None:
+            total_est = flight_cost + hotel_cost
+            under_budget = max_total - total_est if max_total is not None else None
 
-        answer = (
-            f"I found a complete travel plan for Bangalore tomorrow under your ₹{max_total:,.0f} budget. "
-            f"Flight: {flight_title} ({flight_time}) for ₹{flight_cost:,.0f}. "
-            f"Stay: {hotel_name} rated {hotel_rating} for ₹{hotel_cost:,.0f}/night. "
-            f"Dinner: {dinner_name} rated {dinner_rating}. "
-            f"Total estimated cost is ₹{total_est:,.0f}, which is ₹{under_budget:,.0f} under budget."
+        destination = str(intent.entities.get("destination") or "destination").upper()
+        date_label = str(intent.entities.get("date") or "requested date").upper()
+        flight_title = best_flight.sourceName if best_flight else "Not verified"
+        flight_time = (
+            f"{best_flight.departureTime} → {best_flight.arrivalTime}"
+            if best_flight and best_flight.departureTime and best_flight.arrivalTime
+            else "Time not verified"
         )
+        flight_price = f"₹{flight_cost:,.0f}" if flight_cost is not None else "Price not verified"
+
+        hotel_name = best_hotel.title if best_hotel else "No matching hotel verified"
+        hotel_rating = f"{best_hotel.rating} ★" if best_hotel and best_hotel.rating is not None else "Rating not verified"
+        hotel_price = f"₹{hotel_cost:,.0f}" if hotel_cost is not None else "Price not verified"
+
+        dinner_name = best_dinner.title if best_dinner else "No matching dinner place verified"
+        dinner_rating = f"{best_dinner.rating} ★" if best_dinner and best_dinner.rating is not None else "Rating not verified"
+
+        answer_parts = []
+        answer_parts.append(
+            f"For {destination.title()} on {date_label.lower()}, I verified these live results."
+        )
+        if needs_flight:
+            if best_flight:
+                answer_parts.append(f"Flight: {flight_title} ({flight_time}) for {flight_price}.")
+            else:
+                answer_parts.append("I could not verify a flight matching your requested constraints.")
+        if needs_hotel:
+            if best_hotel:
+                answer_parts.append(f"Stay: {hotel_name} rated {hotel_rating} for {hotel_price}/night.")
+            elif max_hotel is not None:
+                answer_parts.append(
+                    f"I could not verify a hotel under ₹{max_hotel:,.0f} "
+                    f"with rating at least {min_rating}."
+                )
+            else:
+                answer_parts.append(
+                    f"I could not verify a hotel rated at least {min_rating}."
+                )
+        if needs_dinner:
+            if best_dinner:
+                answer_parts.append(f"Dinner: {dinner_name} rated {dinner_rating}.")
+            else:
+                answer_parts.append("I could not verify a dinner place meeting the requested rating and opening constraints.")
+        if needs_flight and needs_hotel and total_est is not None and max_total is not None:
+            budget_text = (
+                f"₹{under_budget:,.0f} under budget"
+                if under_budget is not None and under_budget >= 0
+                else f"₹{abs(under_budget or 0):,.0f} over budget"
+            )
+            answer_parts.append(f"The verified flight plus hotel total is ₹{total_est:,.0f}, {budget_text}.")
+        elif needs_flight and needs_hotel and total_est is not None:
+            answer_parts.append(f"The verified flight plus hotel total is ₹{total_est:,.0f}.")
+        elif needs_flight and needs_hotel:
+            answer_parts.append("I did not calculate a total because at least one required price was not verified.")
+
+        answer = " ".join(answer_parts)
 
         rec = {
-            "destination": "BANGALORE · TOMORROW",
+            "destination": f"{destination} · {date_label}",
             "badge": "Best plan",
             "flight": {
                 "name": flight_title,
                 "time": flight_time,
-                "price": f"₹{flight_cost:,.0f}",
-                "url": best_flight.url if best_flight else "https://google.com/travel/flights",
+                "price": flight_price,
+                "url": best_flight.url if best_flight else "",
             },
             "stay": {
                 "name": hotel_name,
                 "rating": hotel_rating,
-                "price": f"₹{hotel_cost:,.0f}",
-                "url": best_hotel.url if best_hotel else "https://google.com/travel/hotels",
+                "price": hotel_price,
+                "url": best_hotel.url if best_hotel else "",
             },
             "dinner": {
                 "name": dinner_name,
                 "rating": dinner_rating,
-                "distance": "1.8 km",
-                "url": best_dinner.url if best_dinner else "https://maps.google.com",
+                "distance": best_dinner.distance or best_dinner.address or "" if best_dinner else "",
+                "url": best_dinner.url if best_dinner else "",
             },
-            "total_cost": f"₹{total_est:,.0f}",
-            "savings": f"₹{under_budget:,.0f} under your ₹{max_total:,.0f} budget",
+            "total_cost": f"₹{total_est:,.0f}" if total_est is not None else "Not fully verified",
+            "savings": (
+                f"₹{under_budget:,.0f} under your ₹{max_total:,.0f} budget"
+                if under_budget is not None and under_budget >= 0
+                else (
+                    f"₹{abs(under_budget):,.0f} over your ₹{max_total:,.0f} budget"
+                    if under_budget is not None
+                    else "No total budget requested"
+                )
+            ),
         }
 
-        action_target = best_flight.url if best_flight and best_flight.url else "https://google.com/travel/flights"
+        for key, requested in (("flight", needs_flight), ("stay", needs_hotel), ("dinner", needs_dinner)):
+            if not requested:
+                rec.pop(key, None)
+
+        action_item = next(
+            (item for item in (best_flight, best_hotel, best_dinner) if item and item.url),
+            None,
+        )
+        action_target = action_item.url if action_item and action_item.url else ""
 
         return RelayDecision(
             answer=answer,
             recommendation=rec,
-            confidence=0.98,
+            confidence=(
+                0.98
+                if (not needs_flight or best_flight)
+                and (not needs_hotel or best_hotel)
+                and (not needs_dinner or best_dinner)
+                else 0.72
+            ),
             evidence_ids=valid_ids,
             action={
-                "type": "open_url",
+                "type": "open_url" if action_target else "none",
                 "target": action_target,
-                "label": f"Open {flight_title} Flight",
+                "label": f"Open {action_item.title}" if action_item else "",
+                "evidenceId": action_item.id if action_item else "",
             },
         )
 
-    def _decide_shopping(self, intent: RelayIntent, items: list[EvidenceItem]) -> RelayDecision:
-        max_price = intent.constraints.get("max_price", 150000.0)
+    def _time_is_at_or_after(self, value: str | None, threshold: Any) -> bool:
+        if not threshold:
+            return True
+        actual = self._parse_time(value)
+        wanted = self._parse_time(str(threshold))
+        if wanted is None:
+            return True
+        if actual is None:
+            return False
+        return actual >= wanted
 
-        valid_items = [i for i in items if i.price and i.price <= max_price]
+    def _parse_time(self, value: str | None) -> dt_time | None:
+        if not value:
+            return None
+        text = value.strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}[ T]", text):
+            try:
+                return datetime.fromisoformat(text).time()
+            except ValueError:
+                return None
+        match = re.search(r"(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?", text, re.IGNORECASE)
+        if not match:
+            return None
+        hour = int(match.group(1))
+        minute = int(match.group(2) or "0")
+        suffix = (match.group(3) or "").upper()
+        if suffix == "PM" and hour < 12:
+            hour += 12
+        elif suffix == "AM" and hour == 12:
+            hour = 0
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            return None
+        return dt_time(hour, minute)
+
+    def _decide_shopping(self, intent: RelayIntent, items: list[EvidenceItem]) -> RelayDecision:
+        max_price = intent.constraints.get("max_price")
+
+        valid_items = [
+            i for i in items if i.engine == "google_shopping" and i.price is not None
+            and (max_price is None or i.price <= max_price)
+        ]
         if not valid_items:
-            valid_items = items
+            return RelayDecision(
+                answer=(f"I found live products, but none had a verified price within ₹{max_price:,.0f}."
+                        if max_price is not None else "I found no products with a verified price."),
+                confidence=0.35,
+                evidence_ids=[],
+                action={"type": "none", "target": "", "label": ""},
+            )
 
         best_item = min(valid_items, key=lambda x: x.price if x.price else 999999)
         valid_ids = self.store.validate_citation_ids([best_item.id])
@@ -189,17 +379,35 @@ class GroundedDecisionEngine:
                 "url": best_item.url,
             },
             action={
-                "type": "open_url",
-                "target": best_item.url or "https://google.com/shopping",
-                "label": f"Open {best_item.sourceName}",
+                "type": "open_url" if best_item.url else "none",
+                "target": best_item.url,
+                "label": f"Open {best_item.sourceName}" if best_item.url else "",
+                "evidenceId": best_item.id,
             },
         )
 
     def _decide_local(self, intent: RelayIntent, items: list[EvidenceItem]) -> RelayDecision:
-        best_item = max(items, key=lambda x: x.rating if x.rating else 0)
+        low = intent.objective.lower()
+        rating_floor = intent.constraints.get("min_rating")
+        if rating_floor is None and re.search(r"\b(?:highly rated|top rated|best)\b", low):
+            rating_floor = 4.0
+        candidates = [
+            item for item in items if item.engine == "google_maps"
+            and (rating_floor is None or (item.rating is not None and item.rating >= rating_floor))
+            and (not re.search(r"\bopen\b", low) or self._opening_verified(intent, item))
+        ]
+        if not candidates:
+            return RelayDecision(
+                "I found live places, but couldn't verify one meeting your rating and opening constraints.",
+                0.35,
+                [],
+                action={"type": "none", "target": "", "label": ""},
+            )
+        best_item = max(candidates, key=lambda x: x.rating if x.rating else 0)
         valid_ids = self.store.validate_citation_ids([best_item.id])
 
-        answer = f"I recommend {best_item.title} rated {best_item.rating} ★. {best_item.snippet}"
+        rating = f" rated {best_item.rating} stars" if best_item.rating is not None else ""
+        answer = f"I recommend {best_item.title}{rating}. {best_item.snippet}"
         return RelayDecision(
             answer=answer,
             confidence=0.95,
@@ -211,11 +419,20 @@ class GroundedDecisionEngine:
                 "url": best_item.url,
             },
             action={
-                "type": "open_maps",
-                "target": best_item.url or "https://maps.google.com",
-                "label": f"Open {best_item.title} in Maps",
+                "type": "open_maps" if best_item.url else "none",
+                "target": best_item.url,
+                "label": f"Open {best_item.title} in Maps" if best_item.url else "",
+                "evidenceId": best_item.id,
             },
         )
+
+    def _opening_verified(self, intent: RelayIntent, item: EvidenceItem) -> bool:
+        # "Open now" is a current observation; it cannot prove tonight's or a
+        # future arrival's hours. Those requests stay unverified without schedules.
+        if not re.search(r"\bopen\s+now\b", intent.objective.lower()):
+            return False
+        state = str(item.metadata.get("open_state") or "").strip().casefold()
+        return bool(re.match(r"^(?:open|open 24 hours)\b", state)) and "closed" not in state
 
     def _decide_news(self, intent: RelayIntent, items: list[EvidenceItem]) -> RelayDecision:
         top_news = items[:3]
@@ -234,9 +451,10 @@ class GroundedDecisionEngine:
                 "url": top_news[0].url if top_news else "https://news.google.com",
             },
             action={
-                "type": "open_url",
-                "target": top_news[0].url if top_news and top_news[0].url else "https://news.google.com",
-                "label": "Read Source Article",
+                "type": "open_url" if top_news and top_news[0].url else "none",
+                "target": top_news[0].url if top_news else "",
+                "label": "Read Source Article" if top_news and top_news[0].url else "",
+                "evidenceId": top_news[0].id if top_news else "",
             },
         )
 
@@ -255,8 +473,9 @@ class GroundedDecisionEngine:
                 "url": best.url,
             },
             action={
-                "type": "open_url",
-                "target": best.url or "https://google.com",
-                "label": "Open Source",
+                "type": "open_url" if best.url else "none",
+                "target": best.url,
+                "label": "Open Source" if best.url else "",
+                "evidenceId": best.id,
             },
         )

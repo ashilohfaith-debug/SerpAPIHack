@@ -99,10 +99,17 @@ class WinEventMonitor:
             log.info("WinEventHook not supported on this platform")
             return
 
-
         def _callback(h_hook, event, hwnd, id_obj, id_child, id_thread, dw_time):
-            # Screen out mouse move or non-client events
-            if id_obj in (0, -4):  # OBJID_WINDOW, OBJID_CLIENT
+            watched = {
+                EVENT_SYSTEM_FOREGROUND,
+                EVENT_SYSTEM_DIALOGSTART,
+                EVENT_SYSTEM_DIALOGEND,
+                EVENT_OBJECT_FOCUS,
+                EVENT_OBJECT_STATECHANGE,
+                EVENT_OBJECT_NAMECHANGE,
+                EVENT_OBJECT_VALUECHANGE,
+            }
+            if event in watched and id_obj in (0, -4):  # OBJID_WINDOW, OBJID_CLIENT
                 self._trigger_debounced()
 
         self._hook_proc = WinEventProc(_callback)

@@ -128,7 +128,7 @@ def test_stt_sends_multipart_wav(base):
     text, lang = SarvamClient(KEY, base=base).stt(float_to_wav(np.zeros(1600)), mode="translate")
     assert (text, lang) == ("What time is it?", "hi-IN")
     body = MockSarvam.log[-1][3]
-    assert b"saaras:v3" in body and b"translate" in body
+    assert b"saaras:v4" in body and b"translate" in body
 
 
 def test_one_connection_for_many_sentences(base):
@@ -187,6 +187,9 @@ def test_sarvam_voice_used_when_online(base):
     tts = SarvamTTS(SarvamClient(KEY, base=base), off)
     audio, sr = tts.synth_to_array("Good morning.")
     assert sr == 22050 and off.said == []
+    request = json.loads(MockSarvam.log[-1][3])
+    assert request["model"] == "bulbul:v4-flash"
+    assert request["speaker"] == "aparna_en_companion"
 
 
 def test_falls_back_to_offline_voice_and_says_so_once(base):
@@ -235,10 +238,15 @@ def test_stt_falls_back_to_whisper(base):
 
 def test_settings_from_environment(monkeypatch):
     monkeypatch.delenv("RELAY_OFFLINE")
+    monkeypatch.delenv("SARVAM_TTS_MODEL", raising=False)
+    monkeypatch.delenv("SARVAM_SPEAKER", raising=False)
     monkeypatch.setattr("relay.memory.secrets.get_secret", lambda k, default="": "")
     assert settings()["key"] == ""  # no key: Sarvam fully off
     assert settings()["base"] == "https://api.sarvam.ai"
     monkeypatch.setenv("SARVAM_API_KEY", " abc ")
+    defaults = settings()
+    assert defaults["tts_model"] == "bulbul:v4-flash"
+    assert defaults["speaker"] == "aparna_en_companion"
     monkeypatch.setenv("SARVAM_SPEAKER", "shubh")
     s = settings()
     # ONE key turns on both: Bulbul voice and Saaras recognition
@@ -246,6 +254,22 @@ def test_settings_from_environment(monkeypatch):
     assert s["tts_model"] == "bulbul:v3" and s["language"] == "en-IN"
     monkeypatch.setenv("SARVAM_STT", "off")  # keep only the voice
     assert settings()["stt"] is False
+
+
+@pytest.mark.parametrize(
+    "speaker,model",
+    [("kavya", "bulbul:v3"), ("shubh", "bulbul:v3"), ("aparna_en_companion", "bulbul:v4-flash")],
+)
+def test_saved_speaker_selects_compatible_model(base, speaker, model):
+    tts = SarvamTTS(SarvamClient(KEY, base=base), OfflineTTS(), speaker=speaker)
+    tts.synth_to_array("Good morning.")
+    assert json.loads(MockSarvam.log[-1][3])["model"] == model
+
+
+def test_explicit_voice_model_is_preserved(monkeypatch):
+    monkeypatch.setenv("SARVAM_SPEAKER", "kavya")
+    monkeypatch.setenv("SARVAM_TTS_MODEL", "bulbul:v3")
+    assert settings()["tts_model"] == "bulbul:v3"
 
 
 # ---------------------------------------------------------------- privacy gate

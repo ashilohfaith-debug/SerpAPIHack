@@ -41,6 +41,8 @@ def test_dispatch_whitelist_and_routing():
     assert not srv.dispatch("set_mode", {"mode": "nope"})["ok"]
     assert srv.dispatch("handle", {"text": "open notepad"})["ok"]
     assert ("handle", "open notepad") in fs.calls
+    assert srv.dispatch("handle", {"args": {"text": "read the page"}})["ok"]
+    assert ("handle", "read the page") in fs.calls
     assert not srv.dispatch("handle", {"text": ""})["ok"]
     assert not srv.dispatch("click_at", {"x": 1})["ok"]  # raw automation refused
 
@@ -75,7 +77,12 @@ def test_live_server_auth_and_events():
             assert e.code == 403
         # panel with token -> 200 HTML
         r = _get(base + "/?token=" + token)
-        assert r.status == 200 and b"RELAY" in r.read()
+        html = r.read()
+        assert r.status == 200 and b"RELAY" in html
+        assert f'/style.css?token={token}'.encode() in html
+        assert f'/app.js?token={token}'.encode() in html
+        assert _get(base + "/style.css?token=" + token).status == 200
+        assert _get(base + "/app.js?token=" + token).status == 200
         # ping command with token -> ok
         assert json.loads(_post(base + "/command?token=" + token, {"command": "ping"}).read())["ok"]
         # disallowed command -> 400

@@ -7,7 +7,6 @@ as soon as intent and key constraints (origin, destination, date, budget) become
 from __future__ import annotations
 
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
 
@@ -37,6 +36,7 @@ class SpeculativeSearchManager:
         self._last_speculative_plan: SearchPlan | None = None
         self._speculative_items: list[EvidenceItem] = []
         self._speculative_intent: RelayIntent | None = None
+        self._debounce: threading.Timer | None = None
 
     def on_partial_transcript(self, partial_text: str, on_speculative_event: Callable[[str, dict[str, Any]], None] | None = None) -> None:
         """Called as STT streams partial recognition results."""
@@ -48,6 +48,7 @@ class SpeculativeSearchManager:
         intent = self.router.classify(text)
 
         if not intent.requires_live_data:
+            self.cancel()
             return
 
         # Check if we have sufficient constraint completeness to speculate
@@ -63,6 +64,9 @@ class SpeculativeSearchManager:
             # Cancel any previous speculative search if text/intent evolved
             if self._active_cancel_event is not None:
                 self._active_cancel_event.set()
+            if self._debounce is not None:
+                self._debounce.cancel()
+            self._speculative_items = []
 
             cancel_event = threading.Event()
             self._active_cancel_event = cancel_event
@@ -71,12 +75,22 @@ class SpeculativeSearchManager:
         # Create speculative search plan
         plan = self.planner.create_search_plan(intent)
         self._last_speculative_plan = plan
+        if not plan.searches:
+            return
 
         if on_speculative_event:
             on_speculative_event("speculative_started", {"text": text, "searches": len(plan.searches)})
 
         # Launch speculative searches in background
-        self._executor.submit(self._run_speculative, plan, cancel_event, on_speculative_event)
+        timer = threading.Timer(
+            0.35,
+            lambda: self._executor.submit(self._run_speculative, plan, cancel_event, on_speculative_event)
+            if not cancel_event.is_set() else None,
+        )
+        timer.daemon = True
+        with self._lock:
+            self._debounce = timer
+        timer.start()
 
     def _run_speculative(
         self,
@@ -105,6 +119,8 @@ class SpeculativeSearchManager:
                     return
 
                 norm = normalize_serp_response(search_item.engine, raw)
+                for item in norm:
+                    item.metadata["search_params"] = dict(search_item.params)
                 self.store.store(search_item.engine, search_item.params, norm)
                 items.extend(norm)
             except Exception as e:
@@ -112,6 +128,8 @@ class SpeculativeSearchManager:
 
         if not cancel_event.is_set():
             with self._lock:
+                if cancel_event.is_set() or cancel_event is not self._active_cancel_event:
+                    return
                 self._speculative_items = items
             log.info("Speculative search completed with %d items", len(items))
             if on_event:
@@ -119,17 +137,31 @@ class SpeculativeSearchManager:
 
     def consume_speculative(self, final_intent: RelayIntent) -> list[EvidenceItem] | None:
         """Reuses speculative results if final intent matches speculative intent."""
+        plan = self.planner.create_search_plan(final_intent)
         with self._lock:
-            if self._speculative_intent and self._speculative_intent.category == final_intent.category:
-                if self._speculative_items:
-                    log.info("Reusing %d speculative evidence items for final intent!", len(self._speculative_items))
-                    items = list(self._speculative_items)
-                    self._speculative_items = []
-                    return items
-            return None
+            if self._active_cancel_event:
+                self._active_cancel_event.set()
+            if self._debounce:
+                self._debounce.cancel()
+            items = [
+                item for item in self._speculative_items
+                if any(
+                    item.engine == search.engine
+                    and item.metadata.get("search_params") == search.params
+                    for search in plan.searches
+                )
+            ]
+            self._speculative_items = []
+            self._speculative_intent = None
+            return items or None
 
     def cancel(self) -> None:
         with self._lock:
             if self._active_cancel_event:
                 self._active_cancel_event.set()
                 self._active_cancel_event = None
+            if self._debounce:
+                self._debounce.cancel()
+                self._debounce = None
+            self._speculative_items = []
+            self._speculative_intent = None

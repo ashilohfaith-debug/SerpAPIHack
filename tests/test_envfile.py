@@ -63,7 +63,12 @@ def test_relay_offline_ignores_every_key(tmp_path, monkeypatch):
 def test_example_file_is_complete_and_has_no_keys():
     text = (ROOT / ".env.example").read_text(encoding="utf-8")
     values = parse(text)
-    assert values == {"RELAY_LLM_URL": "", "RELAY_LLM_KEY": "", "SARVAM_API_KEY": ""}
+    assert values == {
+        "RELAY_LLM_URL": "",
+        "RELAY_LLM_KEY": "",
+        "SARVAM_API_KEY": "",
+        "SERPAPI_API_KEY": "",
+    }
     # the optional settings are there, commented out, each alone on its line
     for k in (
         "SARVAM_SPEAKER",
@@ -71,10 +76,13 @@ def test_example_file_is_complete_and_has_no_keys():
         "SARVAM_LANGUAGE",
         "SARVAM_STT",
         "SARVAM_BASE_URL",
+        "RELAY_STT_MODEL",
+        "RELAY_STT_BEAM_SIZE",
     ):
         line = next(ln for ln in text.splitlines() if ln.startswith(f"# {k}="))
         assert " " not in line[len(f"# {k}=") :], line  # uncommenting gives a clean value
     assert text.index("RELAY_LLM_URL=") < text.index("SARVAM_API_KEY=")  # FreeLLMAPI first
+    assert "SERPAPI_API_KEY=" in text
 
 
 def test_freellmapi_alone_runs_without_sarvam(monkeypatch, tmp_path):

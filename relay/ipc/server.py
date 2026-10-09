@@ -38,6 +38,7 @@ _FORWARD_EVENTS = {
     "reading.part",
     "reading.end",
     "reminder.due",
+    "voice.heard",
     "liveworld.trace",
     "liveworld.decision",
     "liveworld.telemetry",
@@ -113,6 +114,9 @@ class IpcServer:
     def dispatch(self, command: str, args: dict) -> dict:
         if not command_allowed(command):
             return {"ok": False, "error": "command not allowed"}
+        nested_args = args.get("args")
+        if isinstance(nested_args, dict):
+            args = nested_args
         if command == "ping":
             return {"ok": True, "pong": True}
         if command == "set_mode":
@@ -129,20 +133,21 @@ class IpcServer:
             if not text:
                 return {"ok": False, "error": "empty command"}
             # run like a spoken command, through the full safety pipeline
-            self.session.handle(text)
-            return {"ok": True}
+            result = self.session.handle(text)
+            ok = getattr(self.session, "_last_live_action_success", True) if text == "open selected result" else True
+            return {"ok": ok, "results": result}
         if command == "disconnect_live_world":
             from relay.liveworld.serpapi import SerpApiClient
             SerpApiClient.set_disconnected(True)
             if self.bus:
-                self.bus.publish("liveworld.status", {"connected": False})
+                self.bus.emit("liveworld.status", connected=False)
             return {"ok": True, "connected": False}
         if command == "reconnect_live_world":
             from relay.liveworld.serpapi import SerpApiClient
             SerpApiClient.set_disconnected(False)
             status = SerpApiClient().is_available()
             if self.bus:
-                self.bus.publish("liveworld.status", {"connected": status})
+                self.bus.emit("liveworld.status", connected=status)
             return {"ok": True, "connected": status}
         if command == "get_live_world_status":
             from relay.liveworld.serpapi import SerpApiClient
@@ -182,7 +187,14 @@ class IpcServer:
                     if not self._auth():
                         return
                     try:
-                        html = _PANEL_HTML.read_bytes()
+                        html_text = _PANEL_HTML.read_text(encoding="utf-8")
+                        asset_token = server.token
+                        html_text = html_text.replace(
+                            'href="style.css"', f'href="/style.css?token={asset_token}"'
+                        ).replace(
+                            'src="app.js"', f'src="/app.js?token={asset_token}"'
+                        )
+                        html = html_text.encode("utf-8")
                     except OSError:
                         html = b"<h1>RELAY panel missing</h1>"
                     self.send_response(200)

@@ -1,153 +1,84 @@
-# Relay — SerpApi India Hackathon 2026 Submission
+# Relay: The Voice Interface to the Live World
 
-> **The voice interface to the live world.**  
-> *Voice → Intent → Search Plan → SerpApi → Evidence → Decision → Action*
+Relay is a Windows voice assistant for blind and low-vision users. The live-world
+extension separates speech, retrieval, evidence-based decisions, and desktop actions.
+Removing SerpApi removes current-world retrieval; local commands continue working.
 
----
+## Architecture
 
-## 1. Problem
-
-Today's voice assistants are conversational but fundamentally unreliable when decisions depend on the live world.
-
-- Prices change continuously.
-- Flights and hotel availability fluctuate by the minute.
-- Local businesses open, close, and update operating hours.
-- Breaking news and product releases evolve in real time.
-- Ratings and user reviews shift over time.
-
-An LLM's static training memory or hallucinated guesses are **not enough**. When a user asks an assistant to plan a trip, compare laptop prices, or find an open restaurant, guessing current facts leads to broken real-world decisions.
-
----
-
-## 2. Core Insight
-
-**Separate reasoning from reality.**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  LLM       →  Knows how to reason                           │
-│  SerpApi   →  Knows what is true right now                  │
-│  Relay     →  Knows how to act                             │
-└─────────────────────────────────────────────────────────────┘
+```text
+Microphone -> local wake gate -> Whisper or Saaras -> Session
+  Local command -> existing safety gate -> UIA executor -> re-observe -> delta narration
+  Live command  -> LiveWorldBroker -> router -> bounded search plan
+    -> SerpApi engines in parallel -> normalized evidence -> constraint filtering
+    -> cited decision -> spoken answer / companion panel -> verified result handoff
 ```
 
-Relay enforces a strict architectural boundary: **The reasoning layer MUST NOT provide an answer for live facts until SerpApi returns usable evidence.**
+The engines are Google Search, Shopping, Maps, Flights, Hotels, and News. Keys stay
+in the Python process. The browser receives decisions over a loopback, token-authenticated
+SSE connection. HTML, CSS, JavaScript, and command requests all require that token.
 
----
+Search plans contain at most six searches. Identical engine/parameter combinations
+use a five-minute in-memory cache. Results are ranked deterministically against
+supported explicit constraints. General research currently presents retrieved
+source snippets; it does not implement a comprehensive LLM comparison of every source.
 
-## 3. System Architecture
+## Setup
 
-```
-User Voice Input
-       │
-       ▼
- ┌───────────┐
- │ STT Engine│  (Whisper / Sarvam)
- └─────┬─────┘
-       │
-       ▼
-┌───────────────┐
-│LiveWorldRouter│  (Deterministic & intent classifier)
-└──────┬────────┘
-       │
-       ├─────────────────────────────────────────┐
-       │ (requiresLiveData = False)              │ (requiresLiveData = True)
-       ▼                                         ▼
-┌─────────────┐                        ┌──────────────────┐
-│Local Skills │                        │ LiveWorldBroker  │
-│  & Actions  │                        └────────┬─────────┘
-└─────────────┘                                 │
-                                                ▼
-                                       ┌──────────────────┐
-                                       │  Search Planner  │
-                                       └────────┬─────────┘
-                                                │
-                                                ▼
-                                       ┌──────────────────┐
-                                       │ SerpApi Engines  │ (Parallel Execution)
-                                       └────────┬─────────┘
-                                                │
-                                                ▼
-                                       ┌──────────────────┐
-                                       │ Normalization &  │
-                                       │ Evidence Store   │
-                                       └────────┬─────────┘
-                                                │
-                                                ▼
-                                       ┌──────────────────┐
-                                       │ Decision Engine  │ (Grounded reasoning)
-                                       └────────┬─────────┘
-                                                │
-                                                ▼
-                                       ┌──────────────────┐
-                                       │ Action Provenance│
-                                       └────────┬─────────┘
-                                                │
-                                                ▼
-                                       Grounded Voice Answer
-                                      + Interactive Result UI
-                                      + Action Execution
-```
+Follow the source setup in README.md. Configure `SERPAPI_API_KEY` in the ignored
+`.env` file. `SARVAM_API_KEY` optionally enables Saaras v4 recognition and Bulbul
+v4 Flash speech with the `aparna_en_companion` persona. Without it, recognition
+uses local `base.en` INT8 and speech uses Piper with a Windows SAPI fallback.
+Existing legacy voices such as `kavya` automatically use Bulbul v3 unless a model
+is explicitly configured. Existing `.env` settings are not overwritten.
 
----
+Start `uv run python -m relay --start --with-panel`. Use the URL printed by Relay;
+its token is required. Never put real keys into browser code, recordings, or screenshots.
 
-## 4. Why SerpApi is Essential
+## Three-Minute Demo
 
-Relay **fails closed** if `SERPAPI_API_KEY` is missing or SerpApi is unreachable.
+1. Speak: "Relay, find the cheapest nonstop flight from Chennai to Bangalore tomorrow
+   after 5 PM, and a hotel under 4000 near Indiranagar. Keep everything under 10000."
+2. Inspect the retrieved flights/hotels, prices, constraints, and cited evidence.
+   If no combination qualifies, Relay reports that instead of inventing a plan.
+3. Ask "find another cheaper option" to exercise retained context and stable exclusions.
+4. Ask "open the hotel", then "open the flight". Each action uses that component's
+   cited link, rather than whichever link was last selected.
+5. Ask "book the flight". Relay resolves the returned flight booking token into
+   provider options and opens the selected handoff. Passenger details and payment
+   remain at the provider. An opened handoff is not a completed booking.
+6. Disconnect Live World in the panel. Repeat the search and observe the refusal.
+   A supported local command such as "what time is it" continues working.
 
-If live-world data is required and SerpApi cannot be reached, Relay explicitly announces:
+The original Bangalore prompt omits the departure city. Relay asks for it; a short
+reply such as "Chennai" completes the pending request. Unsupported city names
+require an airport code before a Flights request is issued.
 
-> *"I understood the request, but live-world access is unavailable, so I can't verify current results."*
+## Honest Limits
 
-Relay **never silently falls back to LLM memory for live facts.**
+- No real SerpApi credential was configured during the audit. Search and booking
+  provider tests use fixtures and mock HTTP responses. A live SerpApi demo still
+  requires valid credentials; fixture success is not live-provider verification.
+- The configured Sarvam credential was tested against the live service. Bulbul v3
+  with the saved `kavya` voice and Saaras v4 recognition both passed the machine
+  health check. The new v4 Flash persona has fixture coverage, not a live listening test.
+- Search results are not a guarantee of ticket inventory or completed payment.
+- A restaurant's "open now" observation cannot prove future opening hours. Relay
+  rejects a claimed tonight/arrival-time match when its schedule is not verified.
+- The speculative manager supports debounce, cancellation, cache reuse, and exact
+  parameter matching. The current offline voice loop supplies finalized utterances;
+  actual incremental microphone transcription is not connected to that manager.
+- In-flight standard-library HTTP requests cannot be forcibly aborted. Cancellation
+  discards obsolete results and prevents subsequent requests; timeouts bound the call.
+- Naturalness, accents, noise, barge-in, and screen-reader ergonomics require tests
+  with the intended users on their actual microphones and Windows applications.
+- Extended testing encountered intermittent desktop COM timeouts and SSE network
+  suspension. UIA replacement workers are now bounded and the panel announces
+  reconnection. The final 538-test suite passed, but soak testing remains necessary.
 
-If SerpApi disappears, Relay completely loses its connection to the live world.
+## Provider References
 
----
-
-## 5. SerpApi Engines Implemented
-
-Relay integrates official SerpApi endpoints across 6 specialized search engines:
-
-1. **`google_flights`**: Real-time airline flight schedules, prices, departure/arrival times, nonstop status, and direct booking URLs.
-2. **`google_hotels`**: Live hotel nightly rates, overall ratings, review counts, location areas, and property details.
-3. **`google_maps`**: Local business listings, addresses, user review counts, star ratings, and operating status.
-4. **`google_shopping`**: Real-time product prices across e-commerce merchants, inline deals, and store links.
-5. **`google_news`**: Breaking news headlines, publisher sources, and publication timestamps.
-6. **`google`**: General organic web search for specification verification, reviews, and primary sources.
-
----
-
-## 6. Signature Original Features
-
-### 1. Speculative Voice Search
-To eliminate voice latency, search execution begins **before the user finishes speaking** as soon as intent and key constraints (origin, destination, budget, location) stabilize during STT transcript streaming. If the finalized request matches the speculative search, evidence is reused instantly. If intent changes, in-flight searches are cleanly cancelled using cancellation tokens.
-
-### 2. Multi-Engine Search Planning
-Relay plans targeted searches across multiple SerpApi engines concurrently within a strict search budget (maximum 6 calls per request, typical 2–4 calls).
-
-### 3. Grounded Evidence & Citation Integrity
-Every current-world factual claim in the decision must cite an `evidenceId` stored in the `EvidenceStore`. Any hallucinated or invalid citation ID is rejected by the decision verifier.
-
-### 4. Action Provenance UI
-Before Relay executes an external action (e.g. opening a flight result or maps business), it presents an explicit provenance card explaining **WHY** the option was selected, **LIVE EVIDENCE** sources, and **FRESHNESS**.
-
----
-
-## 7. Existing Project Disclosure
-
-Relay existed prior to the hackathon as a Windows-first, offline-first voice control assistant designed for accessibility.
-
-**Added during the SerpApi India Hackathon 2026:**
-- The entire `relay.liveworld` subsystem (`LiveWorldBroker`, `LiveWorldRouter`, `SearchPlanner`, `SerpApiClient`, `EvidenceStore`, `GroundedDecisionEngine`, `ProvenanceGenerator`, `SpeculativeSearchManager`)
-- SerpApi multi-engine integration (`google_flights`, `google_hotels`, `google_maps`, `google_shopping`, `google_news`, `google`)
-- Live evidence normalization & citation verification system
-- Action provenance UI & Live World Web Panel components
-- Developer demo disconnect toggle mode for SerpApi offline testing
-- Hackathon test suite and benchmark integration
-
----
-
-## 8. AI Tools Used
-
-- **Claude / Gemini (via Antigravity AI coding assistant)**: Used for architecture design, refactoring, writing normalizer functions, UI styling, and automated unit test generation.
+- [Google Flights parameters](https://serpapi.com/google-flights-api)
+- [Flight booking-token options](https://serpapi.com/google-flights-booking-options)
+- [Sarvam Bulbul models](https://docs.sarvam.ai/api/getting-started/models/bulbul)
+- [Bulbul v4 Flash guide](https://docs.sarvam.ai/api/api-guides-tutorials/text-to-speech/best-practice-guide-for-bulbul-v-4-flash)

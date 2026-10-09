@@ -792,8 +792,9 @@ class Skills:
         )
 
     def k_email(self, i):
-        from relay.system import web
         from urllib.parse import quote
+
+        from relay.system import web
 
         if i.slots.get("action") == "compose":
             to = i.slots.get("to", "")
@@ -1260,9 +1261,10 @@ class Skills:
         if not cleaned:
             cleaned = raw_target.lower()
 
-        from relay.system import windows
         import ctypes
         from ctypes import wintypes
+
+        from relay.system import windows
         fg = windows.foreground()
         region = None
         hwnd = None

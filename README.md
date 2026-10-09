@@ -31,7 +31,9 @@
 
 **Relay** transforms Windows into an accessible, voice-driven operating system. It combines local speech recognition, real-time semantic desktop perception, deterministic planning, and LLM reasoning to operate software on your computer hands-free.
 
-Unlike cloud agents that guess screen state from delayed, low-resolution screenshots, Relay perceives the Windows desktop through **Windows UI Automation (UIA) accessibility trees** and direct process hooks. It inspects genuine controls, input boxes, document text, and focus states with zero hallucination.
+Relay perceives the Windows desktop through **Windows UI Automation (UIA) accessibility trees** and direct process hooks. It reads exposed controls, document text, and focus states, then re-observes actions before announcing success. Coverage depends on the application's accessibility support.
+
+See [MASTER_AUDIT.md](MASTER_AUDIT.md) for verification results and remaining integration limits, and [HACKATHON.md](HACKATHON.md) for the live-world demo and architecture. The source changes described there are not yet incorporated into the pre-built downloads.
 
 ```
 You Speak (Local Whisper / Online STT)
@@ -117,7 +119,7 @@ Relay includes a native, zero-exposure credential manager for hands-free login:
 - Core speech recognition runs locally via **Whisper**.
 - Voice synthesis runs locally via **Piper TTS**.
 - Offline intent grammar handles system actions, window management, media, typing, and DPAPI credentials without internet connection.
-- Optional high-speed AI assistance integrates with free API providers (Google AI Studio, Groq, FreeLLMAPI, Sarvam AI) with sub-200ms latency.
+- Optional AI assistance integrates with configured providers (Google AI Studio, Groq, FreeLLMAPI, Sarvam AI). Measure latency with the bundled health checks on the target machine and connection.
 
 ---
 
@@ -129,30 +131,34 @@ Deploy Relay on any Windows 10 or 11 system (64-bit):
 
 | Package | Size | Description | Download |
 |---|---|---|---|
+| **SERP-Relay Installer (Hackathon)** | **44.1 MB** | Standalone executable (`serp-relay.exe`). Bundles complete runtime with SerpApi Live-World routing & offline audio models. | [Download serp-relay.exe](serp-relay.exe) · [Mirror](downloads/serp-relay.exe) |
 | **1-Click Setup** | **8.4 MB** | Full Windows installer (`Relay-Setup.exe`). Automatic start menu shortcuts and system tray integration. | [Download Setup.exe](downloads/Relay-Setup.exe) |
 | **Standalone Executable** | **16.9 MB** | Single standalone binary (`relay.exe`). No installation needed. | [Download relay.exe](downloads/relay.exe) |
 | **Portable ZIP** | **33.3 MB** | Portable package containing executable and dependencies. | [Download ZIP](downloads/relay-windows-x64.zip) |
 
 ### Development Setup (From Source)
 
-```bash
+```powershell
 # Clone the repository
-git clone https://github.com/nagasaipradhyumnapoola/relay.git
-cd relay/app
-
-# Create virtual environment with uv or python
-uv venv
-.venv\Scripts\activate
+git clone https://github.com/ashilohfaith-debug/SerpAPIHack.git
+cd relay
 
 # Install dependencies
-uv pip install -e ".[voice,dev]"
+uv sync --extra voice --extra percept --extra daily --extra dev
+
+# Download the selected local recognition and voice models once
+uv run python -m relay --setup-models
+
+# Optional online settings: edit .env locally; do not commit API keys
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 # Verify installation & run self-tests
-python -m relay --selftest
-python -m relay --check
+uv run python -m relay --selftest
+uv run python -m relay --voice-selftest
+uv run python -m relay --check
 
 # Start Relay
-python -m relay --start
+uv run python -m relay --start --with-panel
 ```
 
 ---

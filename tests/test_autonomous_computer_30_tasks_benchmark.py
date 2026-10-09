@@ -12,25 +12,20 @@ Validates:
 
 from __future__ import annotations
 
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from relay.intent import Kind, parse
-from relay.memory.secrets import get_secret, delete_secret, save_secret
+from relay.executor.executor import ActionOutcome
+from relay.memory.journal import ExecState
+from relay.memory.secrets import get_secret
 from relay.memory.task_context import TaskContext
 from relay.narration import delta as delta_mod
 from relay.narration import policy as pol
 from relay.perception.semantic import Dialog, ScreenSnapshot, UIElement
 from relay.perception.text import clean_content_text
-from relay.safety import PermissionEngine, Risk, ConfirmationStrength
 from relay.session import Session
 from relay.system.apps import AppEntry
-
-
-from relay.executor.executor import ActionOutcome
-from relay.memory.journal import ExecState
 
 
 @pytest.fixture
@@ -419,8 +414,8 @@ def test_autonomous_computer_30_tasks_benchmark(mock_session, monkeypatch):
 
 def test_batch_30_tasks_runner_stress():
     """Verify TransparentRunner executes 30 planned step actions with delta tracking."""
-    from relay.planner.runner import TransparentRunner
     from relay.planner.planner import Step
+    from relay.planner.runner import TransparentRunner
 
     spoken: list[str] = []
     ctx = TaskContext("stress-30-task")

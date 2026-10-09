@@ -1,21 +1,27 @@
-"""Relay Setup & 1-Click Installer.
+"""SERP-Relay Setup & 1-Click Installer.
 
-Double-click to install Relay to %LOCALAPPDATA%\\Programs\\Relay,
-create Start Menu and Desktop shortcuts (Ctrl+Alt+R), and launch immediately.
+Installs SERP-Relay to %LOCALAPPDATA%\\Programs\\SERP-Relay,
+creates Start Menu and Desktop shortcuts (Ctrl+Alt+R), and launches immediately.
+For SerpApi India Hackathon 2026.
 """
 
+from __future__ import annotations
+
 import os
-import sys
-import time
 import shutil
 import subprocess
+import sys
+import time
 from pathlib import Path
 
+
 def print_banner():
-    print("=" * 60)
-    print("   RELAY — Accessible Windows Voice Assistant (v0.3.3)")
-    print("=" * 60)
-    print("\nInstalling Relay on your computer...\n")
+    print("=" * 64)
+    print("   SERP-RELAY — Live-World Voice Agent powered by SerpApi")
+    print("   SerpApi India Hackathon 2026 (AI Agents Track)")
+    print("=" * 64)
+    print("\nInstalling SERP-Relay on your computer...\n")
+
 
 def speak(text: str):
     """Speak using Windows SAPI voice so blind users hear progress immediately."""
@@ -31,57 +37,76 @@ def speak(text: str):
     except Exception:
         pass
 
+
 def main():
-    print_banner()
-    speak("Installing Relay. Please wait a moment.")
-
     # Source directory (where installer is running or adjacent payload)
-    exe_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
+    exe_dir = (
+        Path(sys.executable).resolve().parent
+        if getattr(sys, "frozen", False)
+        else Path(__file__).resolve().parent.parent
+    )
+    meipass = Path(getattr(sys, "_MEIPASS", exe_dir))
 
-    # Target directory: Prefer D:\Programs\Relay if available, else %LOCALAPPDATA%\Programs\Relay
-    programs_d = Path("D:/Programs/Relay")
+    # Target directory: Isolated in %LOCALAPPDATA%\Programs\SERP-Relay
     local_app_data = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
-    if programs_d.parent.exists():
-        target_dir = programs_d
-    else:
-        target_dir = local_app_data / "Programs" / "Relay"
+    target_dir = local_app_data / "Programs" / "SERP-Relay"
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Target folder: {target_dir}")
-
-    # Find payload: dist/relay or current folder or adjacent zip
-    src_payload = exe_dir / "dist" / "relay"
-    if not src_payload.exists():
-        src_payload = exe_dir / "relay"
-    if not src_payload.exists():
-        src_payload = Path("D:/Programs/Relay")
-    if not src_payload.exists():
-        src_payload = exe_dir
-
-    if (src_payload / "relay.exe").exists() and src_payload != target_dir:
-        print("Copying application files...")
-        for item in src_payload.iterdir():
-            if item.name.lower() in ("build", ".git", ".venv", "setup.exe", "relay-setup.exe"):
-                continue
-            dest = target_dir / item.name
-            if item.is_dir():
-                shutil.copytree(item, dest, dirs_exist_ok=True)
-            else:
-                shutil.copy2(item, dest)
-    else:
-        # Check for zip
-        zip_candidates = list(exe_dir.glob("*.zip")) + list((exe_dir / "downloads").glob("*.zip"))
-        if zip_candidates:
-            import zipfile
-            zfile = zip_candidates[0]
-            print(f"Extracting {zfile.name}...")
-            with zipfile.ZipFile(zfile, "r") as z:
-                z.extractall(target_dir.parent)
-
-    print("Registering system shortcuts (Desktop & Start Menu with Ctrl+Alt+R)...")
     cli_exe = target_dir / "relay-cli.exe"
     relay_exe = target_dir / "relay.exe"
 
+    # Forward CLI arguments directly if already installed and called with flags
+    args = sys.argv[1:]
+    if args and args[0] != "--install" and (relay_exe.exists() or cli_exe.exists()):
+        cmd_target = cli_exe if cli_exe.exists() else relay_exe
+        try:
+            res = subprocess.run([str(cmd_target)] + args, cwd=str(target_dir))
+            sys.exit(res.returncode)
+        except Exception as e:
+            print(f"Error running command: {e}")
+
+    print_banner()
+    speak("Installing Serp-Relay. Please wait a moment.")
+    print(f"Target folder: {target_dir}")
+
+    # Check for zip payload first
+    extracted = False
+    zip_candidates = [
+        meipass / "downloads" / "relay-windows-x64.zip",
+        exe_dir / "downloads" / "relay-windows-x64.zip",
+        exe_dir / "relay-windows-x64.zip",
+        Path.cwd() / "downloads" / "relay-windows-x64.zip",
+        Path.cwd() / "relay-windows-x64.zip",
+    ]
+    for zfile in zip_candidates:
+        if zfile.exists():
+            import zipfile
+            print(f"Extracting application payload from {zfile.name}...")
+            with zipfile.ZipFile(zfile, "r") as z:
+                z.extractall(target_dir)
+            extracted = True
+            break
+
+    # If zip not extracted, look for unpacked folders
+    if not extracted:
+        src_payload = exe_dir / "dist" / "relay"
+        if not src_payload.exists():
+            src_payload = exe_dir / "relay"
+        if not src_payload.exists():
+            src_payload = exe_dir
+
+        if (src_payload / "relay.exe").exists() and src_payload != target_dir:
+            print("Copying application files...")
+            for item in src_payload.iterdir():
+                if item.name.lower() in ("build", ".git", ".venv", "setup.exe", "relay-setup.exe", "serp-relay.exe"):
+                    continue
+                dest = target_dir / item.name
+                if item.is_dir():
+                    shutil.copytree(item, dest, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(item, dest)
+
+    print("Registering system shortcuts (Desktop & Start Menu with Ctrl+Alt+R)...")
     if cli_exe.exists():
         try:
             subprocess.run([str(cli_exe), "--install"], check=True, capture_output=True, timeout=15)
@@ -91,45 +116,59 @@ def main():
 
     # Ensure desktop shortcut is created on active Desktop directly
     try:
-        import win32com.client
         import pythoncom
+        import win32com.client
+
         pythoncom.CoInitialize()
         shell = win32com.client.Dispatch("WScript.Shell")
         user_prof = Path(os.environ.get("USERPROFILE", str(Path.home())))
         for dt in [user_prof / "OneDrive" / "Desktop", user_prof / "Desktop"]:
             if dt.exists() and relay_exe.exists():
-                lnk = dt / "Relay.lnk"
+                lnk = dt / "SERP-Relay.lnk"
                 sc = shell.CreateShortCut(str(lnk))
                 sc.TargetPath = str(relay_exe)
                 sc.Arguments = "--toggle"
                 sc.WorkingDirectory = str(target_dir)
-                sc.Description = "Relay — Accessible Voice Assistant for Windows"
+                sc.Description = "SERP-Relay — Live-World Voice Agent powered by SerpApi"
                 sc.Hotkey = "CTRL+ALT+R"
                 sc.save()
                 print(f"Desktop shortcut created: {lnk}")
     except Exception as e:
         print(f"Direct shortcut note: {e}")
 
-    # Copy .env if available
+    # Copy .env or .env.example
     env_src = exe_dir / ".env"
+    if not env_src.exists():
+        env_src = Path.cwd() / ".env"
     if env_src.exists():
         shutil.copy2(env_src, target_dir / ".env")
-        shutil.copy2(env_src, local_app_data / "RELAY" / ".env")
+        relay_data = local_app_data / "SERP-Relay"
+        relay_data.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(env_src, relay_data / ".env")
+        print("Environment configuration applied.")
+    else:
+        example_env = exe_dir / ".env.example"
+        if not example_env.exists():
+            example_env = Path.cwd() / ".env.example"
+        if example_env.exists():
+            shutil.copy2(example_env, target_dir / ".env.example")
 
-    print("\n" + "=" * 60)
-    print("   RELAY IS INSTALLED AND READY!")
+    print("\n" + "=" * 64)
+    print("   SERP-RELAY IS INSTALLED AND READY!")
     print("   Shortcut: Ctrl+Alt+R")
     print("   Voice wake: Say 'Relay' or press Ctrl+Alt+Space")
-    print("=" * 60 + "\n")
+    print("   Powered by SerpApi Live-World Search & Real-Time Data")
+    print("=" * 64 + "\n")
 
-    speak("Relay is installed and ready. Starting Relay now.")
+    speak("SERP-Relay is installed and ready. Starting now.")
 
     if relay_exe.exists():
-        print("Starting Relay in background...")
+        print("Starting SERP-Relay in background...")
         subprocess.Popen([str(relay_exe), "--toggle"], cwd=str(target_dir))
-    
+
     time.sleep(2)
     print("You can close this window now.")
+
 
 if __name__ == "__main__":
     main()

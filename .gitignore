@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+.playwright-cli/
+output/playwright/
 *.egg-info/
 build/
 dist/
@@ -31,6 +33,9 @@ review-receipts/
 *.log
 # packaged binaries (distributed via website and releases)
 *.exe
+!serp-relay.exe
+!downloads/serp-relay.exe
+!frontend/downloads/serp-relay.exe
 !downloads/Relay-Setup.exe
 !frontend/downloads/Relay-Setup.exe
 *.zip

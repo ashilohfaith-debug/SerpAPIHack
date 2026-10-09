@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RELAY — Accessible Windows Voice Assistant Panel</title>
   <meta name="description" content="RELAY is an accessible, transparent voice assistant designed for blind and low-vision individuals to use Windows 10 & 11 by talking. 100% offline core with UI Automation." />
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -62,6 +63,7 @@
   </header>
 
   <main id="main-content" role="main">
+    <h1 class="sr-only">RELAY: The voice interface to the live world</h1>
 
     <!-- ================================================================= -->
     <!-- LIVE WORLD • SERPAPI INTERFACE                                    -->
@@ -69,9 +71,9 @@
     <section class="hero liveworld-hero" id="liveworld" aria-labelledby="liveworld-heading">
       <div class="liveworld-header-row">
         <div class="liveworld-brand">
-          <span class="liveworld-pulse-dot" id="liveworldPulse"></span>
+          <span class="liveworld-pulse-dot" id="liveworldPulse" aria-hidden="true"></span>
           <h2 id="liveworld-heading" class="liveworld-title">LIVE WORLD <span class="liveworld-accent">• SERPAPI</span></h2>
-          <span class="liveworld-status-tag" id="liveworldStatusTag">ONLINE</span>
+          <span class="liveworld-status-tag offline" id="liveworldStatusTag" role="status">CHECKING</span>
         </div>
         
         <div class="liveworld-header-controls">
@@ -82,14 +84,19 @@
       </div>
 
       <!-- Offline Warning Banner (Shown when disconnected) -->
-      <div id="liveworldOfflineBanner" class="liveworld-offline-banner hidden">
-        <div class="offline-icon">⚠️</div>
+      <div id="liveworldOfflineBanner" class="liveworld-offline-banner hidden" role="alert">
+        <div class="offline-icon" aria-hidden="true">!</div>
         <div class="offline-copy">
           <strong>LIVE WORLD OFFLINE</strong>
           <p>I understood your request, but current information could not be verified. SerpApi connection required.</p>
         </div>
       </div>
 
+      <form id="liveCommandForm" class="mirror-input-row live-command-form">
+        <label for="liveCommandInput">Request</label>
+        <input id="liveCommandInput" class="mirror-input" type="text" autocomplete="off" required />
+        <button class="btn-sharp-primary" type="submit">Send</button>
+      </form>
       <div class="liveworld-grid">
 
         <!-- Column 1: Live Voice & Action Trace Stream -->
@@ -101,7 +108,7 @@
           </div>
 
           <!-- Waveform Visualizer -->
-          <div class="voice-wave-container" id="voiceWaveform">
+          <div class="voice-wave-container" id="voiceWaveform" aria-hidden="true">
             <div class="wave-bar b1"></div>
             <div class="wave-bar b2"></div>
             <div class="wave-bar b3"></div>
@@ -110,130 +117,109 @@
           </div>
 
           <!-- Live Transcript -->
-          <div class="live-transcript-box" id="liveTranscript">
-            <span class="prompt-speaker">User:</span> <span id="transcriptText">"Relay, I'm going to Bangalore tomorrow. Find the cheapest nonstop flight after 5 PM, a hotel under ₹4,000 near Indiranagar rated above 4 stars, and somewhere highly rated that's open for dinner after I arrive. Keep everything under ₹10,000."</span>
+          <div class="live-transcript-box" id="liveTranscript" role="status" aria-live="polite" aria-atomic="true">
+            <span class="prompt-speaker" id="transcriptSpeaker">User:</span> <span id="transcriptText">Waiting for a spoken request.</span>
           </div>
 
           <!-- Action Trace Step List -->
-          <div class="minimal-action-trace" id="actionTraceStream">
-            <div class="trace-step done"><span class="step-icon">✓</span> Listening</div>
-            <div class="trace-step done"><span class="step-icon">✓</span> Understanding travel intent</div>
-            <div class="trace-step done"><span class="step-icon">✓</span> Searching SerpApi: Google Flights ✓, Google Hotels ✓, Google Maps ✓</div>
-            <div class="trace-step done"><span class="step-icon">✓</span> Comparing 34 options</div>
-            <div class="trace-step active"><span class="step-icon">★</span> Grounded decision ready</div>
+          <div class="minimal-action-trace" id="actionTraceStream" role="log" aria-live="polite" aria-label="Live search progress">
+            <div class="trace-step active"><span class="step-icon">•</span> Ready to listen</div>
           </div>
 
           <!-- Telemetry Accordion -->
-          <div class="telemetry-bar" id="telemetryBar">
-            <span class="telemetry-item">3 engines</span> · 
-            <span class="telemetry-item">34 candidates</span> · 
-            <span class="telemetry-item">1.8s search</span> · 
-            <span class="telemetry-item">2.6s total</span>
+          <div class="telemetry-bar" id="telemetryBar" role="status" aria-live="polite">
+            <span class="telemetry-item">No live search yet</span>
           </div>
         </div>
 
         <!-- Column 2: Grounded Result Card -->
         <div class="liveworld-card result-card" id="resultCard">
           <div class="result-card-header">
-            <span class="location-label" id="resultLocation">BANGALORE · TOMORROW</span>
-            <span class="plan-badge">Best plan</span>
+            <span class="location-label" id="resultLocation">LIVE RESULT</span>
+            <span class="plan-badge" id="resultBadge">Awaiting evidence</span>
           </div>
 
+          <h3 id="resultTitle" hidden></h3>
+          <p id="resultAnswer" hidden></p>
           <div class="plan-details-grid">
             <!-- Flight Item -->
-            <div class="plan-row">
-              <div class="plan-row-icon">✈️</div>
+            <div class="plan-row" id="flightResultRow">
+              <div class="plan-row-icon" aria-hidden="true">FL</div>
               <div class="plan-row-info">
                 <span class="plan-row-type">FLIGHT</span>
-                <strong id="flightTitle">IndiGo</strong>
-                <span class="plan-row-sub" id="flightTimes">6:35 PM → 7:40 PM</span>
+                <strong id="flightTitle">Not searched yet</strong>
+                <span class="plan-row-sub" id="flightTimes">Ask for a live trip plan</span>
               </div>
-              <div class="plan-row-val" id="flightPrice">₹3,142</div>
+              <div class="plan-row-val" id="flightPrice">--</div>
             </div>
 
             <!-- Stay Item -->
-            <div class="plan-row">
-              <div class="plan-row-icon">🏨</div>
+            <div class="plan-row" id="hotelResultRow">
+              <div class="plan-row-icon" aria-hidden="true">HT</div>
               <div class="plan-row-info">
                 <span class="plan-row-type">STAY</span>
-                <strong id="hotelTitle">Hotel Example</strong>
-                <span class="plan-row-sub" id="hotelRating">4.4 ★</span>
+                <strong id="hotelTitle">Not searched yet</strong>
+                <span class="plan-row-sub" id="hotelRating">Awaiting SerpApi evidence</span>
               </div>
-              <div class="plan-row-val" id="hotelPrice">₹3,720</div>
+              <div class="plan-row-val" id="hotelPrice">--</div>
             </div>
 
             <!-- Dinner Item -->
-            <div class="plan-row">
-              <div class="plan-row-icon">🍽️</div>
+            <div class="plan-row" id="dinnerResultRow">
+              <div class="plan-row-icon" aria-hidden="true">DN</div>
               <div class="plan-row-info">
                 <span class="plan-row-type">DINNER</span>
-                <strong id="dinnerTitle">Restaurant Example</strong>
-                <span class="plan-row-sub" id="dinnerDist">4.6 ★ · 1.8 km</span>
+                <strong id="dinnerTitle">Not searched yet</strong>
+                <span class="plan-row-sub" id="dinnerDist">Awaiting SerpApi evidence</span>
               </div>
-              <div class="plan-row-val" id="dinnerPrice">Open</div>
+              <div class="plan-row-val" id="dinnerPrice">--</div>
             </div>
 
             <!-- Total Budget Item -->
-            <div class="plan-row total-row">
+            <div class="plan-row total-row" id="totalResultRow">
               <div class="plan-row-info">
                 <span class="plan-row-type">ESTIMATED TOTAL</span>
-                <span class="savings-note" id="savingsNote">₹2,338 under your ₹10,000 budget</span>
+                <span class="savings-note" id="savingsNote">No budget verified yet</span>
               </div>
-              <div class="plan-row-val total-val" id="totalPrice">₹7,662</div>
+              <div class="plan-row-val total-val" id="totalPrice">--</div>
             </div>
           </div>
 
           <!-- Primary Action Button -->
           <div class="result-action-bar">
-            <button class="btn-action-primary" id="openPlanBtn" type="button">
+            <button class="btn-action-primary" id="openPlanBtn" type="button" disabled>
               <span>[ Open plan ]</span>
             </button>
           </div>
 
           <!-- Provenance Footer Link -->
-          <div class="result-provenance-footer" id="evidenceTrigger">
+          <button class="result-provenance-footer" id="evidenceTrigger" type="button" aria-expanded="false" aria-controls="evidenceDrawer">
             <span class="prov-icon">✓</span>
-            <span id="evidenceCountLabel">Verified from 34 live results · Flights · Hotels · Maps</span>
+            <span id="evidenceCountLabel">No live evidence yet</span>
             <span class="open-drawer-arrow">→</span>
-          </div>
+          </button>
         </div>
 
       </div>
     </section>
 
     <!-- Slide-Out Evidence Drawer -->
-    <div id="evidenceDrawer" class="evidence-drawer">
+    <aside id="evidenceDrawer" class="evidence-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="evidenceDrawerTitle" tabindex="-1" inert>
       <div class="drawer-header">
         <div>
-          <h3>LIVE EVIDENCE</h3>
+          <h3 id="evidenceDrawerTitle">LIVE EVIDENCE</h3>
           <span class="drawer-sub">Powered by SerpApi</span>
         </div>
-        <button id="closeDrawerBtn" class="close-drawer-btn" type="button">&times;</button>
+        <button id="closeDrawerBtn" class="close-drawer-btn" type="button" aria-label="Close live evidence">&times;</button>
       </div>
       <div class="drawer-body" id="evidenceDrawerBody">
         <div class="evidence-item-card">
-          <div class="item-engine-badge">GOOGLE FLIGHTS</div>
-          <div class="item-title">IndiGo Flight 6E-241 (MAA → BLR)</div>
-          <div class="item-val-row">₹3,142 · Nonstop · 6:35 PM</div>
-          <div class="item-snippet">Verified live flight schedule from Chennai (MAA) to Bangalore (BLR).</div>
-          <a class="item-source-link" href="https://google.com/travel/flights" target="_blank">View on Google Flights ↗</a>
-        </div>
-        <div class="evidence-item-card">
-          <div class="item-engine-badge">GOOGLE HOTELS</div>
-          <div class="item-title">Hotel Example Indiranagar</div>
-          <div class="item-val-row">₹3,720 / night · 4.4 ★ (1,842 reviews)</div>
-          <div class="item-snippet">Verified boutique hotel near Indiranagar with high traveler ratings.</div>
-          <a class="item-source-link" href="https://google.com/travel/hotels" target="_blank">View on Google Hotels ↗</a>
-        </div>
-        <div class="evidence-item-card">
-          <div class="item-engine-badge">GOOGLE MAPS</div>
-          <div class="item-title">Restaurant Example</div>
-          <div class="item-val-row">4.6 ★ · 1,842 reviews · Open tonight</div>
-          <div class="item-snippet">Highly rated local dining establishment in Indiranagar, Bangalore.</div>
-          <a class="item-source-link" href="https://maps.google.com" target="_blank">View on Google Maps ↗</a>
+          <div class="item-engine-badge">LIVE EVIDENCE</div>
+          <div class="item-title">No SerpApi results have been retrieved yet.</div>
+          <div class="item-val-row">Ask a live-world question to populate this drawer.</div>
         </div>
       </div>
-    </div>
+    </aside>
 
     <!-- Hero Section -->
     <section class="hero" aria-labelledby="hero-title">
@@ -243,10 +229,10 @@
             Assistive Operating System Agent · Windows 10 & 11
           </div>
 
-          <h1 class="hero-title" id="hero-title">
+          <h2 class="hero-title" id="hero-title">
             Use your Windows PC
             <span class="sub-heading">by talking.</span>
-          </h1>
+          </h2>
 
           <p class="hero-desc">
             A voice assistant engineered specifically for <strong>blind and low-vision people</strong>. RELAY inspects your screen via Windows UI Automation, announces actions before executing them, confirms changes by re-observing, and recovers out loud.
@@ -434,7 +420,7 @@
           </div>
           <h3>Setup & First Run</h3>
           <p>
-            RELAY installs without Python knowledge. Run the installer script or double-click <code>Install Relay.cmd</code> from the package. It sets up shortcuts and downloads the local speech recognition and voice models once (~140 MB).
+            RELAY installs without Python knowledge. Run the installer script or double-click <code>Install Relay.cmd</code> from the package. It sets up shortcuts and downloads the selected local speech recognition and voice models once; download size varies by recognition profile.
           </p>
           <div class="code-snippet">RELAY.cmd --install
 RELAY.cmd --check</div>
@@ -556,7 +542,7 @@ SARVAM_API_KEY=sk_...</div>
         <div class="pipe-card active-step" id="pipeStep-0" role="listitem">
           <span class="pipe-badge">STAGE 01</span>
           <h3>Speech In</h3>
-          <p>faster-whisper transcribes voice locally in ~180 ms using int8 quantized weights.</p>
+          <p>faster-whisper transcribes locally with accuracy-first <code>base.en</code> INT8 by default; smaller models remain configurable for constrained hardware.</p>
         </div>
         <div class="pipe-card" id="pipeStep-1" role="listitem">
           <span class="pipe-badge">STAGE 02</span>
@@ -686,56 +672,53 @@ SARVAM_API_KEY=sk_...</div>
             </p>
           </div>
           <div style="display:flex; gap:6px;">
-            <span class="sharp-badge">PORT 8765</span>
+            <span class="sharp-badge" id="ipcPortLabel">LOCAL SESSION</span>
             <span class="sharp-badge">ESSENTIAL MODE</span>
           </div>
         </div>
 
         <div class="mirror-log-terminal" id="mirrorTerminal" role="log" aria-live="polite" aria-label="Live event telemetry log">
-          <div class="terminal-entry perception">[System] Listening on 127.0.0.1:8765 · Piper TTS online · faster-whisper ready</div>
+          <div class="terminal-entry perception">[Panel] Waiting for Relay events.</div>
         </div>
 
         <div class="mirror-input-row">
+          <label for="mirrorCmdInput" class="sr-only">Send a command to Relay</label>
           <input type="text" class="mirror-input" id="mirrorCmdInput" placeholder="Send manual command to daemon (e.g. read the page)..." />
           <button class="btn-sharp-primary" id="mirrorSendBtn" type="button">Send</button>
         </div>
       </div>
     </section>
 
-    <!-- Telemetry & Performance Benchmarks -->
+    <!-- Runtime properties -->
     <section class="metrics-section" aria-labelledby="metrics-heading">
       <div class="section-head">
-        <h2 id="metrics-heading">Hardware Budgets on Budget Laptops</h2>
-        <p>Measured on emulated dual-core Celeron with 4 GB RAM.</p>
+        <h2 id="metrics-heading">Runtime Guarantees</h2>
+        <p>Operational properties verified by automated tests. Machine-specific performance should be measured with the bundled benchmark scripts.</p>
       </div>
 
       <div class="metrics-grid">
         <div class="metric-card">
-          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">Idle Memory</span>
-          <div class="metric-val">~35 MB</div>
-          <span class="metric-sub">Budget: &lt; 200 MB (17.5% utilized)</span>
-          <div class="bar-track"><div class="bar-fill" style="width: 17.5%;"></div></div>
+          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">Offline Recognition</span>
+          <div class="metric-val">base.en INT8</div>
+          <span class="metric-sub">Accuracy-first default with a configurable local model</span>
         </div>
 
         <div class="metric-card">
-          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">Peak Essential Memory</span>
-          <div class="metric-val">~380 MB</div>
-          <span class="metric-sub">Budget: &lt; 1,000 MB (38% utilized)</span>
-          <div class="bar-track"><div class="bar-fill" style="width: 38%;"></div></div>
+          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">Live Data</span>
+          <div class="metric-val">Cited SerpApi</div>
+          <span class="metric-sub">Unverified placeholders and generic fallback links are rejected</span>
         </div>
 
         <div class="metric-card">
-          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">End-to-Speech Latency</span>
-          <div class="metric-val">1.8 s</div>
-          <span class="metric-sub">Measured on budget CPU (Budget &lt; 2.4 s)</span>
-          <div class="bar-track"><div class="bar-fill" style="width: 75%;"></div></div>
+          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">Action Safety</span>
+          <div class="metric-val">Verified</div>
+          <span class="metric-sub">State is re-observed before success is announced</span>
         </div>
 
         <div class="metric-card">
-          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">FreeLLMAPI AI TTFT</span>
-          <div class="metric-val">1.4 s</div>
-          <span class="metric-sub">First token generated over hedged local router</span>
-          <div class="bar-track"><div class="bar-fill" style="width: 60%;"></div></div>
+          <span style="font-family:var(--font-mono); font-size:10px; text-transform:uppercase; color:var(--text-secondary); font-weight:700;">Booking Safety</span>
+          <div class="metric-val">Provider Handoff</div>
+          <span class="metric-sub">Traveler details and payment require explicit keyboard confirmation</span>
         </div>
       </div>
     </section>

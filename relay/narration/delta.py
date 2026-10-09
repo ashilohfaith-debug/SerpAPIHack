@@ -131,7 +131,7 @@ def diff(
     for t in sorted(new_dlg - old_dlg):
         dlg = next((d for d in new.dialogs if d.title == t), None)
         btns = f" Options: {', '.join(dlg.buttons)}." if dlg and dlg.buttons else ""
-        next_step = f" Say click {dlg.buttons[0]} to proceed." if dlg and dlg.buttons else " Say what you'd like to do."
+        next_step = " Say which option you want." if dlg and dlg.buttons else " Say what you'd like to do."
         changes.append(f"A dialog opened: {t}.{btns}{next_step}")
     for t in sorted(old_dlg - new_dlg):
         changes.append(f"The {t} dialog closed.")
@@ -182,8 +182,46 @@ def diff(
     # Content-level diff: newly appeared or changed elements
     old_meaningful = meaningful(old.elements)
     new_meaningful = meaningful(new.elements)
-    old_map = {(e.name.strip().lower(), e.role): e for e in old_meaningful if e.name}
-    new_map = {(e.name.strip().lower(), e.role): e for e in new_meaningful if e.name}
+    def identity(element):
+        return (element.stable_id or element.name.strip().lower(), element.role)
+
+    old_map = {identity(e): e for e in old_meaningful if e.name or e.stable_id}
+    new_map = {identity(e): e for e in new_meaningful if e.name or e.stable_id}
+
+    if not switched:
+        from relay.safety import is_protected_field
+
+        background_changes = []
+        for key, element in new_map.items():
+            previous = old_map.get(key)
+            if previous is None:
+                continue
+            if new.focus and identity(element) == identity(new.focus):
+                continue
+            label = element.name or element.role
+            protected = is_protected_field(
+                role=element.role,
+                name=element.name,
+                is_password_field=bool(element.states.get("is_password") or element.states.get("protected")),
+            )
+            if previous.value != element.value:
+                if protected:
+                    background_changes.append("Password text updated.")
+                elif element.value:
+                    background_changes.append(f"{label} is now '{element.value[:60]}'.")
+                else:
+                    background_changes.append(f"{label} was cleared.")
+            elif previous.name != element.name:
+                background_changes.append(f"{previous.name or previous.role} changed to {label}.")
+            for state in ("enabled", "selected", "toggled"):
+                before, after = previous.states.get(state), element.states.get(state)
+                if before is not None and after is not None and before != after:
+                    words = {"enabled": ("disabled", "enabled"), "selected": ("unselected", "selected"), "toggled": ("off", "on")}
+                    background_changes.append(f"{label} is now {words[state][bool(after)]}.")
+        removed = [old_map[key].name for key in old_map if key not in new_map and old_map[key].name]
+        if removed:
+            background_changes.append(f"No longer on screen: {', '.join(removed[:_MAX_LISTED])}.")
+        changes.extend(background_changes[:_MAX_LISTED])
 
     added_keys = [k for k in new_map if k not in old_map]
     if added_keys and not switched:

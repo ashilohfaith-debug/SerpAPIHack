@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 import urllib.parse
 import urllib.request
 from typing import Optional
@@ -16,8 +17,6 @@ from typing import Optional
 from relay.diagnostics import get_logger
 
 log = get_logger("system.knowledge")
-
-import unicodedata
 
 _STOPWORDS = {
     "a", "an", "the", "and", "or", "in", "on", "at", "to", "for", "of", "with",

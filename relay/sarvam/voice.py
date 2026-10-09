@@ -17,7 +17,7 @@ from typing import Callable
 
 from relay.diagnostics import get_logger
 from relay.memory.store import looks_sensitive
-from relay.sarvam.client import API_BASE, SarvamClient, SarvamError, float_to_wav
+from relay.sarvam.client import API_BASE, SarvamClient, SarvamError, float_to_wav, resolve_tts_model
 
 log = get_logger("sarvam")
 
@@ -30,20 +30,25 @@ def settings() -> dict:
     raw_key = (
         ""
         if offline_forced()
-        else os.environ.get("SARVAM_API_KEY", "").strip() or get_secret("SARVAM_API_KEY", "").strip()
+        else os.environ.get("SARVAM_API_KEY", "").strip()
+        or get_secret("SARVAM_API_KEY", "").strip()
     )
     if raw_key.startswith("#") or "REDACTED" in raw_key:
         raw_key = ""
+    speaker = (
+        os.environ.get("SARVAM_SPEAKER", "aparna_en_companion").strip() or "aparna_en_companion"
+    )
     return {
         "key": raw_key,
-        "tts_model": os.environ.get("SARVAM_TTS_MODEL", "bulbul:v3").strip() or "bulbul:v3",
-        "speaker": os.environ.get("SARVAM_SPEAKER", "").strip(),
+        "tts_model": resolve_tts_model(speaker, os.environ.get("SARVAM_TTS_MODEL")),
+        # Sarvam lists this English companion persona for empathetic support.
+        "speaker": speaker,
         "language": os.environ.get("SARVAM_LANGUAGE", "en-IN").strip() or "en-IN",
         # one key = both: Bulbul voice AND Saaras recognition (SARVAM_STT=off keeps only
         # the voice)
         "stt": os.environ.get("SARVAM_STT", "on").strip().lower()
         not in ("0", "off", "false", "no"),
-        "stt_model": os.environ.get("SARVAM_STT_MODEL", "saaras:v3").strip() or "saaras:v3",
+        "stt_model": os.environ.get("SARVAM_STT_MODEL", "saaras:v4").strip() or "saaras:v4",
         # your own proxy in front of Sarvam (it adds the real key), for public builds
         "base": os.environ.get("SARVAM_BASE_URL", "").strip() or API_BASE,
     }
@@ -79,18 +84,16 @@ class SarvamTTS:
         client: SarvamClient,
         offline_tts,
         language: str = "en-IN",
-        speaker: str = "",
-        model: str = "bulbul:v3",
+        speaker: str = "aparna_en_companion",
+        model: str | None = None,
         on_fallback: Callable[[str], None] | None = None,
     ) -> None:
         self.client = client
         self.offline = offline_tts
         self.language = language
         self.speaker = speaker
-        self.model = model
-        self.rate = getattr(offline_tts, "rate", 0.88)
-        if abs(self.rate - 1.0) < 1e-3:
-            self.rate = 0.88
+        self.model = resolve_tts_model(speaker, model)
+        self.rate = getattr(offline_tts, "rate", 1.0)
         self._fb = _Fallback(on_fallback)
 
     def set_rate(self, rate: float) -> None:
@@ -119,7 +122,7 @@ class SarvamSTT:
         self,
         client: SarvamClient,
         offline_stt,
-        model: str = "saaras:v3",
+        model: str = "saaras:v4",
         on_fallback: Callable[[str], None] | None = None,
     ) -> None:
         self.client = client

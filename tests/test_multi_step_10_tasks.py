@@ -7,10 +7,7 @@ and safely handle cancellations and failures without blind execution.
 
 from __future__ import annotations
 
-import time
 from unittest.mock import MagicMock
-
-import pytest
 
 from relay.intent.compound import split_steps
 from relay.llm.assistant import Assistant, validate_command
@@ -54,8 +51,6 @@ def test_session_runs_10_step_task_end_to_end():
     s = Session(speak=spoken.append, db_path=":memory:")
 
     # Mock handle to record execution and return verified results
-    original_handle = s.handle
-
     def mock_handle(step_text: str):
         executed.append(step_text)
         res = StepResult(description=step_text, state="verified")
@@ -203,7 +198,7 @@ def test_multi_step_10_task_cancel_midway():
     s.handle = mock_handle
 
     steps = [f"step {i}" for i in range(1, 11)]
-    results = s.run_steps(steps)
+    s.run_steps(steps)
 
     # Executed steps 1 to 5, cancelled before step 6
     assert len(executed) == 5
@@ -229,7 +224,7 @@ def test_multi_step_10_task_failure_stops_pipeline():
     s.handle = mock_handle
 
     steps = [f"step {i}" for i in range(1, 11)]
-    results = s.run_steps(steps)
+    s.run_steps(steps)
 
     # Stopped at step 3
     assert len(executed) == 3

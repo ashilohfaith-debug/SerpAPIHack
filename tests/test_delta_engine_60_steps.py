@@ -6,17 +6,14 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from relay.intent import Kind, parse
-from relay.memory.secrets import get_secret, delete_secret
+from relay.memory.secrets import get_secret
 from relay.memory.task_context import TaskContext
 from relay.narration import delta as delta_mod
 from relay.narration import policy as pol
 from relay.perception.semantic import ScreenSnapshot, UIElement
-from relay.perception.text import clean_content_text, visible_text
+from relay.perception.text import clean_content_text
 from relay.session import Session
-
 
 # ============================================================================
 # 1. Delta Engine & Content vs Chrome filtering
@@ -228,7 +225,7 @@ def test_session_60_steps_execution(monkeypatch):
     s.handle = _mock_handle
 
     steps_60 = [f"action step number {i}" for i in range(1, 61)]
-    res = s.run_steps(steps_60)
+    s.run_steps(steps_60)
 
     # 1. Total steps executed must be 60
     assert len(executed_steps) == 60

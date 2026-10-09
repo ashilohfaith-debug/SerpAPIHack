@@ -16,13 +16,24 @@ import os
 import time
 import urllib.parse
 import urllib.request
-from typing import Any, Dict
+from typing import Any
 
 from relay.diagnostics import get_logger
 
 log = get_logger("liveworld.serpapi")
 
 BASE_SERPAPI_URL = "https://serpapi.com/search.json"
+
+
+def _usable_api_key(value: str) -> bool:
+    key = (value or "").strip()
+    if not key:
+        return False
+    marker = key.casefold().replace("-", "_")
+    return not any(
+        placeholder in marker
+        for placeholder in ("your_serpapi_key", "replace_me", "change_me", "placeholder")
+    )
 
 
 class SerpApiUnavailableError(Exception):
@@ -35,7 +46,7 @@ class SerpApiClient:
 
     _disconnected_override: bool = False  # Global demo disconnect toggle
 
-    def __init__(self, api_key: str | None = None, timeout: float = 15.0) -> None:
+    def __init__(self, api_key: str | None = None, timeout: float = 25.0) -> None:
         self.api_key = api_key or os.getenv("SERPAPI_API_KEY", "").strip()
         self.timeout = timeout
 
@@ -54,7 +65,7 @@ class SerpApiClient:
         if self.is_disconnected():
             return False
         key = self.api_key or os.getenv("SERPAPI_API_KEY", "").strip()
-        return bool(key)
+        return _usable_api_key(key)
 
     def search(
         self,
@@ -74,7 +85,7 @@ class SerpApiClient:
             raise SerpApiUnavailableError("SerpApi live-world access disabled by developer override.")
 
         key = self.api_key or os.getenv("SERPAPI_API_KEY", "").strip()
-        if not key:
+        if not _usable_api_key(key):
             raise SerpApiUnavailableError("SERPAPI_API_KEY environment variable is not configured.")
 
         query_params: dict[str, str] = {
@@ -91,7 +102,7 @@ class SerpApiClient:
         url = f"{BASE_SERPAPI_URL}?{urllib.parse.urlencode(query_params)}"
         
         # Redact API key for logging
-        safe_url = url.replace(key, "[REDACTED_API_KEY]")
+        safe_url = url.replace(urllib.parse.quote_plus(key), "[REDACTED_API_KEY]")
         t0 = time.perf_counter()
         log.info("SerpApi request: engine=%s url=%s", engine, safe_url)
 
@@ -114,6 +125,8 @@ class SerpApiClient:
                     raise SerpApiUnavailableError(f"SerpApi HTTP error {status_code}")
                 
                 data = json.loads(raw_bytes.decode("utf-8"))
+                if not isinstance(data, dict):
+                    raise SerpApiUnavailableError("SerpApi returned an invalid response object.")
                 
                 # Check for SerpApi top-level error message
                 if "error" in data:
@@ -129,8 +142,9 @@ class SerpApiClient:
             raise SerpApiUnavailableError(f"SerpApi request failed with HTTP status {e.code}")
         except urllib.error.URLError as e:
             duration = time.perf_counter() - t0
-            log.warning("SerpApi URL error: engine=%s reason=%s in %.2fs", engine, e.reason, duration)
-            raise SerpApiUnavailableError(f"SerpApi network connection error: {e.reason}")
+            reason = str(e.reason).replace(key, "[REDACTED]").replace(urllib.parse.quote_plus(key), "[REDACTED]")
+            log.warning("SerpApi URL error: engine=%s reason=%s in %.2fs", engine, reason, duration)
+            raise SerpApiUnavailableError(f"SerpApi network connection error: {reason}")
         except Exception as e:
             duration = time.perf_counter() - t0
             safe_err = str(e).replace(key, "[REDACTED]")

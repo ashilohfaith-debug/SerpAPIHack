@@ -32,6 +32,7 @@ from relay.memory.journal import ExecState
 from relay.memory.task_context import TaskContext, resolve_reference
 from relay.narration import delta as delta_mod
 from relay.narration import policy as pol
+from relay.perception.semantic import UIElement
 from relay.recovery import detect as recovery_detect
 from relay.safety import Action
 
@@ -587,9 +588,10 @@ class TransparentRunner:
         if not cleaned:
             cleaned = raw_target.lower()
 
-        from relay.system import windows
         import ctypes
         from ctypes import wintypes
+
+        from relay.system import windows
         fg = windows.foreground()
         region = None
         hwnd = None

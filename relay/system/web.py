@@ -7,9 +7,12 @@ and global sites are known by name; spoken domains ("flipkart dot com") work too
 
 from __future__ import annotations
 
+import html
 import os
 import re
-from urllib.parse import quote_plus
+import tempfile
+import threading
+from urllib.parse import parse_qsl, quote_plus, urlparse
 
 SITES = {
     "youtube": "https://www.youtube.com",
@@ -114,3 +117,44 @@ def site_label(url: str) -> str:
 
 def open_url(url: str) -> None:
     os.startfile(url)  # type: ignore[attr-defined]  # default browser
+
+
+def open_booking_request(url: str, post_data: str = "") -> None:
+    """Open a verified SerpApi booking handoff in the default browser.
+
+    Google Flights sometimes returns an opaque POST relay instead of a deeplink.  A
+    short-lived local form preserves that payload exactly enough for browser form
+    submission.  This only reaches the provider selection page; Relay never fills or
+    submits traveller details, credentials, or payment.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError("booking handoff URL is not an HTTP(S) address")
+    if not post_data:
+        open_url(url)
+        return
+    fields = "\n".join(
+        f'<input type="hidden" name="{html.escape(name, quote=True)}" '
+        f'value="{html.escape(value, quote=True)}">'
+        for name, value in parse_qsl(post_data, keep_blank_values=True)
+    )
+    document = (
+        "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\">"
+        "<title>Relay booking handoff</title><body>"
+        "<p>Opening the verified booking provider. No purchase has been submitted.</p>"
+        f'<form id="relay-booking" method="post" action="{html.escape(url, quote=True)}">'
+        f"{fields}</form><script>document.getElementById('relay-booking').submit()</script>"
+        "</body></html>"
+    )
+    handle = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".html", prefix="relay-booking-", encoding="utf-8", delete=False
+    )
+    try:
+        handle.write(document)
+        path = handle.name
+    finally:
+        handle.close()
+    os.startfile(path)  # type: ignore[attr-defined]
+    timer = threading.Timer(120.0, lambda: os.path.exists(path) and os.unlink(path))
+    timer.daemon = True
+    timer.start()

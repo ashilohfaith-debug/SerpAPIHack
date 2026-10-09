@@ -445,9 +445,18 @@ class Session:
 
     # ---- dispatch ----
     def handle(self, utterance: str):
+        low = normalize(utterance)
+        safety_intent = parse(utterance)
+        safety_command = safety_intent.get("command") if safety_intent.kind == Kind.CONTROL else None
+        if safety_command in (Command.EMERGENCY_STOP, Command.STOP_TALKING, Command.CANCEL_TASK):
+            return self._handle_control(safety_command)
+        if self.emergency.is_engaged:
+            if safety_command == Command.CONTINUE:
+                return self._handle_control(safety_command)
+            self.say("Emergency stop is still active. Say continue before making another request.", _REQ)
+            return []
         if self._pending is not None:
             return self._resolve_pending(utterance)
-        low = normalize(utterance)
         raw_low = utterance.lower().strip().strip(".!?")
         if self._offer is not None:
             action, self._offer = self._offer, None
@@ -469,26 +478,72 @@ class Session:
             self.cancel.clear()
             self._answer_cancel.clear()
 
-        # 1. Action trigger check for opening retrieved live evidence URLs
-        open_cmd = utterance.strip().lower()
-        if re.search(r"\b(?:open|launch|show)\s+(?:the\s+)?(?:flight|hotel|stay|dinner|restaurant|plan|option|url|result|link|best)\b", open_cmd):
-            if hasattr(self, "_last_live_action") and self._last_live_action and self._last_live_action.get("target"):
-                target_url = self._last_live_action["target"]
-                label = self._last_live_action.get("label", "result")
-                self.say(f"Opening {label}.", _REQ)
-                from relay.system.web import open_url
-                try:
-                    open_url(target_url)
-                except Exception:
-                    pass
-                return [f"Opened {target_url}"]
+        # 1. Booking preparation: use SerpApi's booking token to resolve a real
+        # provider handoff. This opens checkout but never submits passenger/payment data.
+        book_cmd = utterance.strip().lower()
+        if not self.dictation and re.fullmatch(
+            r"(?:book|reserve)\s+(?:it|this|the\s+(?:flight|ticket|option|trip))[.!?]?",
+            book_cmd,
+        ):
+            decision = self.live_world.prepare_flight_booking(bus=self.bus)
+            if self.emergency.is_engaged or self.cancel.is_set():
+                return []
+            self._last_live_decision = decision
+            self._last_live_action = decision.action
+            self.say(decision.answer, _REQ)
+            action = decision.action or {}
+            if action.get("target"):
+                from relay.system.web import open_booking_request
 
-        # 2. Live-World intent routing via LiveWorldBroker
+                try:
+                    open_booking_request(action["target"], action.get("postData", ""))
+                except Exception as exc:
+                    log.warning("Could not open booking handoff: %s", exc)
+                    self.say("I verified the option, but couldn't open the provider.", _REQ)
+            return [decision.answer]
+
+        # 2. Action trigger check for opening retrieved live evidence URLs
+        open_cmd = utterance.strip().lower()
+        open_match = re.fullmatch(
+            r"(?:open|launch|show)\s+(?:(?:the|selected|best)\s+)?"
+            r"(flight|hotel|stay|dinner|restaurant|plan|option|url|result|link|best)[.!?]?",
+            open_cmd,
+        )
+        if not self.dictation and open_match:
+            self._last_live_action_success = False
+            component = open_match.group(1)
+            engine = {
+                "flight": "google_flights",
+                "hotel": "google_hotels",
+                "stay": "google_hotels",
+                "dinner": "google_maps",
+                "restaurant": "google_maps",
+            }.get(component)
+            action = self.live_world.selected_action(engine)
+            if action and action.get("target"):
+                target_url = action["target"]
+                label = action.get("label", "result")
+                self.say(f"Opening {label}.", _REQ)
+                from relay.system.web import open_booking_request
+                try:
+                    open_booking_request(target_url, action.get("postData", ""))
+                except Exception as exc:
+                    log.warning("Could not open live-world action: %s", exc)
+                    self.say("I couldn't open that verified result.", _REQ)
+                    return []
+                self._last_live_action_success = True
+                return [f"Opened {target_url}"]
+            self.say(f"I don't have a verified {component} link to open. Ask me to find one first.", _REQ)
+            return []
+
+        # 3. Live-World intent routing via LiveWorldBroker
         if not self.dictation and hasattr(self, "live_world") and self.live_world:
-            lw_intent = self.live_world.router.classify(utterance)
+            lw_intent = self.live_world.classify(utterance)
             if lw_intent.requires_live_data:
                 log.info("Routing request to LiveWorldBroker (requires_live_data=True, category=%s)", lw_intent.category)
                 _, decision, telemetry = self.live_world.process(utterance, bus=self.bus)
+                if self.emergency.is_engaged or self.cancel.is_set():
+                    return []
                 self._last_live_decision = decision
                 self._last_live_action = decision.action
                 self.say(decision.answer, _REQ)
@@ -935,7 +990,7 @@ class Session:
         elif k == Kind.SAVE_PASSWORD:
             app = (s.get("app") or "").strip().lower()
             if not app:
-                from relay.system.windows import foreground, _friendly_app
+                from relay.system.windows import _friendly_app, foreground
                 fg = foreground()
                 app = _friendly_app(fg.app).lower() if fg else "default"
             pwd = s.get("password", "").strip()
@@ -947,14 +1002,14 @@ class Session:
         elif k == Kind.ENTER_PASSWORD:
             app = (s.get("app") or "").strip().lower()
             if not app:
-                from relay.system.windows import foreground, _friendly_app
+                from relay.system.windows import _friendly_app, foreground
                 fg = foreground()
                 app = _friendly_app(fg.app).lower() if fg else "default"
             return self._enter_password(app)
         elif k == Kind.FORGET_PASSWORD:
             app = (s.get("app") or "").strip().lower()
             if not app:
-                from relay.system.windows import foreground, _friendly_app
+                from relay.system.windows import _friendly_app, foreground
                 fg = foreground()
                 app = _friendly_app(fg.app).lower() if fg else "default"
             from relay.memory.secrets import delete_secret
@@ -1294,6 +1349,10 @@ class Session:
             self.cancel.set()
             self._answer_cancel.set()
             self._pending = None
+            self._offer = None
+            self._capture = None
+            if hasattr(self.live_world, "speculative_mgr"):
+                self.live_world.speculative_mgr.cancel()
             self.reader.stop()
             self.set_dictation(False)
             self.say(

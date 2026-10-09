@@ -237,8 +237,8 @@ def _start(panel: bool = False, toggle: bool = False) -> int:
         probe = SingleInstance()
         if not probe.acquire():
             from relay.app import speak_once
-            from relay.config import Config
             from relay.audio.hotkeys import spoken_combo
+            from relay.config import Config
 
             speak_once(
                 "Relay is already running. Press "

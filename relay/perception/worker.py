@@ -99,6 +99,7 @@ class _WorkerThread:
                     log.info("abandoned UIA thread unblocked and self-terminated")
                     return
         finally:
+            self.alive = False
             with _WORKERS_LOCK:
                 if self in _ACTIVE_WORKERS:
                     _ACTIVE_WORKERS.remove(self)
@@ -121,6 +122,8 @@ class UIAWorker:
         self._current: ScreenSnapshot | None = None
         self._worker: _WorkerThread | None = None
         self._lock = threading.Lock()
+        self._observe_lock = threading.Lock()
+        self._retired_workers: list[_WorkerThread] = []
         self._monitor_stop = threading.Event()
         self._monitor: threading.Thread | None = None
 
@@ -128,9 +131,20 @@ class UIAWorker:
         if self._worker is None:
             self._worker = _WorkerThread()
 
-    def _ensure_worker(self) -> _WorkerThread:
+    def _ensure_worker(self) -> _WorkerThread | None:
         with self._lock:
             if self._worker is None or not self._worker.alive:
+                self._retired_workers = [w for w in self._retired_workers if w._thread.is_alive()]
+                if (
+                    self._worker is not None
+                    and self._worker._thread.is_alive()
+                    and self._worker not in self._retired_workers
+                ):
+                    self._retired_workers.append(self._worker)
+                # A hung COM call cannot be killed safely. Bound abandoned threads
+                # instead of creating an unlimited number during provider failures.
+                if len(self._retired_workers) >= 2:
+                    return None
                 if self._worker is not None:
                     log.warning("UIA worker unresponsive; starting a replacement")
                 self._worker = _WorkerThread()
@@ -140,9 +154,17 @@ class UIAWorker:
         """Take a fresh observation. Returns the snapshot, or None on timeout
         (worker restarted). Publishes ``perception.change`` when the structure
         changed vs the previous snapshot."""
-        worker = self._ensure_worker()
-        if worker.is_observing():
+        if not self._observe_lock.acquire(blocking=False):
             return self._current
+        try:
+            return self._observe_once(timeout)
+        finally:
+            self._observe_lock.release()
+
+    def _observe_once(self, timeout: float) -> ScreenSnapshot | None:
+        worker = self._ensure_worker()
+        if worker is None:
+            return None
         self._version += 1
         version = self._version
         worker.set_observing(True)
@@ -174,6 +196,8 @@ class UIAWorker:
         which must touch controls on the same thread). Returns (value, ok): ok is
         False on timeout/restart or if the callable raised."""
         worker = self._ensure_worker()
+        if worker is None:
+            return None, False
         box, timed_out = worker.submit(fn, timeout)
         if timed_out or box is None or "error" in box:
             if box is not None and "error" in box:
@@ -205,7 +229,6 @@ class UIAWorker:
     def live(self, val: ScreenSnapshot | None) -> None:
         self._current = val
 
-
     def is_stale(self, snap: ScreenSnapshot | None) -> bool:
         """True if the given snapshot is not the current observation — callers
         must re-observe before acting on its elements."""
@@ -217,7 +240,7 @@ class UIAWorker:
 
     # --- event-driven change monitor (WinEvents + debouncing + polling fallback) ---
     def start_change_monitor(self, interval: float = 0.3) -> None:
-        if self._monitor is not None:
+        if self._monitor is not None or getattr(self, "_winevent_monitor", None) is not None:
             return
         try:
             from relay.perception.events import WinEventMonitor
@@ -244,7 +267,6 @@ class UIAWorker:
         last_hwnd = None
         user32 = ctypes.windll.user32
         while not self._monitor_stop.wait(interval):
-
             try:
                 hwnd = user32.GetForegroundWindow()
             except Exception:

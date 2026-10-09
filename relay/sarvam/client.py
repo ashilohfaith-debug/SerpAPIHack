@@ -26,6 +26,13 @@ import numpy as np
 API_BASE = "https://api.sarvam.ai"
 
 
+def resolve_tts_model(speaker: str, model: str | None = None) -> str:
+    """Keep saved legacy speakers on v3 unless a model is explicitly chosen."""
+    if model and model.strip():
+        return model.strip()
+    return "bulbul:v4-flash" if "_" in speaker or not speaker else "bulbul:v3"
+
+
 class SarvamError(Exception):
     def __init__(self, status: int, message: str) -> None:
         super().__init__(f"Sarvam API {status}: {message}")
@@ -147,14 +154,14 @@ class SarvamClient:
         self,
         text: str,
         language_code: str = "en-IN",
-        speaker: str = "",
+        speaker: str = "aparna_en_companion",
         pace: float = 1.0,
-        model: str = "bulbul:v3",
+        model: str | None = None,
     ) -> tuple[np.ndarray, int]:
         payload = {
             "text": text[:2400],
             "language_code": language_code,
-            "model": model,
+            "model": resolve_tts_model(speaker, model),
             "pace": max(0.5, min(2.0, float(pace))),
         }
         if speaker:
@@ -176,7 +183,7 @@ class SarvamClient:
         wav_bytes: bytes,
         mode: str = "transcribe",
         language_code: str = "unknown",
-        model: str = "saaras:v3",
+        model: str = "saaras:v4",
     ) -> tuple[str, str]:
         """Returns (transcript, detected_language_code)."""
         boundary = "----relay" + uuid.uuid4().hex

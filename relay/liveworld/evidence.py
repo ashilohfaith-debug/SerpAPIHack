@@ -21,6 +21,21 @@ log = get_logger("liveworld.evidence")
 CACHE_TTL_SECONDS = 300.0  # 5 minutes cache TTL
 
 
+def evidence_fingerprint(item: EvidenceItem) -> str:
+    """Stable identity for excluding the same result after a fresh search."""
+    payload = {
+        "engine": item.engine,
+        "source": item.sourceName.strip().casefold(),
+        "title": item.title.strip().casefold(),
+        "price": item.price,
+        "departure": item.departureTime,
+        "arrival": item.arrivalTime,
+        "address": item.address,
+    }
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 class EvidenceStore:
     """In-memory store for normalized live evidence with TTL caching."""
 

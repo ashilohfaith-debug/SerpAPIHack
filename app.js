@@ -187,6 +187,8 @@
   const liveworldStatusTag = document.getElementById('liveworldStatusTag');
   const liveworldOfflineBanner = document.getElementById('liveworldOfflineBanner');
   const openPlanBtn = document.getElementById('openPlanBtn');
+  const evidenceDrawerBody = document.getElementById('evidenceDrawerBody');
+  let currentActionTarget = '';
 
   // Toggle Evidence Drawer
   if (evidenceTrigger && evidenceDrawer) {
@@ -213,7 +215,7 @@
       const token = params.get('token');
 
       if (token) {
-        fetch(`/cmd?token=${token}`, {
+        fetch(`/command?token=${token}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ command: cmd, args: {} })
@@ -244,8 +246,84 @@
   // Open Plan Action Button
   if (openPlanBtn) {
     openPlanBtn.addEventListener('click', () => {
-      window.open('https://google.com/travel/flights', '_blank');
+      if (currentActionTarget) {
+        window.open(currentActionTarget, '_blank', 'noopener,noreferrer');
+      }
     });
+  }
+
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value || '';
+  }
+
+  function formatEvidenceValue(item) {
+    const bits = [];
+    if (typeof item.price === 'number') bits.push(`₹${item.price.toLocaleString('en-IN')}`);
+    if (typeof item.rating === 'number') bits.push(`${item.rating} ★`);
+    if (item.reviewCount) bits.push(`${Number(item.reviewCount).toLocaleString('en-IN')} reviews`);
+    if (item.departureTime) bits.push(item.departureTime);
+    if (item.address) bits.push(item.address);
+    return bits.join(' · ') || item.sourceName || item.engine;
+  }
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[ch]);
+  }
+
+  function renderEvidenceDrawer(items) {
+    if (!evidenceDrawerBody) return;
+    const evidence = Array.isArray(items) ? items : [];
+    if (!evidence.length) {
+      evidenceDrawerBody.innerHTML = '<div class="evidence-item-card"><div class="item-engine-badge">LIVE EVIDENCE</div><div class="item-title">No cited live evidence for this result.</div></div>';
+      return;
+    }
+    evidenceDrawerBody.innerHTML = evidence.map((item) => {
+      const title = escapeHtml(item.title || 'Untitled result');
+      const engine = escapeHtml(String(item.engine || 'serpapi').replace(/_/g, ' ').toUpperCase());
+      const val = escapeHtml(formatEvidenceValue(item));
+      const snippet = escapeHtml(item.snippet || '');
+      const url = item.url || '';
+      const link = url ? `<a class="item-source-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Open source</a>` : '';
+      return `<div class="evidence-item-card"><div class="item-engine-badge">${engine}</div><div class="item-title">${title}</div><div class="item-val-row">${val}</div><div class="item-snippet">${snippet}</div>${link}</div>`;
+    }).join('');
+  }
+
+  function renderDecision(decision) {
+    const rec = decision.recommendation || {};
+    const flight = rec.flight || {};
+    const stay = rec.stay || {};
+    const dinner = rec.dinner || {};
+    setText('resultLocation', rec.destination || 'LIVE RESULT');
+    setText('resultBadge', rec.badge || 'Grounded result');
+    setText('flightTitle', flight.name || 'No flight verified');
+    setText('flightTimes', flight.time || '');
+    setText('flightPrice', flight.price || '--');
+    setText('hotelTitle', stay.name || 'No hotel verified');
+    setText('hotelRating', stay.rating || '');
+    setText('hotelPrice', stay.price || '--');
+    setText('dinnerTitle', dinner.name || 'No dinner place verified');
+    setText('dinnerDist', [dinner.rating, dinner.distance].filter(Boolean).join(' · '));
+    setText('dinnerPrice', dinner.url ? 'Open' : '--');
+    setText('totalPrice', rec.total_cost || '--');
+    setText('savingsNote', rec.savings || 'Budget not fully verified');
+
+    const evidenceItems = decision.provenance && decision.provenance.evidence_items;
+    const evidenceCount = Array.isArray(evidenceItems) ? evidenceItems.length : (decision.evidenceIds || []).length;
+    setText('evidenceCountLabel', evidenceCount ? `Verified from ${evidenceCount} cited live results` : 'No cited live evidence');
+    renderEvidenceDrawer(evidenceItems);
+
+    currentActionTarget = decision.action && decision.action.target ? decision.action.target : '';
+    if (openPlanBtn) {
+      openPlanBtn.disabled = !currentActionTarget;
+      openPlanBtn.style.opacity = currentActionTarget ? '' : '0.5';
+    }
   }
 
   // SSE Real-time Event Mirroring
@@ -273,6 +351,22 @@
             if (transcript && data.answer) {
               transcript.textContent = `"${data.answer}"`;
             }
+            renderDecision(data);
+          } else if (type === 'liveworld.telemetry') {
+            const telemetry = document.getElementById('telemetryBar');
+            if (telemetry) {
+              telemetry.innerHTML = `<span class="telemetry-item">${data.totalSearches || 0} engines</span> · <span class="telemetry-item">${data.candidateCount || 0} candidates</span> · <span class="telemetry-item">${((data.totalLatencyMs || 0) / 1000).toFixed(1)}s total</span>`;
+            }
+          } else if (type === 'liveworld.status') {
+            const connected = Boolean(data.connected);
+            isDisconnected = !connected;
+            if (disconnectBtnLabel) disconnectBtnLabel.textContent = connected ? 'Disconnect Live World' : 'Reconnect Live World';
+            if (liveworldPulse) liveworldPulse.classList.toggle('offline', !connected);
+            if (liveworldStatusTag) {
+              liveworldStatusTag.textContent = connected ? 'ONLINE' : 'OFFLINE';
+              liveworldStatusTag.classList.toggle('offline', !connected);
+            }
+            if (liveworldOfflineBanner) liveworldOfflineBanner.classList.toggle('hidden', connected);
           }
         } catch (err) {}
       };

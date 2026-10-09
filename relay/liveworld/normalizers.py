@@ -11,9 +11,11 @@ Supports:
 
 from __future__ import annotations
 
-import time
+import math
+import re
 import uuid
 from typing import Any
+from urllib.parse import urlparse
 
 from relay.diagnostics import get_logger
 from relay.liveworld.types import EngineType, EvidenceItem
@@ -21,20 +23,47 @@ from relay.liveworld.types import EngineType, EvidenceItem
 log = get_logger("liveworld.normalizers")
 
 
+def _number(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = float(value)
+        return number if math.isfinite(number) and number >= 0 else None
+    if isinstance(value, str):
+        cleaned = re.sub(r"[^0-9.]", "", value)
+        try:
+            number = float(cleaned) if cleaned else None
+            return number if number is not None and math.isfinite(number) and number >= 0 else None
+        except ValueError:
+            return None
+    return None
+
+
 def normalize_serp_response(engine: EngineType, raw_data: dict[str, Any]) -> list[EvidenceItem]:
     """Route raw SerpApi engine response to its corresponding normalizer."""
     if engine == "google_flights":
-        return _normalize_flights(raw_data)
+        items = _normalize_flights(raw_data)
     elif engine == "google_hotels":
-        return _normalize_hotels(raw_data)
+        items = _normalize_hotels(raw_data)
     elif engine == "google_maps":
-        return _normalize_maps(raw_data)
+        items = _normalize_maps(raw_data)
     elif engine == "google_shopping":
-        return _normalize_shopping(raw_data)
+        items = _normalize_shopping(raw_data)
     elif engine == "google_news":
-        return _normalize_news(raw_data)
+        items = _normalize_news(raw_data)
     else:
-        return _normalize_google_web(raw_data)
+        items = _normalize_google_web(raw_data)
+    for item in items:
+        item.url = _safe_url(item.url)
+    return items
+
+
+def _safe_url(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    try:
+        parsed = urlparse(value.strip())
+        return value.strip() if parsed.scheme in ("http", "https") and parsed.hostname else ""
+    except ValueError:
+        return ""
 
 
 def _normalize_flights(raw_data: dict[str, Any]) -> list[EvidenceItem]:
@@ -49,21 +78,21 @@ def _normalize_flights(raw_data: dict[str, Any]) -> list[EvidenceItem]:
             continue
         
         first_leg = flights_list[0]
+        last_leg = flights_list[-1]
         airline = first_leg.get("airline", "Airline")
         flight_num = first_leg.get("flight_number", "")
         dep_airport = first_leg.get("departure_airport", {}).get("name", "Origin")
-        arr_airport = first_leg.get("arrival_airport", {}).get("name", "Destination")
+        arr_airport = last_leg.get("arrival_airport", {}).get("name", "Destination")
         dep_time = first_leg.get("departure_airport", {}).get("time", "")
-        arr_time = first_leg.get("arrival_airport", {}).get("time", "")
+        arr_time = last_leg.get("arrival_airport", {}).get("time", "")
 
-        price = flight.get("price")
-        if isinstance(price, (int, float)):
-            price_val = float(price)
-        else:
-            price_val = 0.0
+        price_val = _number(flight.get("price"))
+        layovers = flight.get("layovers") or []
+        stops = max(len(flights_list) - 1, len(layovers))
+        stop_label = "Nonstop" if stops == 0 else f"{stops} stop" + ("s" if stops != 1 else "")
 
         title = f"{airline} {flight_num} ({dep_time} → {arr_time})" if flight_num else f"{airline} ({dep_time} → {arr_time})"
-        url = raw_data.get("search_metadata", {}).get("google_flights_url", "https://www.google.com/travel/flights")
+        url = raw_data.get("search_metadata", {}).get("google_flights_url", "")
 
         items.append(
             EvidenceItem(
@@ -72,12 +101,23 @@ def _normalize_flights(raw_data: dict[str, Any]) -> list[EvidenceItem]:
                 sourceName=airline,
                 title=title,
                 url=url,
-                snippet=f"Nonstop flight from {dep_airport} to {arr_airport}. Price: ₹{price_val:,.0f}.",
+                snippet=(
+                    f"{stop_label} flight from {dep_airport} to {arr_airport}. Price: ₹{price_val:,.0f}."
+                    if price_val is not None
+                    else f"{stop_label} flight from {dep_airport} to {arr_airport}; price not returned."
+                ),
                 price=price_val,
                 currency="INR",
                 departureTime=dep_time,
                 arrivalTime=arr_time,
-                metadata={"airline": airline, "flight_number": flight_num, "raw_flight": flight},
+                metadata={
+                    "airline": airline,
+                    "flight_number": flight_num,
+                    "stops": stops,
+                    "is_nonstop": stops == 0,
+                    "booking_token": flight.get("booking_token", ""),
+                    "raw_flight": flight,
+                },
             )
         )
 
@@ -91,12 +131,12 @@ def _normalize_hotels(raw_data: dict[str, Any]) -> list[EvidenceItem]:
     for idx, prop in enumerate(properties[:10]):
         title = prop.get("name", "Hotel Property")
         rate_info = prop.get("rate_per_night", {})
-        extracted_price = rate_info.get("extracted_before_taxes") or rate_info.get("extracted_lowest") or prop.get("extracted_price", 0)
+        extracted_price = rate_info.get("extracted_before_taxes") or rate_info.get("extracted_lowest") or prop.get("extracted_price")
         
         rating = prop.get("overall_rating") or prop.get("rating")
         reviews = prop.get("reviews") or prop.get("review_count")
         description = prop.get("description", "") or prop.get("snippet", "")
-        link = prop.get("link", "https://www.google.com/travel/hotels")
+        link = prop.get("link", "")
 
         items.append(
             EvidenceItem(
@@ -106,11 +146,17 @@ def _normalize_hotels(raw_data: dict[str, Any]) -> list[EvidenceItem]:
                 title=title,
                 url=link,
                 snippet=description or f"Hotel in target area rated {rating} stars with {reviews} reviews.",
-                price=float(extracted_price) if extracted_price else None,
+                price=_number(extracted_price),
                 currency="INR",
                 rating=float(rating) if rating else None,
                 reviewCount=int(reviews) if reviews else None,
-                metadata={"hotel_class": prop.get("hotel_class"), "amenities": prop.get("amenities", [])},
+                address=prop.get("address") or None,
+                metadata={
+                    "hotel_class": prop.get("hotel_class"),
+                    "amenities": prop.get("amenities", []),
+                    "property_token": prop.get("property_token", ""),
+                    "free_cancellation": prop.get("free_cancellation"),
+                },
             )
         )
 
@@ -126,7 +172,7 @@ def _normalize_maps(raw_data: dict[str, Any]) -> list[EvidenceItem]:
         rating = place.get("rating")
         reviews = place.get("reviews") or place.get("user_ratings_total")
         address = place.get("address", "")
-        link = place.get("website") or place.get("link") or "https://maps.google.com"
+        link = place.get("website") or place.get("link") or ""
         type_str = place.get("type", "Local Place")
 
         items.append(
@@ -140,7 +186,11 @@ def _normalize_maps(raw_data: dict[str, Any]) -> list[EvidenceItem]:
                 rating=float(rating) if rating else None,
                 reviewCount=int(reviews) if reviews else None,
                 address=address,
-                metadata={"place_id": place.get("place_id"), "hours": place.get("operating_hours")},
+                metadata={
+                    "place_id": place.get("place_id"),
+                    "hours": place.get("operating_hours"),
+                    "open_state": place.get("open_state") or place.get("hours"),
+                },
             )
         )
 
@@ -155,7 +205,7 @@ def _normalize_shopping(raw_data: dict[str, Any]) -> list[EvidenceItem]:
         title = prod.get("title", "Product Item")
         price = prod.get("extracted_price") or prod.get("price")
         source = prod.get("source", "Google Shopping")
-        link = prod.get("link") or prod.get("product_link", "https://google.com/shopping")
+        link = prod.get("link") or prod.get("product_link") or ""
         rating = prod.get("rating")
         reviews = prod.get("reviews")
 
@@ -167,7 +217,7 @@ def _normalize_shopping(raw_data: dict[str, Any]) -> list[EvidenceItem]:
                 title=title,
                 url=link,
                 snippet=f"Available from {source} for ₹{price:,.0f}." if isinstance(price, (int, float)) else f"Available from {source}.",
-                price=float(price) if isinstance(price, (int, float)) else None,
+                price=_number(price),
                 currency="INR",
                 rating=float(rating) if rating else None,
                 reviewCount=int(reviews) if reviews else None,
@@ -175,6 +225,59 @@ def _normalize_shopping(raw_data: dict[str, Any]) -> list[EvidenceItem]:
             )
         )
 
+    return items
+
+
+def normalize_flight_booking_options(
+    raw_data: dict[str, Any], flight: EvidenceItem
+) -> list[EvidenceItem]:
+    """Normalize SerpApi's second-stage Google Flights booking options.
+
+    A booking request can be a direct GET or a POST relay.  The request is retained
+    as structured metadata so Relay can open it without altering opaque form data.
+    """
+    items: list[EvidenceItem] = []
+    for idx, option in enumerate(raw_data.get("booking_options", [])[:10]):
+        sections = [option.get("together"), option.get("departing")]
+        offer = next((part for part in sections if isinstance(part, dict)), None)
+        if not offer:
+            continue
+        seller = str(offer.get("book_with") or offer.get("option_title") or "Booking provider")
+        request = offer.get("booking_request") or {}
+        request = request if isinstance(request, dict) else {}
+        local_prices = offer.get("local_prices") or []
+        inr_price = next(
+            (
+                _number(p.get("price"))
+                for p in local_prices
+                if isinstance(p, dict) and p.get("currency") == "INR"
+            ),
+            None,
+        )
+        price = inr_price or _number(offer.get("price"))
+        items.append(
+            EvidenceItem(
+                id=f"ev_booking_{idx + 1}_{uuid.uuid4().hex[:4]}",
+                engine="google_flights",
+                sourceName=seller,
+                title=f"Book {flight.title} with {seller}",
+                url=_safe_url(request.get("url")),
+                snippet=(
+                    f"Verified booking option from {seller} for ₹{price:,.0f}."
+                    if price is not None
+                    else f"Verified booking option from {seller}; price was not returned."
+                ),
+                price=price,
+                currency="INR" if inr_price is not None else flight.currency,
+                metadata={
+                    "kind": "flight_booking",
+                    "post_data": str(request.get("post_data") or ""),
+                    "booking_phone": offer.get("booking_phone", ""),
+                    "separate_tickets": bool(option.get("separate_tickets")),
+                    "flight_evidence_id": flight.id,
+                },
+            )
+        )
     return items
 
 

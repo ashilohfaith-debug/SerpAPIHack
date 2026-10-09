@@ -6,7 +6,6 @@ before Relay executes external actions or opens URLs.
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from relay.diagnostics import get_logger
@@ -32,7 +31,11 @@ class ProvenanceGenerator:
             sources.append(f"{item.sourceName or engine_name} ({item.engine})")
 
             if item.engine == "google_flights" and item.price:
-                why_bullets.append(f"₹{item.price:,.0f} nonstop flight ({item.title})")
+                stops = item.metadata.get("stops")
+                route_type = "nonstop" if item.metadata.get("is_nonstop") else (
+                    f"{stops} stop" if stops == 1 else f"{stops} stops" if stops is not None else "flight"
+                )
+                why_bullets.append(f"₹{item.price:,.0f} {route_type} flight ({item.title})")
             elif item.engine == "google_hotels":
                 parts = []
                 if item.price:

@@ -109,6 +109,36 @@ def test_worker_times_out_and_restarts_without_hanging():
     assert snap is not None and snap.foreground_app == "Recovered"
 
 
+def test_worker_bounds_hung_provider_replacements():
+    import threading
+
+    from relay.perception.worker import UIAWorker
+
+    release = threading.Event()
+    calls = []
+
+    def hung(version):
+        calls.append(version)
+        release.wait(5)
+        return ScreenSnapshot(version, foreground_app="Recovered")
+
+    worker = UIAWorker(observe_fn=hung)
+    try:
+        assert worker.observe(timeout=0.05) is None
+        assert worker.observe(timeout=0.05) is None
+        for _ in range(10):
+            assert worker.observe(timeout=0.05) is None
+        assert len(calls) == 2
+        assert worker.run(lambda: True, timeout=0.05) == (None, False)
+        release.set()
+        for thread in worker._retired_workers:
+            thread._thread.join(timeout=2)
+        assert worker.observe(timeout=1).foreground_app == "Recovered"
+    finally:
+        release.set()
+        worker.stop()
+
+
 # ---- real UIA (integration) ----
 @pytest.mark.integration
 def test_real_uia_observe_returns_snapshot():
@@ -156,5 +186,3 @@ def test_ocr_read_screen_synthetic_image(monkeypatch):
     assert len(regions) > 0
     assert any("Audit" in r.name or "Relay" in r.name.replace(" ", "") for r in regions)
     assert regions[0].provenance == "ocr"
-
-

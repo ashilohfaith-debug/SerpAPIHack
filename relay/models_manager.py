@@ -17,6 +17,7 @@ RELAY would try to load.
 
 from __future__ import annotations
 
+import os
 import time
 import urllib.request
 from pathlib import Path
@@ -82,9 +83,22 @@ def _piper_onnx():
     return voice_path()
 
 
-def _whisper_present() -> bool:
+def _whisper_model_name() -> str:
+    return os.environ.get("RELAY_STT_MODEL", "base.en").strip() or "base.en"
+
+
+def _whisper_present(model_name: str | None = None) -> bool:
+    model_name = model_name or _whisper_model_name()
+    direct = Path(model_name)
+    if direct.is_dir():
+        return (direct / "model.bin").exists()
     d = models_dir() / "whisper"
-    return d.exists() and any(d.rglob("*.bin"))
+    safe_name = model_name.replace("/", "--")
+    candidates = (
+        d / f"models--Systran--faster-whisper-{safe_name}",
+        d / f"models--{safe_name}",
+    )
+    return any(path.exists() and any(path.rglob("model.bin")) for path in candidates)
 
 
 def status() -> list[dict]:
@@ -104,7 +118,7 @@ def status() -> list[dict]:
     )
     out.append(
         {
-            "name": "faster-whisper tiny.en (STT)",
+            "name": f"faster-whisper {_whisper_model_name()} (STT)",
             "present": _whisper_present(),
             "size_mb": None,
             "how": "relay --setup-models (downloaded once into models/whisper)",
@@ -203,7 +217,7 @@ def ensure(download_missing: bool = True, download: bool | None = None) -> bool:
             ok = False
     if not _whisper_present():
         if download_missing:
-            print("downloading the speech-recognition model (whisper tiny.en) …")
+            print(f"downloading the speech-recognition model (whisper {_whisper_model_name()}) …")
             try:
                 from relay.audio import WhisperSTT
 

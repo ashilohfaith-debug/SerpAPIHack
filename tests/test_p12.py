@@ -38,6 +38,17 @@ def test_models_status_shape_and_text():
     assert "Managed models" in txt
 
 
+def test_whisper_readiness_checks_the_selected_model(monkeypatch, tmp_path):
+    from relay import models_manager
+
+    monkeypatch.setenv("RELAY_MODELS_DIR", str(tmp_path))
+    tiny = tmp_path / "whisper" / "models--Systran--faster-whisper-tiny.en" / "snapshots" / "x"
+    tiny.mkdir(parents=True)
+    (tiny / "model.bin").write_bytes(b"tiny")
+    assert models_manager._whisper_present("tiny.en")
+    assert not models_manager._whisper_present("base.en")
+
+
 class _FakeSession:
     def __init__(self):
         self.handled = []

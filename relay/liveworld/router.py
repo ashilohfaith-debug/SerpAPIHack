@@ -20,10 +20,16 @@ log = get_logger("liveworld.router")
 
 # Obvious local actions that DO NOT require live world data
 LOCAL_PATTERNS = [
-    r"\b(?:turn|set|raise|lower|mute|unmute)\s+(?:the\s+)?volume\b",
+    r"\b(?:turn|set|raise|lower|mute|unmute)\s+(?:(?:the|my)\s+)?volume\b",
     r"\b(?:open|close|launch|switch\s+to)\s+(?:notepad|calculator|vs\s*code|browser|chrome|edge|explorer|word|excel|settings|terminal|cmd|powershell|spotify)\b",
-    r"\b(?:read|spell|stop|pause|resume|cancel|help)\b",
-    r"\b(?:what\s+time|what\s+is\s+the\s+date|battery|volume|status)\b",
+    r"^(?:relay[, ]+)?(?:open|close|show)\s+(?:(?:the|another|my)\s+)?(?:file|folder|document)\b",
+    r"^(?:relay[, ]+)?(?:(?:emergency\s+)?stop|pause|resume|continue|cancel|help)\b",
+    r"^(?:relay[, ]+)?(?:read|spell)\b(?!.*\b(?:news|latest|current|prices|flights|hotels)\b)",
+    r"^(?:relay[, ]+)?(?:what\s+time|what\s+is\s+the\s+date|battery|volume|status)\b",
+    r"\b(?:where\s+am\s+i|what'?s\s+on\s+(?:my\s+)?screen|describe\s+(?:my\s+)?screen|what\s+do\s+you\s+see)\b",
+    r"\b(?:where\s+is\s+(?:the\s+)?sound\s+going|headphone\s+mode|speaker|speaking\s+through)\b",
+    r"\b(?:create|make)\s+(?:a\s+)?new\s+(?:folder|file)\b",
+    r"\b(?:new\s+folder|new\s+file|rename|copy|move|delete)\b",
     r"\b(?:remember|forget|show\s+notes|add\s+note|clear\s+history)\b",
     r"\b(?:type|dictate)\s+",
 ]
@@ -72,7 +78,8 @@ class LiveWorldRouter:
 
         # Step 2: Check for live world category match
         detected_category: Category | None = None
-        for cat, patterns in LIVE_WORLD_PATTERNS.items():
+        for cat in ("travel", "news", "local", "shopping", "research"):
+            patterns = LIVE_WORLD_PATTERNS[cat]
             for pat in patterns:
                 if re.search(pat, low):
                     detected_category = cat  # type: ignore
@@ -80,9 +87,19 @@ class LiveWorldRouter:
             if detected_category:
                 break
 
+        # Spoken route shorthand often omits the word "flight", for example
+        # "New York to Los Angeles on 2026-10-20". A date-qualified route is
+        # specific enough to treat as travel instead of sending it to web search.
+        if not detected_category and re.match(
+            r"^(?:relay[, ]+)?[a-z][a-z .'-]*?\s+to\s+[a-z][a-z .'-]*?\s+"
+            r"(?:today|tomorrow|tonight|next\s+week|on\s+(?:[a-z]+|\d{4}-\d{2}-\d{2}))\b",
+            low,
+        ):
+            detected_category = "travel"
+
         # If no explicit live pattern, check for generic questions asking about current/live information
         if not detected_category:
-            if any(kw in low for kw in ["today", "now", "current", "latest", "price", "find", "search", "where", "best", "top"]):
+            if re.search(r"\b(?:today|now|current|latest|price|best|top)\b", low):
                 detected_category = "research"
 
         if not detected_category:
@@ -96,6 +113,16 @@ class LiveWorldRouter:
 
         # Extract entities and constraints from text
         entities, constraints = self._extract_entities_and_constraints(raw, low, detected_category)
+        if (
+            detected_category == "travel"
+            and entities.get("origin")
+            and entities.get("destination")
+            and not re.search(
+                r"\b(?:flight|flights|fly|flying|ticket|tickets|hotel|hotels|stay|resort|dinner|restaurant|food)\b",
+                low,
+            )
+        ):
+            constraints["wants_flight"] = True
 
         return RelayIntent(
             requires_live_data=True,
@@ -112,27 +139,78 @@ class LiveWorldRouter:
         entities: dict[str, Any] = {}
         constraints: dict[str, Any] = {}
 
-        # Travel entity extraction (e.g., "going to Bangalore", "from Chennai to Bangalore")
-        dest_match = re.search(r"\b(?:to|in|at|around)\s+([A-Z][a-z]+|[a-z]+)\b", raw, re.IGNORECASE)
-        if dest_match:
-            dest = dest_match.group(1).title()
-            if dest.lower() not in ["the", "a", "an", "my", "some"]:
-                entities["destination"] = dest
-
-        from_match = re.search(r"\bfrom\s+([A-Z][a-z]+|[a-z]+)\b", raw, re.IGNORECASE)
-        if from_match:
-            entities["origin"] = from_match.group(1).title()
+        # Travel entity extraction. Capture multi-word places, but stop before
+        # dates/constraints so "New Delhi next week" never becomes an airport name.
+        stop = (
+            r"(?=\s+(?:today|tomorrow|tonight|next\s+week|"
+            r"on\s+(?:[a-z]+|\d{4}-\d{2}-\d{2})|after\b|"
+            r"before\b|under\b|nonstop\b|direct\b|rated\b|near\b|with\b|and\b|for\b)"
+            r"|[,.]|$)"
+        )
+        route_match = re.search(
+            rf"\bfrom\s+([a-z][a-z .'-]*?)\s+to\s+([a-z][a-z .'-]*?){stop}",
+            low,
+            re.IGNORECASE,
+        )
+        if not route_match:
+            route_match = re.search(
+                rf"^(?:relay[, ]+)?(?:find|show|book|search)(?:\s+me)?(?:\s+the)?"
+                rf"(?:\s+(?:cheapest|best|nonstop|direct))*(?:\s+a)?"
+                rf"\s+(?:flight|flights|ticket|tickets)\s+"
+                rf"([a-z][a-z .'-]*?)\s+to\s+([a-z][a-z .'-]*?){stop}",
+                low,
+                re.IGNORECASE,
+            )
+        if not route_match and not re.match(r"^(?:relay[, ]+)?(?:find|show|book|search)\b", low):
+            route_match = re.search(
+                rf"^(?:relay[, ]+)?([a-z][a-z .'-]*?)\s+to\s+"
+                rf"([a-z][a-z .'-]*?){stop}",
+                low,
+                re.IGNORECASE,
+            )
+        if route_match:
+            entities["origin"] = self._clean_place(route_match.group(1))
+            entities["destination"] = self._clean_place(route_match.group(2))
+        else:
+            from_match = re.search(rf"\bfrom\s+([a-z][a-z .'-]*?){stop}", low, re.I)
+            if from_match:
+                entities["origin"] = self._clean_place(from_match.group(1))
+            dest_match = re.search(
+                rf"\b(?:going|go|flying|fly|travel(?:ling)?|trip)?\s*"
+                rf"(?:to|in|at|around)\s+([a-z][a-z .'-]*?){stop}",
+                low,
+                re.IGNORECASE,
+            )
+            if dest_match:
+                dest = self._clean_place(dest_match.group(1))
+                if dest.lower() not in {"the", "a", "an", "my", "some"}:
+                    entities["destination"] = dest
 
         # Date extraction
         if "tomorrow" in low:
             entities["date"] = "tomorrow"
         elif "today" in low or "tonight" in low:
             entities["date"] = "today"
+        elif "next week" in low:
+            entities["date"] = "next week"
+        else:
+            iso_date = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", low)
+            weekday = re.search(
+                r"\bon\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
+                low,
+            )
+            if iso_date:
+                entities["date"] = iso_date.group(1)
+            elif weekday:
+                entities["date"] = weekday.group(1)
 
         # Time constraints
-        time_after = re.search(r"\bafter\s+(\d+)\s*(?:pm|am)?\b", low)
+        time_after = re.search(r"\bafter\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", low)
         if time_after:
-            constraints["departure_after"] = f"{time_after.group(1)} PM" if "pm" in low or int(time_after.group(1)) <= 12 else time_after.group(1)
+            minute = time_after.group(2) or "00"
+            constraints["departure_after"] = (
+                f"{time_after.group(1)}:{minute} {time_after.group(3).upper()}"
+            )
 
         # Nonstop constraint
         if "nonstop" in low or "direct" in low:
@@ -144,13 +222,19 @@ class LiveWorldRouter:
             constraints["min_rating"] = float(rating_match.group(1))
 
         # Location area constraint
-        near_match = re.search(r"\bnear\s+([A-Za-z0-9\s]+?)(?:\s+rated|\s+under|\s+open|\s+after|\.|\,|$)", raw, re.IGNORECASE)
+        near_match = re.search(
+            r"\bnear\s+([A-Za-z0-9\s]+?)(?:\s+rated|\s+under|\s+open|\s+after|\.|\,|$)",
+            raw,
+            re.IGNORECASE,
+        )
         if near_match:
             entities["location_area"] = near_match.group(1).strip()
 
         # Price / budget extraction (supports ₹, rs, rupees, lakh, k)
         # 1. Total budget: "keep everything under ₹10,000"
-        total_budget_m = re.search(r"(?:everything|total|overall)\s+under\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low)
+        total_budget_m = re.search(
+            r"(?:everything|total|overall)\s+under\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low
+        )
         if total_budget_m:
             constraints["max_total_budget"] = float(total_budget_m.group(1).replace(",", ""))
 
@@ -165,7 +249,11 @@ class LiveWorldRouter:
             constraints["max_price"] = float(lakh_m.group(1)) * 100000
         else:
             gen_price_m = re.search(r"under\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low)
-            if gen_price_m and "max_total_budget" not in constraints and "max_hotel_price" not in constraints:
+            if (
+                gen_price_m
+                and "max_total_budget" not in constraints
+                and "max_hotel_price" not in constraints
+            ):
                 constraints["max_price"] = float(gen_price_m.group(1).replace(",", ""))
 
         # Cheapest preference
@@ -173,3 +261,7 @@ class LiveWorldRouter:
             constraints["prefer"] = "cheapest"
 
         return entities, constraints
+
+    @staticmethod
+    def _clean_place(value: str) -> str:
+        return " ".join(value.strip(" .,-").split()).title()
