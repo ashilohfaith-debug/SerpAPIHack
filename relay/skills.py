@@ -163,27 +163,37 @@ class Skills:
     def k_time(self, i):
         from relay.system import status
 
-        self.say(status.time_text())
+        txt = status.time_text()
+        self.say(txt)
+        return [txt]
 
     def k_date(self, i):
         from relay.system import status
 
-        self.say(status.date_text())
+        txt = status.date_text()
+        self.say(txt)
+        return [txt]
 
     def k_battery(self, i):
         from relay.system import status
 
-        self.say(status.battery_text())
+        txt = status.battery_text()
+        self.say(txt)
+        return [txt]
 
     def k_internet(self, i):
         from relay.system import status
 
-        self.say(status.internet_text())
+        txt = status.internet_text()
+        self.say(txt)
+        return [txt]
 
     def k_status(self, i):
         from relay.system import status
 
-        self.say(status.status_text())
+        txt = status.status_text()
+        self.say(txt)
+        return [txt]
 
     def k_calculate(self, i):
         from relay.system import calc

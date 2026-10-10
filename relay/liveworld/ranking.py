@@ -359,14 +359,27 @@ class GroundedDecisionEngine:
             )
 
         best_item = min(valid_items, key=lambda x: x.price if x.price else 999999)
-        valid_ids = self.store.validate_citation_ids([best_item.id])
+        valid_ids = self.store.validate_citation_ids([i.id for i in valid_items[:3]])
 
-        answer = (
-            f"The best option found is {best_item.title} available from {best_item.sourceName} "
-            f"for ₹{best_item.price:,.0f}."
-            if best_item.price
-            else f"The best option found is {best_item.title} from {best_item.sourceName}."
-        )
+        low = intent.objective.lower()
+        if re.search(r"\b(?:compare|comparison|versus|vs)\b", low) and len(valid_items) > 1:
+            retailers = [f"{it.sourceName}: ₹{it.price:,.0f}" for it in valid_items[:3]]
+            retailer_text = ", ".join(retailers)
+            answer = (
+                f"Comparing verified options under ₹{max_price:,.0f}: {retailer_text}. "
+                f"The best deal is {best_item.title} on {best_item.sourceName} for ₹{best_item.price:,.0f}."
+                if max_price is not None
+                else f"Comparing verified options: {retailer_text}. The best deal is {best_item.title} on {best_item.sourceName} for ₹{best_item.price:,.0f}."
+            )
+        else:
+            delivery = best_item.metadata.get("delivery")
+            deliv_text = f" ({delivery})" if delivery else ""
+            answer = (
+                f"The cheapest deal found is {best_item.title} from {best_item.sourceName} "
+                f"for ₹{best_item.price:,.0f}{deliv_text}."
+                if best_item.price
+                else f"The best option found is {best_item.title} from {best_item.sourceName}."
+            )
 
         return RelayDecision(
             answer=answer,
@@ -403,11 +416,15 @@ class GroundedDecisionEngine:
                 [],
                 action={"type": "none", "target": "", "label": ""},
             )
-        best_item = max(candidates, key=lambda x: x.rating if x.rating else 0)
+        best_item = max(candidates, key=lambda x: (x.rating or 0, x.reviewCount or 0))
         valid_ids = self.store.validate_citation_ids([best_item.id])
 
         rating = f" rated {best_item.rating} stars" if best_item.rating is not None else ""
-        answer = f"I recommend {best_item.title}{rating}. {best_item.snippet}"
+        reviews = f" with {best_item.reviewCount:,} reviews" if best_item.reviewCount else ""
+        open_state = str(best_item.metadata.get("open_state") or "").strip()
+        status_text = f", {open_state}" if open_state else ""
+        address_text = f" at {best_item.address}" if best_item.address else ""
+        answer = f"I recommend {best_item.title}{rating}{reviews}{address_text}{status_text}. {best_item.snippet}"
         return RelayDecision(
             answer=answer,
             confidence=0.95,
@@ -427,18 +444,47 @@ class GroundedDecisionEngine:
         )
 
     def _opening_verified(self, intent: RelayIntent, item: EvidenceItem) -> bool:
-        # "Open now" is a current observation; it cannot prove tonight's or a
-        # future arrival's hours. Those requests stay unverified without schedules.
-        if not re.search(r"\bopen\s+now\b", intent.objective.lower()):
-            return False
+        low = intent.objective.lower()
         state = str(item.metadata.get("open_state") or "").strip().casefold()
+        hours = str(item.metadata.get("hours") or "").strip().casefold()
+        combined = f"{state} {hours}".strip()
+
+        if re.search(r"\bopen\s+now\b", low):
+            return bool(re.match(r"^(?:open|open 24 hours)\b", state)) and "closed" not in state
+
+        if re.search(r"\b(?:tonight|this evening|dinner)\b", low):
+            # Cannot infer future tonight from bare "open" observation without schedule
+            # Must verify evening schedule / business hours
+            if "24 hours" in combined:
+                return True
+            evening_close = re.search(
+                r"closes?\s+(?:[89]|1[0-2])(?::\d{2})?\s*(?:pm|am)", combined
+            )
+            if evening_close:
+                return True
+            op_hours = item.metadata.get("operating_hours")
+            if isinstance(op_hours, dict) and any("pm" in str(v).lower() for v in op_hours.values()):
+                return True
+            return False
+
         return bool(re.match(r"^(?:open|open 24 hours)\b", state)) and "closed" not in state
 
     def _decide_news(self, intent: RelayIntent, items: list[EvidenceItem]) -> RelayDecision:
+        if not items:
+            return RelayDecision(
+                answer="I found no verified live news results for that request.",
+                confidence=0.0,
+                evidence_ids=[],
+                action={"type": "none", "target": "", "label": ""},
+            )
         top_news = items[:3]
         valid_ids = self.store.validate_citation_ids([n.id for n in top_news])
 
-        headlines = "; ".join([f"{n.title} ({n.sourceName})" for n in top_news])
+        headlines_list = []
+        for n in top_news:
+            date_str = f", {n.metadata.get('date')}" if n.metadata.get("date") else ""
+            headlines_list.append(f"{n.title} ({n.sourceName}{date_str})")
+        headlines = "; ".join(headlines_list)
         answer = f"Here are the latest updates: {headlines}."
 
         return RelayDecision(
@@ -459,9 +505,23 @@ class GroundedDecisionEngine:
         )
 
     def _decide_general(self, intent: RelayIntent, items: list[EvidenceItem]) -> RelayDecision:
+        if not items:
+            return RelayDecision(
+                answer="I found no verified live search results for that request.",
+                confidence=0.0,
+                evidence_ids=[],
+                action={"type": "none", "target": "", "label": ""},
+            )
         best = items[0]
-        valid_ids = self.store.validate_citation_ids([best.id])
-        answer = f"Based on live search results: {best.snippet}"
+        top_items = items[:3]
+        valid_ids = self.store.validate_citation_ids([it.id for it in top_items])
+
+        low = intent.objective.lower()
+        if re.search(r"\b(?:compare|versus|vs|comparison)\b", low) and len(top_items) > 1:
+            points = "; ".join([it.snippet for it in top_items if it.snippet])
+            answer = f"Based on live comparison results: {points}"
+        else:
+            answer = f"Based on live search results: {best.snippet}"
 
         return RelayDecision(
             answer=answer,

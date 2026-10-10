@@ -25,7 +25,9 @@ LOCAL_PATTERNS = [
     r"^(?:relay[, ]+)?(?:open|close|show)\s+(?:(?:the|another|my)\s+)?(?:file|folder|document)\b",
     r"^(?:relay[, ]+)?(?:(?:emergency\s+)?stop|pause|resume|continue|cancel|help)\b",
     r"^(?:relay[, ]+)?(?:read|spell)\b(?!.*\b(?:news|latest|current|prices|flights|hotels)\b)",
-    r"^(?:relay[, ]+)?(?:what\s+time|what\s+is\s+the\s+date|battery|volume|status)\b",
+    r"\b(?:how(?:'s|\s+is)\s+(?:my\s+|the\s+)?(?:laptop\s+)?battery|battery\s+(?:level|percentage|status)|how\s+much\s+battery(?:\s+do\s+i\s+have)?|is\s+(?:the\s+laptop|it)\s+charging|laptop\s+battery)\b",
+    r"^(?:relay[, ]+)?(?:battery|my\s+battery)(?:\s+status)?$",
+    r"^(?:relay[, ]+)?(?:what\s+time(?:\s+is\s+it)?|what'?s\s+the\s+time|what\s+is\s+the\s+date|what'?s\s+the\s+date|status)\b",
     r"\b(?:where\s+am\s+i|what'?s\s+on\s+(?:my\s+)?screen|describe\s+(?:my\s+)?screen|what\s+do\s+you\s+see)\b",
     r"\b(?:where\s+is\s+(?:the\s+)?sound\s+going|headphone\s+mode|speaker|speaking\s+through)\b",
     r"\b(?:create|make)\s+(?:a\s+)?new\s+(?:folder|file)\b",
@@ -41,20 +43,20 @@ LIVE_WORLD_PATTERNS = {
         r"\b(?:go\s+to|going\s+to|visit)\s+([a-zA-Z\s]+)\s+(?:tomorrow|tonight|next\s+week|on\s+[a-zA-Z]+)\b",
     ],
     "shopping": [
-        r"\b(?:buy|price|prices|cheap|cheapest|deal|deals|cost|costs|laptop|phone|rtx|graphics\s+card|tv|monitor|specs|review)\b",
+        r"\b(?:buy|price|prices|cheap|cheapest|deal|deals|cost|costs|laptop|phone|iphone|rtx|graphics\s+card|tv|monitor|specs|review)\b",
         r"\bunder\s+(?:₹|\$|rs\.?|inr)?\s*[\d,]+\b",
     ],
     "local": [
         r"\b(?:restaurant|restaurants|cafe|cafes|food|dinner|lunch|breakfast|place|places|bar|pub|atm|hospital)\s+(?:near|in|around)\b",
-        r"\b(?:open\s+tonight|open\s+now|highly\s+rated|rated\s+above)\b",
+        r"\b(?:open\s+tonight|open\s+now|highly\s+rated|rated\s+above|top\s+rated)\b",
     ],
     "news": [
-        r"\b(?:news|happened|events|headlines|latest\s+update|what\s+happened\s+with)\b",
+        r"\b(?:news|happened|events|headlines|latest\s+update|what\s+happened\s+with|stock\s+market|space\s+mission|space\s+missions)\b",
         r"\b(?:today|yesterday|this\s+week)\s+with\b",
     ],
     "research": [
         r"\b(?:compare|versus|vs|differences|latest\s+information|current\s+status|research)\b",
-        r"\b(?:who\s+is\s+currently|what\s+is\s+the\s+current|latest\s+version)\b",
+        r"\b(?:who\s+is\s+currently|what\s+is\s+the\s+current|latest\s+version|released\s+this\s+year|battery\s+life)\b",
     ],
 }
 
@@ -169,6 +171,10 @@ class LiveWorldRouter:
                 re.IGNORECASE,
             )
         if route_match:
+            cand_origin = route_match.group(1).strip().lower()
+            if any(cand_origin.startswith(p) for p in ("i'm going", "i am going", "going", "i'm travelling", "travelling", "traveling", "trip", "i'm flying")):
+                route_match = None
+        if route_match:
             entities["origin"] = self._clean_place(route_match.group(1))
             entities["destination"] = self._clean_place(route_match.group(2))
         else:
@@ -216,19 +222,42 @@ class LiveWorldRouter:
         if "nonstop" in low or "direct" in low:
             constraints["nonstop"] = True
 
-        # Rating constraint (e.g. "above 4 stars", "rated 4.5+")
+        # Rating constraint (e.g. "above 4 stars", "rated 4.5+", "top rated", "highly rated")
         rating_match = re.search(r"(?:above|rated|>)\s*(\d+(?:\.\d+)?)\s*(?:stars|star|\+)?", low)
         if rating_match:
             constraints["min_rating"] = float(rating_match.group(1))
+        elif re.search(r"\b(?:highly rated|top rated|4\s*\+\s*stars?)\b", low):
+            constraints["min_rating"] = 4.0
 
         # Location area constraint
         near_match = re.search(
-            r"\bnear\s+([A-Za-z0-9\s]+?)(?:\s+rated|\s+under|\s+open|\s+after|\.|\,|$)",
+            r"\bnear\s+([A-Za-z0-9\s]+?)(?=\s+(?:in\b|at\b|around\b|that\b|which\b|where\b|for\b|with\b|rated\b|under\b|open\b|after\b|before\b|today\b|tomorrow\b|tonight\b|next\s+week\b)|[,.]|$)",
             raw,
             re.IGNORECASE,
         )
         if near_match:
             entities["location_area"] = near_match.group(1).strip()
+
+        # Split locality and city if destination contains both (e.g. "Indiranagar Bangalore")
+        indian_cities = [
+            "bangalore", "bengaluru", "new delhi", "delhi", "mumbai", "chennai",
+            "kolkata", "hyderabad", "pune", "ahmedabad", "jaipur", "kochi",
+            "goa", "chandigarh", "lucknow"
+        ]
+        dest_raw = str(entities.get("destination") or "").strip()
+        if dest_raw and dest_raw.lower() not in ("new delhi", "delhi", "new york"):
+            for city in indian_cities:
+                if dest_raw.lower().endswith(" " + city):
+                    area_part = dest_raw[: len(dest_raw) - len(city) - 1].strip()
+                    if area_part and area_part.lower() != "new":
+                        entities["location_area"] = area_part
+                        entities["destination"] = city.title()
+                        break
+        if not entities.get("destination"):
+            for city in indian_cities:
+                if re.search(rf"\b(?:in|near|around|at)\s+{city}\b", low):
+                    entities["destination"] = city.title()
+                    break
 
         # Price / budget extraction (supports ₹, rs, rupees, lakh, k)
         # 1. Total budget: "keep everything under ₹10,000"
@@ -238,23 +267,43 @@ class LiveWorldRouter:
         if total_budget_m:
             constraints["max_total_budget"] = float(total_budget_m.group(1).replace(",", ""))
 
-        # 2. Hotel budget: "hotel under ₹4,000"
-        hotel_budget_m = re.search(r"hotel\s+under\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low)
+        # 2. Hotel budget: "hotel under ₹4,000" or "hotel near ... under 3500"
+        hotel_budget_m = re.search(
+            r"hotel\b[^.]*?\bunder\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low
+        )
         if hotel_budget_m:
             constraints["max_hotel_price"] = float(hotel_budget_m.group(1).replace(",", ""))
 
-        # 3. Laptop/item budget: "under ₹1.5 lakh" or "under 150000"
+        # 3. Flight budget: "flight ... under 7000"
+        flight_budget_m = re.search(
+            r"flight\b[^.]*?\bunder\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low
+        )
+        if flight_budget_m:
+            constraints["max_price"] = float(flight_budget_m.group(1).replace(",", ""))
+
+        # 4. Laptop/item budget: "under ₹1.5 lakh" or general "under 80000"
         lakh_m = re.search(r"under\s+(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)\s*lakh", low)
         if lakh_m:
             constraints["max_price"] = float(lakh_m.group(1)) * 100000
         else:
             gen_price_m = re.search(r"under\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low)
-            if (
-                gen_price_m
-                and "max_total_budget" not in constraints
-                and "max_hotel_price" not in constraints
-            ):
-                constraints["max_price"] = float(gen_price_m.group(1).replace(",", ""))
+            if gen_price_m:
+                val = float(gen_price_m.group(1).replace(",", ""))
+                if "max_total_budget" not in constraints:
+                    if (
+                        category == "travel"
+                        and re.search(r"\b(?:hotel|hotels|stay|resort)\b", low)
+                        and not re.search(r"\b(?:flight|flights|fly|ticket)\b", low)
+                    ):
+                        constraints["max_hotel_price"] = val
+                    elif "max_price" not in constraints and "max_hotel_price" not in constraints:
+                        constraints["max_price"] = val
+
+        # Open schedule constraints
+        if re.search(r"\b(?:open\s+tonight|tonight)\b", low):
+            constraints["open_tonight"] = True
+        if re.search(r"\bopen\s+now\b", low):
+            constraints["open_now"] = True
 
         # Cheapest preference
         if "cheapest" in low or "lowest price" in low:

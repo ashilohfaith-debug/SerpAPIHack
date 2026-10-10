@@ -208,7 +208,9 @@ def _normalize_shopping(raw_data: dict[str, Any]) -> list[EvidenceItem]:
         link = prod.get("link") or prod.get("product_link") or ""
         rating = prod.get("rating")
         reviews = prod.get("reviews")
+        delivery = prod.get("delivery")
 
+        deliv_str = f" ({delivery})" if delivery else ""
         items.append(
             EvidenceItem(
                 id=f"ev_shop_{idx+1}_{uuid.uuid4().hex[:4]}",
@@ -216,12 +218,12 @@ def _normalize_shopping(raw_data: dict[str, Any]) -> list[EvidenceItem]:
                 sourceName=source,
                 title=title,
                 url=link,
-                snippet=f"Available from {source} for ₹{price:,.0f}." if isinstance(price, (int, float)) else f"Available from {source}.",
+                snippet=f"Available from {source} for ₹{price:,.0f}{deliv_str}." if isinstance(price, (int, float)) else f"Available from {source}{deliv_str}.",
                 price=_number(price),
                 currency="INR",
                 rating=float(rating) if rating else None,
                 reviewCount=int(reviews) if reviews else None,
-                metadata={"merchant": source},
+                metadata={"merchant": source, "delivery": delivery},
             )
         )
 
@@ -310,8 +312,43 @@ def _normalize_news(raw_data: dict[str, Any]) -> list[EvidenceItem]:
 
 def _normalize_google_web(raw_data: dict[str, Any]) -> list[EvidenceItem]:
     items: list[EvidenceItem] = []
-    results = raw_data.get("organic_results", [])
 
+    # Check for direct answer box
+    ans_box = raw_data.get("answer_box", {})
+    if isinstance(ans_box, dict) and ans_box:
+        ans_title = ans_box.get("title") or "Direct Answer"
+        ans_snippet = ans_box.get("snippet") or ans_box.get("answer") or ans_box.get("result") or ""
+        ans_link = ans_box.get("link") or ""
+        if ans_snippet:
+            items.append(
+                EvidenceItem(
+                    id=f"ev_web_ans_{uuid.uuid4().hex[:4]}",
+                    engine="google",
+                    sourceName="Google Direct Answer",
+                    title=ans_title,
+                    url=ans_link,
+                    snippet=ans_snippet,
+                )
+            )
+
+    # Check for knowledge graph
+    kg = raw_data.get("knowledge_graph", {})
+    if isinstance(kg, dict) and kg.get("description"):
+        kg_title = kg.get("title", "Knowledge Graph")
+        kg_desc = kg.get("description", "")
+        kg_link = kg.get("source", {}).get("link", "") if isinstance(kg.get("source"), dict) else ""
+        items.append(
+            EvidenceItem(
+                id=f"ev_web_kg_{uuid.uuid4().hex[:4]}",
+                engine="google",
+                sourceName="Google Knowledge Graph",
+                title=kg_title,
+                url=kg_link,
+                snippet=kg_desc,
+            )
+        )
+
+    results = raw_data.get("organic_results", [])
     for idx, res in enumerate(results[:10]):
         title = res.get("title", "Web Result")
         link = res.get("link", "")

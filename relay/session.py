@@ -480,7 +480,7 @@ class Session:
 
         # 1. Booking preparation: use SerpApi's booking token to resolve a real
         # provider handoff. This opens checkout but never submits passenger/payment data.
-        book_cmd = utterance.strip().lower()
+        book_cmd = re.sub(r"^(?:relay|hey relay)[, ]*", "", utterance.strip().lower()).strip()
         if not self.dictation and re.fullmatch(
             r"(?:book|reserve)\s+(?:it|this|the\s+(?:flight|ticket|option|trip))[.!?]?",
             book_cmd,
@@ -503,7 +503,7 @@ class Session:
             return [decision.answer]
 
         # 2. Action trigger check for opening retrieved live evidence URLs
-        open_cmd = utterance.strip().lower()
+        open_cmd = re.sub(r"^(?:relay|hey relay)[, ]*", "", utterance.strip().lower()).strip()
         open_match = re.fullmatch(
             r"(?:open|launch|show)\s+(?:(?:the|selected|best)\s+)?"
             r"(flight|hotel|stay|dinner|restaurant|plan|option|url|result|link|best)[.!?]?",

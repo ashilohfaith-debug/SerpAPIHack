@@ -75,9 +75,14 @@ class SearchPlanner:
                         )
                     )
 
-            if wants_hotel and dest and travel_date:
+            if wants_hotel and (dest or area) and travel_date:
+                hotel_q = (
+                    f"hotels in {area} {dest}"
+                    if area and dest and area.lower() != dest.lower() and dest.lower() not in area.lower()
+                    else f"hotels in {dest or area}"
+                )
                 hotel_params: dict[str, str | int | float | bool] = {
-                    "q": f"hotels in {area} {dest}",
+                    "q": hotel_q,
                     "check_in_date": travel_date,
                     "check_out_date": self._next_date(travel_date),
                     "currency": "INR",
@@ -85,37 +90,50 @@ class SearchPlanner:
                     "hl": "en",
                     "gl": "in",
                 }
-                if intent.constraints.get("max_hotel_price") is not None:
-                    hotel_params["max_price"] = int(intent.constraints["max_hotel_price"])
+                hotel_budget = intent.constraints.get("max_hotel_price")
+                if hotel_budget is None and not wants_flight:
+                    hotel_budget = intent.constraints.get("max_price")
+                if hotel_budget is not None:
+                    hotel_params["max_price"] = int(hotel_budget)
                 searches.append(
                     SearchItem(
                         engine="google_hotels",
                         params=hotel_params,
-                        reason=f"Searching live hotels near {area} rated 4+ stars under budget",
+                        reason=f"Searching live hotels near {area or dest} rated 4+ stars under budget",
                     )
                 )
 
-            if wants_dinner and dest:
+            if wants_dinner and (dest or area):
+                dinner_q = (
+                    f"highly rated dinner restaurants in {area} {dest}"
+                    if area and dest and area.lower() != dest.lower() and dest.lower() not in area.lower()
+                    else f"highly rated dinner restaurants in {dest or area}"
+                )
                 searches.append(
                     SearchItem(
                         engine="google_maps",
                         params={
-                            "q": f"highly rated dinner restaurants in {area} {dest}",
+                            "q": dinner_q,
                             "type": "search",
                             "hl": "en",
                             "gl": "in",
                         },
-                        reason=f"Finding top dinner spots open near {area}",
+                        reason=f"Finding top dinner spots open near {area or dest}",
                     )
                 )
 
         elif cat == "shopping":
+            clean_q = self._clean_search_query(obj)
+            prod_q = re.sub(
+                r"\bunder\s+(?:₹|rs\.?|rupees|inr)?\s*[\d,]+(?:\s*lakh)?\b", "", clean_q, flags=re.I
+            ).strip()
+            prod_q = re.sub(r"\s+", " ", prod_q)
             # 1. Google Shopping search
             searches.append(
                 SearchItem(
                     engine="google_shopping",
                     params={
-                        "q": obj,
+                        "q": prod_q or clean_q,
                         "google_domain": "google.co.in",
                         "gl": "in",
                         "hl": "en",
@@ -124,27 +142,28 @@ class SearchPlanner:
                 )
             )
 
-            # 2. General web for reviews / comparisons
-            searches.append(
-                SearchItem(
-                    engine="google",
-                    params={
-                        "q": f"{obj} review specs comparison",
-                        "google_domain": "google.co.in",
-                        "gl": "in",
-                        "hl": "en",
-                    },
-                    reason="Verifying user reviews, specifications, and issues",
+            # 2. Parallel review check when comparison requested
+            if re.search(r"\b(?:compare|comparison|versus|vs|review|specs)\b", obj.lower()):
+                searches.append(
+                    SearchItem(
+                        engine="google",
+                        params={
+                            "q": f"{prod_q or clean_q} review specs comparison",
+                            "google_domain": "google.co.in",
+                            "gl": "in",
+                            "hl": "en",
+                        },
+                        reason="Verifying user reviews, specifications, and issues",
+                    )
                 )
-            )
 
         elif cat == "local":
-            # 1. Google Maps search
+            clean_q = self._clean_search_query(obj)
             searches.append(
                 SearchItem(
                     engine="google_maps",
                     params={
-                        "q": obj,
+                        "q": clean_q,
                         "type": "search",
                         "hl": "en",
                         "gl": "in",
@@ -153,27 +172,13 @@ class SearchPlanner:
                 )
             )
 
-            # 2. General Google search for details
-            searches.append(
-                SearchItem(
-                    engine="google",
-                    params={
-                        "q": obj,
-                        "google_domain": "google.co.in",
-                        "gl": "in",
-                        "hl": "en",
-                    },
-                    reason="Verifying additional business details and reviews",
-                )
-            )
-
         elif cat == "news":
-            # 1. Google News search
+            clean_q = self._clean_search_query(obj)
             searches.append(
                 SearchItem(
                     engine="google_news",
                     params={
-                        "q": obj,
+                        "q": clean_q,
                         "gl": "in",
                         "hl": "en",
                     },
@@ -181,27 +186,13 @@ class SearchPlanner:
                 )
             )
 
-            # 2. Web search for background context
-            searches.append(
-                SearchItem(
-                    engine="google",
-                    params={
-                        "q": obj,
-                        "google_domain": "google.co.in",
-                        "gl": "in",
-                        "hl": "en",
-                    },
-                    reason="Retrieving primary reference sources and analysis",
-                )
-            )
-
         else:  # research or general live query
-            # 1. Primary Google web search
+            clean_q = self._clean_search_query(obj)
             searches.append(
                 SearchItem(
                     engine="google",
                     params={
-                        "q": obj,
+                        "q": clean_q,
                         "google_domain": "google.co.in",
                         "gl": "in",
                         "hl": "en",
@@ -209,20 +200,6 @@ class SearchPlanner:
                     reason="Searching live web facts and verified information",
                 )
             )
-
-            # 2. Google News search if recency implied
-            if any(w in obj.lower() for w in ["latest", "recent", "today", "new", "update"]):
-                searches.append(
-                    SearchItem(
-                        engine="google_news",
-                        params={
-                            "q": obj,
-                            "gl": "in",
-                            "hl": "en",
-                        },
-                        reason="Checking recent news developments",
-                    )
-                )
 
         plan = SearchPlan(
             id=plan_id,
@@ -232,6 +209,19 @@ class SearchPlanner:
         )
         log.info("Created search plan %s with %d searches", plan.id, len(plan.searches))
         return plan
+
+    @staticmethod
+    def _clean_search_query(text: str) -> str:
+        q = text.strip()
+        q = re.sub(r"^(?:relay|hey relay)[, ]*", "", q, flags=re.I).strip()
+        q = re.sub(
+            r"^(?:find(?:\s+me)?|search(?:\s+for)?|look\s+up|what\s+is\s+the|what\s+are\s+the|tell\s+me|compare|show(?:\s+me)?)\s+",
+            "",
+            q,
+            flags=re.I,
+        ).strip()
+        q = re.sub(r"[.!?]+$", "", q).strip()
+        return q or text.strip()
 
     def _city_code(self, city_name: str) -> str | None:
         name = city_name.lower().strip()
