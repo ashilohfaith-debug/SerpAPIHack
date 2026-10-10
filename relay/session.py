@@ -505,8 +505,8 @@ class Session:
         # 2. Action trigger check for opening retrieved live evidence URLs
         open_cmd = re.sub(r"^(?:relay|hey relay)[, ]*", "", utterance.strip().lower()).strip()
         open_match = re.fullmatch(
-            r"(?:open|launch|show)\s+(?:(?:the|selected|best)\s+)?"
-            r"(flight|hotel|stay|dinner|restaurant|plan|option|url|result|link|best)[.!?]?",
+            r"(?:open|launch|show)\s+(?:(?:the|selected|best)\s+)*"
+            r"(flight|hotel|stay|dinner|restaurant|plan|option|url|result|link|best|deal|offer|product|item|laptop|phone)[.!?]?",
             open_cmd,
         )
         if not self.dictation and open_match:
@@ -518,6 +518,12 @@ class Session:
                 "stay": "google_hotels",
                 "dinner": "google_maps",
                 "restaurant": "google_maps",
+                "deal": "google_shopping",
+                "offer": "google_shopping",
+                "product": "google_shopping",
+                "item": "google_shopping",
+                "laptop": "google_shopping",
+                "phone": "google_shopping",
             }.get(component)
             action = self.live_world.selected_action(engine)
             if action and action.get("target"):
