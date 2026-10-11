@@ -30,28 +30,40 @@
     {
       "src": "/downloads/(.*)",
       "headers": {
-        "Content-Disposition": "attachment"
+        "Content-Disposition": "attachment",
+        "Content-Type": "application/octet-stream",
+        "X-Content-Type-Options": "nosniff",
+        "Access-Control-Allow-Origin": "*"
       },
       "dest": "/downloads/$1"
     },
     {
       "src": "/serp-relay.exe",
       "headers": {
-        "Content-Disposition": "attachment; filename=\"serp-relay.exe\""
+        "Content-Disposition": "attachment; filename=\"serp-relay.exe\"",
+        "Content-Type": "application/octet-stream",
+        "X-Content-Type-Options": "nosniff",
+        "Access-Control-Allow-Origin": "*"
       },
       "dest": "/downloads/serp-relay.exe"
     },
     {
       "src": "/Relay-Setup.exe",
       "headers": {
-        "Content-Disposition": "attachment"
+        "Content-Disposition": "attachment; filename=\"Relay-Setup.exe\"",
+        "Content-Type": "application/octet-stream",
+        "X-Content-Type-Options": "nosniff",
+        "Access-Control-Allow-Origin": "*"
       },
       "dest": "/downloads/Relay-Setup.exe"
     },
     {
       "src": "/relay.exe",
       "headers": {
-        "Content-Disposition": "attachment"
+        "Content-Disposition": "attachment; filename=\"serp-relay.exe\"",
+        "Content-Type": "application/octet-stream",
+        "X-Content-Type-Options": "nosniff",
+        "Access-Control-Allow-Origin": "*"
       },
       "dest": "/downloads/serp-relay.exe"
     },

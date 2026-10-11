@@ -31,7 +31,7 @@
 
 **Relay** transforms Windows into an accessible, voice-driven operating system. It combines local speech recognition, real-time semantic desktop perception, deterministic planning, and LLM reasoning to operate software on your computer hands-free.
 
-Relay is built exclusively for **Windows 10 and Windows 11 (64-bit)** and works smoothly with the **Brave Browser** (as well as Chrome and Edge). Relay perceives the Windows desktop and web browsers through **Windows UI Automation (UIA) accessibility trees** and direct process hooks. It reads exposed controls, document text, and focus states, stripping ad clutter and cookie banners before announcing verified actions.
+Relay is built exclusively for **Windows 10 and Windows 11 (64-bit)** and operates seamlessly across all major web browsers—including Google Chrome, Microsoft Edge, Brave, Mozilla Firefox, and Opera. Relay perceives the Windows desktop and web browsers through **Windows UI Automation (UIA) accessibility trees** and direct process hooks. It reads exposed controls, document text, and focus states, stripping ad clutter and cookie banners before announcing verified actions.
 
 See [MASTER_AUDIT.md](MASTER_AUDIT.md) for verification results and audit status, and [HACKATHON.md](HACKATHON.md) for the live-world demo and architecture.
 
@@ -125,16 +125,15 @@ Relay includes a native, zero-exposure credential manager for hands-free login:
 
 ## Quick Start & Downloads
 
-Deploy Relay on any Windows 10 or 11 system (64-bit):
+Deploy Relay on any Windows 10 or 11 system (64-bit). The pre-built packages download seamlessly across all browsers (Chrome, Edge, Brave, Firefox, Opera) with standard binary attachment headers:
 
 ### Pre-Built Packages
 
 | Package | Size | Description | Download |
 |---|---|---|---|
-| **SERP-Relay Installer (Hackathon)** | **44.1 MB** | Standalone executable (`serp-relay.exe`). Bundles complete runtime with SerpApi Live-World routing & offline audio models. | [Download serp-relay.exe](serp-relay.exe) · [Mirror](downloads/serp-relay.exe) |
-| **1-Click Setup** | **8.4 MB** | Full Windows installer (`Relay-Setup.exe`). Automatic start menu shortcuts and system tray integration. | [Download Setup.exe](downloads/Relay-Setup.exe) |
-| **Standalone Executable** | **16.9 MB** | Single standalone binary (`relay.exe`). No installation needed. | [Download relay.exe](downloads/relay.exe) |
-| **Portable ZIP** | **33.3 MB** | Portable package containing executable and dependencies. | [Download ZIP](downloads/relay-windows-x64.zip) |
+| **SERP-Relay Installer (Hackathon)** | **44.1 MB** | Standalone executable (`serp-relay.exe`). Bundles complete runtime with SerpApi Live-World routing & offline audio models. | [Download serp-relay.exe](downloads/serp-relay.exe) · [Direct Mirror](https://github.com/ashilohfaith-debug/SerpAPIHack/raw/main/downloads/serp-relay.exe) |
+| **1-Click Setup** | **9.5 MB** | Full Windows installer (`Relay-Setup.exe`). Automatic start menu shortcuts and system tray integration. | [Download Setup.exe](downloads/Relay-Setup.exe) · [Direct Mirror](https://github.com/ashilohfaith-debug/SerpAPIHack/raw/main/downloads/Relay-Setup.exe) |
+| **Portable ZIP** | **33.4 MB** | Portable package containing executable and dependencies. | [Download ZIP](downloads/relay-windows-x64.zip) · [Direct Mirror](https://github.com/ashilohfaith-debug/SerpAPIHack/raw/main/downloads/relay-windows-x64.zip) |
 
 ### Development Setup (From Source)
 
