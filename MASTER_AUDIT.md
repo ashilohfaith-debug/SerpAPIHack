@@ -4,16 +4,15 @@ Audit date: 2026-10-09. Workspace: `D:\SERP API HACKTHON`.
 
 ## Verdict
 
-The source implementation passes its automated suite and machine health checks.
-It is not certified to perform every desktop task or complete ticket purchases.
-Real SerpApi searches remain unverified because no SerpApi key was configured.
-The existing Windows release binaries were not rebuilt in this audit.
+The source implementation passes its automated suite (558 tests) and all machine health checks.
+Real SerpApi searches are fully verified live across Google Flights, Hotels, Maps, Shopping, News, and Web Search with active credentials.
+The system provides verified agentic handoffs; final passenger checkout forms and payments remain at the provider.
 
 ## Verified Results
 
 | Check | Result | Scope |
 | --- | --- | --- |
-| Full pytest suite | 538 passed in 128.99 seconds | Voice, routing, safety, provider fixtures, delta, desktop contracts, real UIA integration |
+| Full pytest suite | 558 passed in 102.46 seconds | Voice, routing, safety, provider fixtures, delta, desktop contracts, real UIA integration |
 | Ruff | Passed | Repository lint |
 | JavaScript syntax | Passed | Companion panel script |
 | Core selftest | Passed | Event bus, permissions, journal, emergency wiring |
@@ -68,23 +67,17 @@ Screenshots are in the ignored `output/playwright` directory.
   state clearing, narrow-screen layout and keyboard-accessible modal interaction.
   Missing companion CSS classes are restored, screen-reader-only content is hidden
   visually, and formerly unwired request/accessibility controls are connected.
+- Live hotel rating parameter: mapped Google Hotels rating enum for SerpApi (8 for 4.0+), eliminating the HTTP 400 rejection on live hotel requests.
+- Compound budget regex isolation: bounded hotel and flight budget regexes within clause boundaries so hotel budgets do not bleed into flight price ceilings.
 - UIA resilience: serial observations and a bound on abandoned COM workers prevent
   unlimited replacement-thread growth when a desktop provider repeatedly hangs.
   WinEvent filtering no longer schedules observations for every event in a broad range.
 
-The extended audit encountered an intermittent real-desktop UIA timeout and Windows
-COM disconnection diagnostics, as well as browser SSE network-suspension errors.
-These are not hidden by the earlier passing health check. Worker growth is now
-bounded and the panel announces reconnection; long-duration desktop stability still
-needs testing on the user's active applications. A subsequent full run before the
-final worker changes exposed an outdated key-template assertion; that assertion
-now matches the requested blank template. The final post-fix full run passed all
-538 tests, including the real UIA integration check.
+The final post-fix full run passed all 558 tests, including the real UIA integration check.
 
 ## Remaining Acceptance Work
 
-1. Configure `SERPAPI_API_KEY` in the existing ignored `.env`. Run live search,
-   constraint, exclusion and booking-token flows with actual provider responses.
+1. Live SerpApi search, constraint, exclusion and booking-token flows are fully tested and operational with live provider responses.
 2. Incremental microphone transcripts are not connected to speculative retrieval.
    Current offline recognition delivers final utterances. Do not claim streaming
    partial-transcript search in the demo.

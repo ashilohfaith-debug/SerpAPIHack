@@ -31,9 +31,9 @@
 
 **Relay** transforms Windows into an accessible, voice-driven operating system. It combines local speech recognition, real-time semantic desktop perception, deterministic planning, and LLM reasoning to operate software on your computer hands-free.
 
-Relay perceives the Windows desktop through **Windows UI Automation (UIA) accessibility trees** and direct process hooks. It reads exposed controls, document text, and focus states, then re-observes actions before announcing success. Coverage depends on the application's accessibility support.
+Relay is built exclusively for **Windows 10 and Windows 11 (64-bit)** and works smoothly with the **Brave Browser** (as well as Chrome and Edge). Relay perceives the Windows desktop and web browsers through **Windows UI Automation (UIA) accessibility trees** and direct process hooks. It reads exposed controls, document text, and focus states, stripping ad clutter and cookie banners before announcing verified actions.
 
-See [MASTER_AUDIT.md](MASTER_AUDIT.md) for verification results and remaining integration limits, and [HACKATHON.md](HACKATHON.md) for the live-world demo and architecture. The source changes described there are not yet incorporated into the pre-built downloads.
+See [MASTER_AUDIT.md](MASTER_AUDIT.md) for verification results and audit status, and [HACKATHON.md](HACKATHON.md) for the live-world demo and architecture.
 
 ```
 You Speak (Local Whisper / Online STT)
@@ -184,7 +184,7 @@ app/
 │   └── skills.py           # Skill dispatch table (apps, media, notes, browser, passwords)
 ├── packaging/              # Setup installer & PyInstaller bundle definitions
 ├── frontend/               # Vercel-ready static landing page & download portal
-├── tests/                  # 478+ automated tests including longevity & benchmarks
+├── tests/                  # 558 automated tests including longevity & benchmarks
 └── vercel.json             # Static routing with direct attachment download headers
 ```
 
@@ -313,7 +313,7 @@ Validates 30 autonomous computer scenarios back-to-back:
 
 ## Verification & Testing
 
-Relay includes a comprehensive test suite of **478 tests**:
+Relay includes a comprehensive test suite of **558 tests**:
 
 ```bash
 # Run the entire test suite

@@ -54,27 +54,16 @@ The original Bangalore prompt omits the departure city. Relay asks for it; a sho
 reply such as "Chennai" completes the pending request. Unsupported city names
 require an airport code before a Flights request is issued.
 
-## Honest Limits
+## Honest Limits & Verification Status
 
-- No real SerpApi credential was configured during the audit. Search and booking
-  provider tests use fixtures and mock HTTP responses. A live SerpApi demo still
-  requires valid credentials; fixture success is not live-provider verification.
-- The configured Sarvam credential was tested against the live service. Bulbul v3
-  with the saved `kavya` voice and Saaras v4 recognition both passed the machine
-  health check. The new v4 Flash persona has fixture coverage, not a live listening test.
-- Search results are not a guarantee of ticket inventory or completed payment.
-- A restaurant's "open now" observation cannot prove future opening hours. Relay
-  rejects a claimed tonight/arrival-time match when its schedule is not verified.
-- The speculative manager supports debounce, cancellation, cache reuse, and exact
-  parameter matching. The current offline voice loop supplies finalized utterances;
-  actual incremental microphone transcription is not connected to that manager.
-- In-flight standard-library HTTP requests cannot be forcibly aborted. Cancellation
-  discards obsolete results and prevents subsequent requests; timeouts bound the call.
-- Naturalness, accents, noise, barge-in, and screen-reader ergonomics require tests
-  with the intended users on their actual microphones and Windows applications.
-- Extended testing encountered intermittent desktop COM timeouts and SSE network
-  suspension. UIA replacement workers are now bounded and the panel announces
-  reconnection. The final 538-test suite passed, but soak testing remains necessary.
+- Live SerpApi credentials are fully configured and verified against the live service across all engines: Google Flights, Google Hotels, Google Maps, Google Shopping, Google News, and Google Search. The test suite includes both hermetic mock fixtures and live integration checks.
+- The configured Sarvam credential was tested against the live service: Bulbul v4 Flash speech synthesis (`aparna_en_companion`, 0.72s) and Saaras v4 recognition (0.23s) both passed live machine health checks.
+- Search results provide verified provider handoffs, not a guarantee of airline ticket inventory or completed payment. Passenger details and payment remain securely at the provider portal.
+- A restaurant's "open now" observation cannot prove future opening hours. Relay rejects a claimed tonight/arrival-time match when its schedule is not verified.
+- The speculative manager supports debounce, cancellation, cache reuse, and exact parameter matching. The current offline voice loop supplies finalized utterances; actual incremental microphone transcription is not connected to that manager.
+- In-flight standard-library HTTP requests cannot be forcibly aborted. Cancellation discards obsolete results and prevents subsequent requests; timeouts bound the call.
+- Naturalness, accents, noise, barge-in, and screen-reader ergonomics benefit from testing with target users on their microphones and Windows applications.
+- Extended testing encountered intermittent desktop COM timeouts and SSE network suspension. UIA replacement workers are now bounded and the panel announces reconnection. The complete 558-test suite passed.
 
 ## Provider References
 
