@@ -42,3 +42,4 @@ review-receipts/
 !downloads/relay-windows-x64.zip
 !frontend/downloads/relay-windows-x64.zip
 *.spec
+.vercel

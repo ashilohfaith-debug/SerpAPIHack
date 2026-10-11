@@ -99,6 +99,16 @@ class SerpApiClient:
             if v is not None and v != "":
                 query_params[k] = str(v)
 
+        # Google Hotels on SerpApi requires rating enum: 7=3.5+, 8=4.0+, 9=4.5+
+        if engine == "google_hotels" and "rating" in query_params:
+            r_val = str(query_params["rating"]).strip()
+            if r_val in ("4", "4.0"):
+                query_params["rating"] = "8"
+            elif r_val in ("3.5", "3", "3.0"):
+                query_params["rating"] = "7"
+            elif r_val in ("4.5", "5", "5.0"):
+                query_params["rating"] = "9"
+
         url = f"{BASE_SERPAPI_URL}?{urllib.parse.urlencode(query_params)}"
         
         # Redact API key for logging

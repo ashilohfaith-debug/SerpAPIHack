@@ -269,14 +269,14 @@ class LiveWorldRouter:
 
         # 2. Hotel budget: "hotel under ₹4,000" or "hotel near ... under 3500"
         hotel_budget_m = re.search(
-            r"hotel\b[^.]*?\bunder\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low
+            r"\bhotels?\b(?:(?!\bflights?\b)[^.,;])*\bunder\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low
         )
         if hotel_budget_m:
             constraints["max_hotel_price"] = float(hotel_budget_m.group(1).replace(",", ""))
 
         # 3. Flight budget: "flight ... under 7000"
         flight_budget_m = re.search(
-            r"flight\b[^.]*?\bunder\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low
+            r"\bflights?\b(?:(?!\bhotels?\b)[^.,;])*\bunder\s+(?:₹|rs\.?|rupees|inr)?\s*([\d,]+)", low
         )
         if flight_budget_m:
             constraints["max_price"] = float(flight_budget_m.group(1).replace(",", ""))
